@@ -1,0 +1,69 @@
+Node {
+    tag_name: "ul",
+    children: [
+        Node {
+            tag_name: "li",
+            children: [
+                Node {
+                    tag_name: "",
+                    children: [],
+                    props: Text(
+                        "Item 1",
+                    ),
+                },
+            ],
+            props: Data(
+                NodeData {
+                    attrs: {
+                        "class": "item",
+                    },
+                },
+            ),
+        },
+        Node {
+            tag_name: "li",
+            children: [
+                Node {
+                    tag_name: "",
+                    children: [],
+                    props: Text(
+                        "Item 2",
+                    ),
+                },
+            ],
+            props: Data(
+                NodeData {
+                    attrs: {
+                        "class": "item",
+                    },
+                },
+            ),
+        },
+        Node {
+            tag_name: "li",
+            children: [
+                Node {
+                    tag_name: "",
+                    children: [],
+                    props: Text(
+                        "Item 3",
+                    ),
+                },
+            ],
+            props: Data(
+                NodeData {
+                    attrs: {
+                        "class": "item",
+                    },
+                },
+            ),
+        },
+    ],
+    props: Data(
+        NodeData {
+            attrs: {
+                "id": "list",
+            },
+        },
+    ),
+}

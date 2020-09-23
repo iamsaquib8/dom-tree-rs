@@ -1,0 +1,44 @@
+Node {
+    tag_name: "a",
+    children: [
+        Node {
+            tag_name: "b",
+            children: [
+                Node {
+                    tag_name: "c",
+                    children: [
+                        Node {
+                            tag_name: "",
+                            children: [],
+                            props: Text(
+                                "Hello",
+                            ),
+                        },
+                    ],
+                    props: Data(
+                        NodeData {
+                            attrs: {},
+                        },
+                    ),
+                },
+            ],
+            props: Data(
+                NodeData {
+                    attrs: {},
+                },
+            ),
+        },
+        Node {
+            tag_name: "",
+            children: [],
+            props: Text(
+                "World\n",
+            ),
+        },
+    ],
+    props: Data(
+        NodeData {
+            attrs: {},
+        },
+    ),
+}

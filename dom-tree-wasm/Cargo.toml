@@ -3,6 +3,9 @@ name = "dom-tree-wasm"
 version = "0.1.0"
 authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
 edition = "2018"
+description = "A Wasm bindgen over dom-tree-rs providing wasm module to parse and create tree data structure for a given HTML string."
+repository = "https://github.com/iamsaquib8/dom-tree-rs/tree/main/dom-tree-wasm"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

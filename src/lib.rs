@@ -5,7 +5,7 @@ pub mod html;
 mod tests {
     use std::fs;
 
-    use super::{dom, html};
+    use super::html;
     #[test]
     fn to_tree2() {
         let foo = fs::read_to_string("examples/2.html");

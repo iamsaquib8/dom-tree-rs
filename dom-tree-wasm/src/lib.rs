@@ -1,5 +1,3 @@
-mod utils;
-
 use dom_tree_rs::{dom, html};
 use wasm_bindgen::prelude::*;
 

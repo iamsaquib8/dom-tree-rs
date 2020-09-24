@@ -1,21 +1,24 @@
+use std::fmt;
 use std::collections::{HashMap, HashSet};
+use serde::{Serialize};
+use serde_json;
 
 pub type Attrs = HashMap<String, String>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct Node {
   pub tag_name: String,
   pub children: Vec<Node>,
   pub props: Props,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum Props {
   Data(NodeData),
   Text(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct NodeData {
   pub attrs: Attrs,
 }
@@ -47,4 +50,19 @@ impl NodeData {
       None => HashSet::new(),
     }
   }
+}
+
+
+impl fmt::Display for Node {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+      write!(
+          f,
+          r#"{:#?}"#,
+          self
+      )
+  }
+}
+
+pub fn output(node: Node) -> String {
+  serde_json::to_string(&node).unwrap()
 }

@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 // allocator.
 #[cfg(feature = "wee_alloc")]
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: wee_aaaalloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[wasm_bindgen]
 pub fn parse(source: String) -> String {

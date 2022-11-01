@@ -7,3 +7,4 @@ A Wasm bindgen over dom-tree-rs providing wasm module to parse and create tree d
 ```
 wasm-pack build --target nodejs
 ```
+sup schmosby

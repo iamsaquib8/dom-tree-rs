@@ -17,9 +17,10 @@ fn document_shape() {
 #[test]
 fn empty_children_array() {
     let dom = parse("<br>");
-    assert!(dom
-        .to_json()
-        .contains("\"tag\":\"br\",\"attrs\":{},\"children\":[]"));
+    assert!(
+        dom.to_json()
+            .contains("\"tag\":\"br\",\"attrs\":{},\"children\":[]")
+    );
 }
 
 #[test]

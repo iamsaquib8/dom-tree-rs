@@ -2,7 +2,7 @@
 name = "dom-tree-rs-benchmarks"
 version = "0.0.0"
 publish = false
-edition = "2021"
+edition = "2024"
 
 # Independent crate (excluded from the main workspace) so its heavier
 # benchmark-only dependencies never touch the published crate's graph.

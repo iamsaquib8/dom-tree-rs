@@ -5,7 +5,7 @@
 [![downloads](https://img.shields.io/crates/d/dom-tree-rs.svg)](https://crates.io/crates/dom-tree-rs)
 [![CI](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml)
 [![license](https://img.shields.io/github/license/iamsaquib8/dom-tree-rs)](./LICENSE)
-[![MSRV](https://img.shields.io/badge/MSRV-1.70-blue)](#msrv)
+[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](#msrv)
 ![no_std](https://img.shields.io/badge/no__std-yes-success)
 ![dependencies](https://img.shields.io/badge/dependencies-0-success)
 
@@ -200,7 +200,7 @@ If you need byte-exact browser parsing, use `html5ever`.
 
 ## MSRV
 
-Rust **1.70**.
+Rust **1.85** (edition 2024). Built and tested on the latest stable.
 
 ## Quality
 

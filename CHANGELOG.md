@@ -4,13 +4,17 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [0.2.1] — 2026-06-23
+## [0.2.1] — 2026-06-24
 
 ### Added
 - Zero-dependency HTML re-serialization (`Dom::to_html`, `NodeRef::to_html`) —
   round-trips a parsed tree back to HTML with correct escaping and void/raw-text
   handling. Always available (no feature required).
 - `#![forbid(unsafe_code)]` — the crate contains no `unsafe`.
+
+### Changed
+- Moved to **edition 2024**; minimum supported Rust is now **1.85**
+  (developed and tested on the latest stable).
 
 ## [0.2.0] — 2026-06-23
 

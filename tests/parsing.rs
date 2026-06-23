@@ -1,6 +1,6 @@
 //! Behavioural tests for the parser and tree.
 
-use domtree::{parse, tokenize, NodeKind, Token};
+use domtree::{NodeKind, Token, parse, tokenize};
 
 #[test]
 fn basic_nesting() {

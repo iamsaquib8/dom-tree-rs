@@ -1,8 +1,8 @@
 [package]
 name = "dom-tree-wasm"
 version = "0.2.1"
-edition = "2021"
-rust-version = "1.70"
+edition = "2024"
+rust-version = "1.85"
 authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
 description = "WebAssembly bindings for dom-tree-rs: parse messy HTML into a JSON tree in the browser, edge, or any JS runtime."
 repository = "https://github.com/iamsaquib8/dom-tree-rs"

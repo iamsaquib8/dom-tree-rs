@@ -49,4 +49,4 @@ committing the updated `.snap` files.
 - `cargo fmt`, `cargo clippy` clean, tests pass.
 - Add a test for the behaviour you changed (a corpus fixture is great for
   parsing changes).
-- Keep the MSRV at 1.70 (no newer std APIs).
+- Keep the MSRV at 1.85 (edition 2024); the CI `msrv` job enforces it.

@@ -1,16 +1,13 @@
 # dom-tree-rs
 
-[![CI](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml)
-[![license](https://img.shields.io/github/license/iamsaquib8/dom-tree-rs)](./LICENSE)
-[![MSRV](https://img.shields.io/badge/MSRV-1.70-blue)](#msrv)
-![no_std](https://img.shields.io/badge/no__std-yes-success)
-![dependencies](https://img.shields.io/badge/dependencies-0-success)
-
-<!-- Re-enable these after `cargo publish` (see docs/PUBLISHING.md) — until then
-     they render as "not found":
 [![crates.io](https://img.shields.io/crates/v/dom-tree-rs.svg)](https://crates.io/crates/dom-tree-rs)
 [![docs.rs](https://img.shields.io/docsrs/dom-tree-rs)](https://docs.rs/dom-tree-rs)
--->
+[![downloads](https://img.shields.io/crates/d/dom-tree-rs.svg)](https://crates.io/crates/dom-tree-rs)
+[![CI](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/iamsaquib8/dom-tree-rs)](./LICENSE)
+[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](#msrv)
+![no_std](https://img.shields.io/badge/no__std-yes-success)
+![dependencies](https://img.shields.io/badge/dependencies-0-success)
 
 
 **A tiny, zero-dependency, forgiving HTML parser.** Turn messy real-world HTML
@@ -154,6 +151,16 @@ let json = dom.to_json();
 With the `serde` feature, the tree also implements `serde::Serialize` (same JSON
 shape).
 
+### HTML
+
+Re-serialize a tree (or subtree) back to HTML — a `parse → to_html → parse`
+round-trip is stable:
+
+```rust
+let dom = domtree::parse("<ul><li>a<li>b</ul>"); // missing </li>s
+assert_eq!(dom.to_html(), "<ul><li>a</li><li>b</li></ul>");
+```
+
 ### WebAssembly
 
 See [`dom-tree-wasm/`](./dom-tree-wasm) — parse HTML to JSON from JavaScript with
@@ -193,13 +200,20 @@ If you need byte-exact browser parsing, use `html5ever`.
 
 ## MSRV
 
-Rust **1.70**.
+Rust **1.85** (edition 2024). Built and tested on the latest stable.
 
 ## Quality
 
 Property-tested for "never panics" + tree invariants (proptest, thousands of
 cases per run), snapshot-tested against a corpus of messy HTML, and CI runs
 fmt / clippy / a `no_std` build / a wasm size gate / `cargo-fuzz`.
+
+## Roadmap
+
+See [ROADMAP.md](./ROADMAP.md) for what's planned (`to_html()` re-serialization,
+wider selectors and entities, streaming events, performance) — and, just as
+importantly, the **non-goals** that keep this crate tiny and honest. Ideas and
+PRs that fit the philosophy are welcome.
 
 ## License
 

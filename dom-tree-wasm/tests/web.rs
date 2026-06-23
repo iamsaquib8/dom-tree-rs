@@ -1,13 +1,22 @@
-//! Test suite for the Web and headless browsers.
+//! Browser/node tests for the wasm bindings.
+//!
+//! Run with: `wasm-pack test --node`
 
 #![cfg(target_arch = "wasm32")]
 
-extern crate wasm_bindgen_test;
 use wasm_bindgen_test::*;
 
-wasm_bindgen_test_configure!(run_in_browser);
+#[wasm_bindgen_test]
+fn parses_to_json() {
+    let json = dom_tree_wasm::parse("<p class='x'>hi &amp; bye</p>");
+    assert!(json.contains("\"type\":\"document\""));
+    assert!(json.contains("\"tag\":\"p\""));
+    assert!(json.contains("\"class\":\"x\""));
+    assert!(json.contains("\"value\":\"hi & bye\""));
+}
 
 #[wasm_bindgen_test]
-fn pass() {
-    assert_eq!(1 + 1, 2);
+fn counts_errors() {
+    assert_eq!(dom_tree_wasm::parse_error_count("<p>ok</p>"), 0);
+    assert!(dom_tree_wasm::parse_error_count("<b><i>x</b></i>") > 0);
 }

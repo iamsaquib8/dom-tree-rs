@@ -1,41 +1,45 @@
 [package]
 name = "dom-tree-wasm"
-version = "0.1.0"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.70"
 authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
-edition = "2018"
-description = "A Wasm bindgen over dom-tree-rs providing wasm module to parse and create tree data structure for a given HTML string."
-repository = "https://github.com/iamsaquib8/dom-tree-rs/tree/main/dom-tree-wasm"
+description = "WebAssembly bindings for dom-tree-rs: parse messy HTML into a JSON tree in the browser, edge, or any JS runtime."
+repository = "https://github.com/iamsaquib8/dom-tree-rs"
 license = "MIT"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["console_error_panic_hook"]
+default = []
+# Expose `query(html, selector)` (pulls in the selector engine).
+query = ["dom-tree-rs/query"]
 
 [dependencies]
-wasm-bindgen = "0.2.63"
-dom-tree-rs = { path = "../" }
-
-# The `console_error_panic_hook` crate provides better debugging of panics by
-# logging them with `console.error`. This is great for development, but requires
-# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
-# code size when deploying.
-console_error_panic_hook = { version = "0.1.6", optional = true }
-
-# `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
-# compared to the default allocator's ~10K. It is slower than the default
-# allocator, however.
-#
-# Unfortunately, `wee_alloc` requires nightly Rust when targeting wasm for now.
-wee_alloc = { version = "0.4.5", optional = true }
+wasm-bindgen = "0.2"
+# Only the default `json` feature of the core crate — no serde, zero deps.
+dom-tree-rs = { path = "..", default-features = false, features = ["json"] }
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.13"
+wasm-bindgen-test = "0.3"
 
+# Optimise hard for code size — this is the whole pitch.
 [profile.release]
-# Tell `rustc` to optimize for small code size.
-opt-level = "s"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = false
+# Aggressive size optimisation. The `--enable-*` flags let the bundled wasm-opt
+# accept the wasm features modern rustc emits by default (bulk-memory, sign-ext,
+# …); without them wasm-opt rejects the module.
+wasm-opt = [
+    "-Oz",
+    "--enable-bulk-memory",
+    "--enable-sign-ext",
+    "--enable-nontrapping-float-to-int",
+    "--enable-mutable-globals",
+]

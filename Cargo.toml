@@ -1,11 +1,57 @@
 [package]
 name = "dom-tree-rs"
-version = "0.1.1"
-authors = ["iamsaquib"]
-edition = "2018"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.70"
+authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
+description = "Tiny, zero-dependency, forgiving HTML parser: turn messy real-world HTML into a clean DOM tree (and JSON). WASM-first, no_std-friendly."
+repository = "https://github.com/iamsaquib8/dom-tree-rs"
+homepage = "https://github.com/iamsaquib8/dom-tree-rs"
+documentation = "https://docs.rs/dom-tree-rs"
+readme = "README.md"
+license = "MIT"
+keywords = ["html", "parser", "dom", "wasm", "no-std"]
+categories = ["parser-implementations", "wasm", "web-programming", "no-std"]
+exclude = ["/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/docs/launch"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "domtree"
+
+[features]
+default = ["json"]
+# Built-in, zero-dependency JSON serializer (`Dom::to_json`).
+json = []
+# Optional `serde::Serialize` impls on the tree (pulls in `serde`).
+serde = ["dep:serde"]
+# Hand-rolled CSS-subset selector engine (`Dom::select`). Off by default for size.
+query = []
+# Enables std-only conveniences (e.g. `std::error::Error` for `ParseError`).
+# The crate is `no_std + alloc` by default.
+std = []
 
 [dependencies]
-serde_json = "1.0.57"
-serde = { version = "1.0.116", features = ["derive"] }
+serde = { version = "1", default-features = false, features = ["alloc"], optional = true }
+
+[dev-dependencies]
+# Snapshot testing for the corpus suite (dev-only; not a runtime dependency).
+insta = "1"
+# Property tests: "never panics", arena-invariant checks.
+proptest = "1"
+# Drives the `serde` Serialize impl in the JSON-equality roundtrip test.
+serde_json = "1"
+
+[package.metadata.docs.rs]
+# Document all features (incl. query + serde) on docs.rs.
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[profile.release]
+opt-level = 3
+lto = true
+
+[workspace]
+resolver = "2"
+# The WASM bindings, the comparison benchmarks, and the fuzz harness are
+# independent crates with their own (heavier) dependency graphs and release
+# profiles, so they are kept out of this crate's pristine, minimal-dep graph.
+exclude = ["dom-tree-wasm", "benchmarks", "fuzz"]

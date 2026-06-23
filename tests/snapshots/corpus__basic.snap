@@ -1,0 +1,5 @@
+---
+source: tests/corpus.rs
+expression: dom.to_json()
+---
+{"type":"document","errors":0,"children":[{"type":"element","tag":"ul","attrs":{"id":"list"},"children":[{"type":"text","value":"\n  "},{"type":"element","tag":"li","attrs":{"class":"item"},"children":[{"type":"text","value":"Item 1"}]},{"type":"text","value":"\n  "},{"type":"element","tag":"li","attrs":{"class":"item"},"children":[{"type":"text","value":"Item 2"}]},{"type":"text","value":"\n"}]},{"type":"text","value":"\n"}]}

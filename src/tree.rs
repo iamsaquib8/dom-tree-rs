@@ -1,0 +1,397 @@
+//! The parsed document ([`Dom`]) and the read handle into it ([`NodeRef`]).
+
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt;
+
+use crate::error::ParseError;
+use crate::node::{Element, Node, NodeId, NodeKind};
+
+/// A parsed HTML document: an arena of nodes plus the list of top-level
+/// (root) nodes and any recovery diagnostics.
+///
+/// Build one with [`crate::parse`]. It is immutable once built; you traverse it
+/// with [`NodeRef`] handles obtained from [`Dom::root`], [`Dom::roots`],
+/// [`Dom::get`], or the `find_by_*` helpers.
+#[derive(Clone)]
+pub struct Dom {
+    pub(crate) nodes: Vec<Node>,
+    pub(crate) roots: Vec<NodeId>,
+    pub(crate) errors: Vec<ParseError>,
+}
+
+impl Dom {
+    pub(crate) fn with_capacity(cap: usize) -> Self {
+        Dom {
+            nodes: Vec::with_capacity(cap),
+            roots: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+
+    pub(crate) fn alloc(&mut self, kind: NodeKind) -> NodeId {
+        let id = NodeId(self.nodes.len() as u32);
+        self.nodes.push(Node::new(kind));
+        id
+    }
+
+    #[inline]
+    pub(crate) fn node(&self, id: NodeId) -> Option<&Node> {
+        self.nodes.get(id.index())
+    }
+
+    #[inline]
+    pub(crate) fn node_mut(&mut self, id: NodeId) -> Option<&mut Node> {
+        self.nodes.get_mut(id.index())
+    }
+
+    /// Append `child` under `parent` (or as a new root when `parent` is `None`),
+    /// maintaining all four sibling/child links.
+    pub(crate) fn append(&mut self, parent: Option<NodeId>, child: NodeId) {
+        let parent = match parent {
+            None => {
+                self.roots.push(child);
+                return;
+            }
+            Some(p) => p,
+        };
+        if let Some(c) = self.node_mut(child) {
+            c.parent = Some(parent);
+        }
+        let last = self.node(parent).and_then(|n| n.last_child);
+        match last {
+            None => {
+                if let Some(p) = self.node_mut(parent) {
+                    p.first_child = Some(child);
+                    p.last_child = Some(child);
+                }
+            }
+            Some(last) => {
+                if let Some(l) = self.node_mut(last) {
+                    l.next_sibling = Some(child);
+                }
+                if let Some(c) = self.node_mut(child) {
+                    c.prev_sibling = Some(last);
+                }
+                if let Some(p) = self.node_mut(parent) {
+                    p.last_child = Some(child);
+                }
+            }
+        }
+    }
+
+    // --- public read API -------------------------------------------------
+
+    /// Number of nodes in the arena.
+    pub fn len(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// Whether the document contains no nodes.
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
+
+    /// Recovery diagnostics collected during parsing (empty for clean input).
+    pub fn errors(&self) -> &[ParseError] {
+        &self.errors
+    }
+
+    /// A handle to a node by id, or `None` if the id is out of range.
+    pub fn get(&self, id: NodeId) -> Option<NodeRef<'_>> {
+        if id.index() < self.nodes.len() {
+            Some(NodeRef { dom: self, id })
+        } else {
+            None
+        }
+    }
+
+    /// The first top-level node (the document element for a typical page).
+    pub fn root(&self) -> Option<NodeRef<'_>> {
+        self.roots.first().map(|&id| NodeRef { dom: self, id })
+    }
+
+    /// All top-level nodes, in document order.
+    pub fn roots(&self) -> impl Iterator<Item = NodeRef<'_>> {
+        self.roots.iter().map(move |&id| NodeRef { dom: self, id })
+    }
+
+    /// Every node in the arena, in document (pre-order) order.
+    pub fn nodes(&self) -> impl Iterator<Item = NodeRef<'_>> {
+        (0..self.nodes.len()).map(move |i| NodeRef {
+            dom: self,
+            id: NodeId(i as u32),
+        })
+    }
+
+    /// All elements whose tag name equals `name` (ASCII case-insensitive).
+    pub fn find_by_tag<'a>(&'a self, name: &'a str) -> impl Iterator<Item = NodeRef<'a>> + 'a {
+        self.nodes()
+            .filter(move |n| n.tag_name().is_some_and(|t| t.eq_ignore_ascii_case(name)))
+    }
+
+    /// The first element with `id="…"` equal to `id`, if any.
+    pub fn find_by_id<'a>(&'a self, id: &'a str) -> Option<NodeRef<'a>> {
+        self.nodes().find(|n| n.attr("id") == Some(id))
+    }
+
+    /// All elements whose `class` attribute contains `class`.
+    pub fn find_by_class<'a>(&'a self, class: &'a str) -> impl Iterator<Item = NodeRef<'a>> + 'a {
+        self.nodes().filter(move |n| n.has_class(class))
+    }
+}
+
+impl fmt::Debug for Dom {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut list = f.debug_list();
+        for r in self.roots() {
+            list.entry(&r);
+        }
+        list.finish()
+    }
+}
+
+/// A lightweight, `Copy` read handle to a single node, bound to its [`Dom`].
+///
+/// All traversal (`parent`, `children`, `descendants`, `ancestors`, siblings)
+/// is O(1) per step thanks to the arena's links.
+#[derive(Clone, Copy)]
+pub struct NodeRef<'a> {
+    dom: &'a Dom,
+    id: NodeId,
+}
+
+impl<'a> NodeRef<'a> {
+    #[inline]
+    fn raw(&self) -> &'a Node {
+        // Invariant: a `NodeRef` is only ever constructed from an id that is
+        // valid in `dom` (via `Dom::get`/`root`/`roots`/`nodes` or by following
+        // an existing node's links). The arena is append-only and never shrinks,
+        // so this index is always in bounds.
+        debug_assert!(self.id.index() < self.dom.nodes.len());
+        &self.dom.nodes[self.id.index()]
+    }
+
+    /// This node's arena id.
+    #[inline]
+    pub fn id(&self) -> NodeId {
+        self.id
+    }
+
+    /// The node's kind (element / text / comment / doctype).
+    #[inline]
+    pub fn kind(&self) -> &'a NodeKind {
+        &self.raw().kind
+    }
+
+    /// Whether this node is an element.
+    pub fn is_element(&self) -> bool {
+        matches!(self.raw().kind, NodeKind::Element(_))
+    }
+
+    /// Whether this node is a text node.
+    pub fn is_text(&self) -> bool {
+        matches!(self.raw().kind, NodeKind::Text(_))
+    }
+
+    /// The underlying [`Element`], if this node is one.
+    pub fn element(&self) -> Option<&'a Element> {
+        match &self.raw().kind {
+            NodeKind::Element(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    /// The tag name (lower-cased), if this node is an element.
+    pub fn tag_name(&self) -> Option<&'a str> {
+        self.element().map(Element::name)
+    }
+
+    /// The value of attribute `name`, if this is an element with that attribute.
+    pub fn attr(&self, name: &str) -> Option<&'a str> {
+        self.element().and_then(|e| e.attr(name))
+    }
+
+    /// All `(name, value)` attribute pairs (empty iterator for non-elements).
+    pub fn attributes(&self) -> impl Iterator<Item = (&'a str, &'a str)> {
+        self.element().into_iter().flat_map(Element::attributes)
+    }
+
+    /// The class names on this element.
+    pub fn classes(&self) -> impl Iterator<Item = &'a str> {
+        self.element().into_iter().flat_map(Element::classes)
+    }
+
+    /// Whether this element has the given class.
+    pub fn has_class(&self, class: &str) -> bool {
+        self.element().is_some_and(|e| e.has_class(class))
+    }
+
+    /// This node's own text, if it is a text node (already entity-decoded).
+    pub fn text(&self) -> Option<&'a str> {
+        match &self.raw().kind {
+            NodeKind::Text(t) => Some(t),
+            _ => None,
+        }
+    }
+
+    /// The body text of this comment node, if it is one.
+    pub fn comment(&self) -> Option<&'a str> {
+        match &self.raw().kind {
+            NodeKind::Comment(c) => Some(c),
+            _ => None,
+        }
+    }
+
+    /// Concatenated text of this node and all its descendants, in document
+    /// order (entity-decoded). Equivalent to the DOM `textContent`.
+    pub fn text_content(&self) -> String {
+        let mut out = String::new();
+        if let NodeKind::Text(t) = &self.raw().kind {
+            out.push_str(t);
+        }
+        for d in self.descendants() {
+            if let NodeKind::Text(t) = &d.raw().kind {
+                out.push_str(t);
+            }
+        }
+        out
+    }
+
+    // --- traversal -------------------------------------------------------
+
+    /// This node's parent, if any.
+    pub fn parent(&self) -> Option<NodeRef<'a>> {
+        self.raw().parent.map(|id| NodeRef { dom: self.dom, id })
+    }
+
+    /// The first child, if any.
+    pub fn first_child(&self) -> Option<NodeRef<'a>> {
+        self.raw().first_child.map(|id| NodeRef { dom: self.dom, id })
+    }
+
+    /// The last child, if any.
+    pub fn last_child(&self) -> Option<NodeRef<'a>> {
+        self.raw().last_child.map(|id| NodeRef { dom: self.dom, id })
+    }
+
+    /// The next sibling, if any.
+    pub fn next_sibling(&self) -> Option<NodeRef<'a>> {
+        self.raw().next_sibling.map(|id| NodeRef { dom: self.dom, id })
+    }
+
+    /// The previous sibling, if any.
+    pub fn prev_sibling(&self) -> Option<NodeRef<'a>> {
+        self.raw().prev_sibling.map(|id| NodeRef { dom: self.dom, id })
+    }
+
+    /// This node's direct children, in order.
+    pub fn children(&self) -> impl Iterator<Item = NodeRef<'a>> {
+        let dom = self.dom;
+        core::iter::successors(self.raw().first_child, move |id| {
+            dom.node(*id).and_then(|n| n.next_sibling)
+        })
+        .map(move |id| NodeRef { dom, id })
+    }
+
+    /// Child *elements* only (skips text/comment/doctype nodes).
+    pub fn child_elements(&self) -> impl Iterator<Item = NodeRef<'a>> {
+        self.children().filter(NodeRef::is_element)
+    }
+
+    /// This node's ancestors, from parent up to the root.
+    pub fn ancestors(&self) -> impl Iterator<Item = NodeRef<'a>> {
+        let dom = self.dom;
+        core::iter::successors(self.raw().parent, move |id| {
+            dom.node(*id).and_then(|n| n.parent)
+        })
+        .map(move |id| NodeRef { dom, id })
+    }
+
+    /// All descendants of this node, in document (pre-order) order. Does not
+    /// include the node itself. Allocation-free.
+    pub fn descendants(&self) -> Descendants<'a> {
+        Descendants {
+            dom: self.dom,
+            root: self.id,
+            next: self.raw().first_child,
+        }
+    }
+}
+
+impl<'a> fmt::Debug for NodeRef<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.raw().kind {
+            NodeKind::Element(e) => f
+                .debug_struct("Element")
+                .field("tag", &e.name())
+                .field("attrs", &Attrs(e))
+                .field("children", &Kids(*self))
+                .finish(),
+            NodeKind::Text(t) => f.debug_tuple("Text").field(&t.as_ref()).finish(),
+            NodeKind::Comment(c) => f.debug_tuple("Comment").field(&c.as_ref()).finish(),
+            NodeKind::Doctype(d) => f.debug_tuple("Doctype").field(&d.as_ref()).finish(),
+        }
+    }
+}
+
+struct Attrs<'a>(&'a Element);
+impl<'a> fmt::Debug for Attrs<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut m = f.debug_map();
+        for (k, v) in self.0.attributes() {
+            m.entry(&k, &v);
+        }
+        m.finish()
+    }
+}
+
+struct Kids<'a>(NodeRef<'a>);
+impl<'a> fmt::Debug for Kids<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.0.children()).finish()
+    }
+}
+
+/// Pre-order descendant iterator (see [`NodeRef::descendants`]).
+pub struct Descendants<'a> {
+    dom: &'a Dom,
+    root: NodeId,
+    next: Option<NodeId>,
+}
+
+impl<'a> Iterator for Descendants<'a> {
+    type Item = NodeRef<'a>;
+
+    fn next(&mut self) -> Option<NodeRef<'a>> {
+        let cur = self.next?;
+        self.next = self.advance(cur);
+        Some(NodeRef {
+            dom: self.dom,
+            id: cur,
+        })
+    }
+}
+
+impl<'a> Descendants<'a> {
+    fn advance(&self, cur: NodeId) -> Option<NodeId> {
+        // Pre-order: descend to first child, else move to a next sibling,
+        // walking up ancestors until we leave the subtree rooted at `root`.
+        if let Some(child) = self.dom.node(cur).and_then(|n| n.first_child) {
+            return Some(child);
+        }
+        let mut n = cur;
+        loop {
+            if n == self.root {
+                return None;
+            }
+            if let Some(sib) = self.dom.node(n).and_then(|nd| nd.next_sibling) {
+                return Some(sib);
+            }
+            match self.dom.node(n).and_then(|nd| nd.parent) {
+                Some(p) => n = p,
+                None => return None,
+            }
+        }
+    }
+}

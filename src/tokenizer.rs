@@ -8,7 +8,6 @@
 use alloc::vec::Vec;
 
 use crate::error::{ErrorKind, ParseError};
-use crate::tags;
 use crate::token::{AttrValue, Token};
 
 /// A streaming HTML tokenizer. Construct with [`Tokenizer::new`] (or the
@@ -102,11 +101,11 @@ impl<'a> Tokenizer<'a> {
 
     fn read_text(&mut self) -> Token<'a> {
         let start = self.pos;
-        while let Some(b) = self.peek() {
-            if b == b'<' {
-                break;
-            }
-            self.pos += 1;
+        // Scan to the next '<' in one shot — the iterator `position` loop
+        // auto-vectorizes far better than a byte-at-a-time `peek` loop.
+        match self.rest().iter().position(|&b| b == b'<') {
+            Some(rel) => self.pos += rel,
+            None => self.pos = self.bytes.len(),
         }
         Token::Text(self.slice(start, self.pos))
     }
@@ -396,7 +395,3 @@ fn is_rawish_name(name: &str) -> bool {
         .iter()
         .any(|t| name.eq_ignore_ascii_case(t))
 }
-
-// `tags::is_rawish` is the lower-cased equivalent used by the builder; keep a
-// reference so the dependency is obvious and the helper above stays in sync.
-const _: fn(&str) -> bool = tags::is_rawish;

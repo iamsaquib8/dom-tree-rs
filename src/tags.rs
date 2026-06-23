@@ -33,18 +33,6 @@ pub(crate) fn is_raw_text(name: &str) -> bool {
     matches!(name, "script" | "style")
 }
 
-/// Elements whose content is "escapable raw text": like raw text (no nested
-/// tags) but character references *are* decoded.
-pub(crate) fn is_escapable_raw_text(name: &str) -> bool {
-    matches!(name, "title" | "textarea")
-}
-
-/// Either flavour of raw text — the tokenizer scans both the same way; the
-/// difference (entity decoding) is applied later at accessor time.
-pub(crate) fn is_rawish(name: &str) -> bool {
-    is_raw_text(name) || is_escapable_raw_text(name)
-}
-
 /// Block-level start tags that implicitly close an open `<p>`.
 fn closes_p(name: &str) -> bool {
     matches!(

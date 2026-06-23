@@ -7,7 +7,6 @@
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::entities;
@@ -18,18 +17,14 @@ use crate::token::Token;
 use crate::tokenizer::Tokenizer;
 use crate::tree::Dom;
 
-/// One entry on the open-elements stack: its arena id and lower-cased name.
-struct Open {
-    id: NodeId,
-    name: String,
-}
-
 /// Parse `src` into a best-effort [`Dom`]. Never panics; diagnostics land in
 /// [`Dom::errors`].
 pub(crate) fn parse_document(src: &str) -> Dom {
     let mut tk = Tokenizer::new(src);
     let mut dom = Dom::with_capacity(src.len() / 8 + 4);
-    let mut open: Vec<Open> = Vec::new();
+    // The open-elements stack holds arena ids; names are resolved from the arena
+    // on demand, so we never allocate a separate per-element name string.
+    let mut open: Vec<NodeId> = Vec::new();
 
     while let Some((tok, pos)) = tk.next_token() {
         match tok {
@@ -38,23 +33,25 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 attrs,
                 self_closing,
             } => {
-                let lname = name.to_ascii_lowercase();
+                let lname = lower(name);
 
                 // Implicit close: pop open elements that this start tag closes.
-                while let Some(top) = open.last() {
-                    if tags::implicitly_closes(&lname, &top.name) {
+                while let Some(&top) = open.last() {
+                    let should_close = tags::implicitly_closes(&lname, open_name(&dom, top));
+                    if should_close {
                         open.pop();
-                        dom.errors.push(ParseError::new(pos, ErrorKind::ImplicitlyClosed));
+                        dom.errors
+                            .push(ParseError::new(pos, ErrorKind::ImplicitlyClosed));
                     } else {
                         break;
                     }
                 }
 
-                let parent = open.last().map(|o| o.id);
+                let parent = open.last().copied();
 
                 let mut built: Vec<(Box<str>, Box<str>)> = Vec::with_capacity(attrs.len());
                 for (k, v) in attrs {
-                    let key: Box<str> = k.to_ascii_lowercase().into_boxed_str();
+                    let key = box_lower(k);
                     let (decoded, unknown) = entities::decode(v.as_str());
                     if unknown {
                         dom.errors.push(ParseError::new(pos, ErrorKind::UnknownEntity));
@@ -63,23 +60,23 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 }
 
                 let element = Element {
-                    name: lname.as_str().into(),
+                    name: Box::from(lname.as_ref()),
                     attrs: built,
                 };
                 let id = dom.alloc(NodeKind::Element(element));
                 dom.append(parent, id);
 
                 if !self_closing && !tags::is_void(&lname) {
-                    open.push(Open { id, name: lname });
+                    open.push(id);
                 }
             }
 
             Token::EndTag { name } => {
-                let lname = name.to_ascii_lowercase();
+                let lname = lower(name);
                 if tags::is_void(&lname) {
                     continue; // void elements never have end tags
                 }
-                match open.iter().rposition(|o| o.name == lname) {
+                match open.iter().rposition(|&id| open_name(&dom, id) == lname.as_ref()) {
                     Some(idx) => {
                         if idx != open.len() - 1 {
                             dom.errors
@@ -95,8 +92,8 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 if t.is_empty() {
                     continue;
                 }
-                let parent = open.last().map(|o| o.id);
-                let text: Box<str> = if parent_is_raw(&open) {
+                let parent = open.last().copied();
+                let text: Box<str> = if parent_is_raw(&dom, &open) {
                     Box::from(t)
                 } else {
                     let (decoded, unknown) = entities::decode(t);
@@ -113,19 +110,19 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 if c.is_empty() {
                     continue;
                 }
-                let parent = open.last().map(|o| o.id);
+                let parent = open.last().copied();
                 let id = dom.alloc(NodeKind::Text(Box::from(c)));
                 dom.append(parent, id);
             }
 
             Token::Comment(c) => {
-                let parent = open.last().map(|o| o.id);
+                let parent = open.last().copied();
                 let id = dom.alloc(NodeKind::Comment(Box::from(c)));
                 dom.append(parent, id);
             }
 
             Token::Doctype(d) => {
-                let parent = open.last().map(|o| o.id);
+                let parent = open.last().copied();
                 let id = dom.alloc(NodeKind::Doctype(Box::from(d.trim())));
                 dom.append(parent, id);
             }
@@ -143,9 +140,38 @@ pub(crate) fn parse_document(src: &str) -> Dom {
     dom
 }
 
+/// The lower-cased tag name of an open element, looked up in the arena.
+fn open_name(dom: &Dom, id: NodeId) -> &str {
+    match dom.node(id).map(|n| &n.kind) {
+        Some(NodeKind::Element(e)) => e.name(),
+        _ => "",
+    }
+}
+
 /// Whether the innermost open element keeps its text raw (no entity decoding).
-fn parent_is_raw(open: &[Open]) -> bool {
-    open.last().is_some_and(|o| tags::is_raw_text(&o.name))
+fn parent_is_raw(dom: &Dom, open: &[NodeId]) -> bool {
+    open.last()
+        .is_some_and(|&id| tags::is_raw_text(open_name(dom, id)))
+}
+
+/// Lower-case `name`, but borrow it unchanged when it's already lower-case
+/// (the common case) — avoiding an allocation + copy per tag/end-tag.
+fn lower(name: &str) -> Cow<'_, str> {
+    if name.bytes().any(|b| b.is_ascii_uppercase()) {
+        Cow::Owned(name.to_ascii_lowercase())
+    } else {
+        Cow::Borrowed(name)
+    }
+}
+
+/// Box a lower-cased copy of `name` in a single allocation, skipping the
+/// lower-casing work when it's already lower-case.
+fn box_lower(name: &str) -> Box<str> {
+    if name.bytes().any(|b| b.is_ascii_uppercase()) {
+        name.to_ascii_lowercase().into_boxed_str()
+    } else {
+        Box::from(name)
+    }
 }
 
 /// Turn a `Cow<str>` into a `Box<str>` with at most one allocation.

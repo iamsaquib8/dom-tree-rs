@@ -1,0 +1,19 @@
+[package]
+name = "dom-tree-rs-benchmarks"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+# Independent crate (excluded from the main workspace) so its heavier
+# benchmark-only dependencies never touch the published crate's graph.
+
+[dependencies]
+dom-tree-rs = { path = "..", features = ["json", "query"] }
+
+[dev-dependencies]
+criterion = "0.5"
+tl = "0.7"
+
+[[bench]]
+name = "parse"
+harness = false

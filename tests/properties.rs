@@ -16,6 +16,11 @@ fn html_soup() -> impl Strategy<Value = String> {
 }
 
 proptest! {
+    // Run a generous number of cases — this is our primary local guard for the
+    // "never panics" promise (the cargo-fuzz harness in fuzz/ adds coverage-
+    // guided fuzzing on top, in CI / for contributors).
+    #![proptest_config(ProptestConfig { cases: 4096, ..ProptestConfig::default() })]
+
     #[test]
     fn parse_never_panics(s in html_soup()) {
         let dom = parse(&s);

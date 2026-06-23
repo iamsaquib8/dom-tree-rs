@@ -1,0 +1,30 @@
+[package]
+name = "dom-tree-rs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+dom-tree-rs = { path = "..", features = ["json", "query"] }
+
+[[bin]]
+name = "parse"
+path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tokenize"
+path = "fuzz_targets/tokenize.rs"
+test = false
+doc = false
+bench = false
+
+# Fuzz binaries want a release-ish profile with debug assertions on.
+[profile.release]
+debug = 1

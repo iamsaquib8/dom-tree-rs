@@ -154,6 +154,16 @@ let json = dom.to_json();
 With the `serde` feature, the tree also implements `serde::Serialize` (same JSON
 shape).
 
+### HTML
+
+Re-serialize a tree (or subtree) back to HTML — a `parse → to_html → parse`
+round-trip is stable:
+
+```rust
+let dom = domtree::parse("<ul><li>a<li>b</ul>"); // missing </li>s
+assert_eq!(dom.to_html(), "<ul><li>a</li><li>b</li></ul>");
+```
+
 ### WebAssembly
 
 See [`dom-tree-wasm/`](./dom-tree-wasm) — parse HTML to JSON from JavaScript with

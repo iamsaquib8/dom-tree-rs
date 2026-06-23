@@ -48,6 +48,7 @@
 //! - `std` — adds `std`-only conveniences; the crate is `no_std + alloc` by default.
 
 #![no_std]
+#![forbid(unsafe_code)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(
     not(test),
@@ -69,7 +70,6 @@ mod token;
 mod tokenizer;
 mod tree;
 
-#[cfg(any(feature = "json", feature = "serde"))]
 mod serialize;
 
 #[cfg(feature = "query")]

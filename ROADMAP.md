@@ -38,11 +38,9 @@ These are deliberately *out of scope* — reach for the right tool instead:
 
 ## 0.3 — coverage & ergonomics
 
-- [ ] **`to_html()`** — re-serialize a tree (or subtree) back to HTML, with
-      correct escaping, void elements, and attribute quoting. (Round-tripping is
-      a common request and fits the owned tree.)
-- [ ] **`#![forbid(unsafe_code)]`** — we already use no `unsafe`; make it a
-      guarantee and advertise it.
+- [x] **`to_html()`** — re-serialize a tree (or subtree) back to HTML, with
+      correct escaping, void elements, and raw-text handling. _(shipped)_
+- [x] **`#![forbid(unsafe_code)]`** — the crate contains no `unsafe`. _(shipped)_
 - [ ] **Wider entity coverage** — Windows-1252 remapping for numeric refs in
       `0x80–0x9F` (browser behaviour, e.g. `&#150;` → `–`), and an optional
       `entities-full` feature for the complete named-entity set (default stays

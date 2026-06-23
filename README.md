@@ -1,16 +1,13 @@
 # dom-tree-rs
 
+[![crates.io](https://img.shields.io/crates/v/dom-tree-rs.svg)](https://crates.io/crates/dom-tree-rs)
+[![docs.rs](https://img.shields.io/docsrs/dom-tree-rs)](https://docs.rs/dom-tree-rs)
+[![downloads](https://img.shields.io/crates/d/dom-tree-rs.svg)](https://crates.io/crates/dom-tree-rs)
 [![CI](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml)
 [![license](https://img.shields.io/github/license/iamsaquib8/dom-tree-rs)](./LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.70-blue)](#msrv)
 ![no_std](https://img.shields.io/badge/no__std-yes-success)
 ![dependencies](https://img.shields.io/badge/dependencies-0-success)
-
-<!-- Re-enable these after `cargo publish` (see docs/PUBLISHING.md) — until then
-     they render as "not found":
-[![crates.io](https://img.shields.io/crates/v/dom-tree-rs.svg)](https://crates.io/crates/dom-tree-rs)
-[![docs.rs](https://img.shields.io/docsrs/dom-tree-rs)](https://docs.rs/dom-tree-rs)
--->
 
 
 **A tiny, zero-dependency, forgiving HTML parser.** Turn messy real-world HTML

@@ -4,7 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [0.2.0] — unreleased
+## [0.2.1] — 2026-06-23
+
+### Added
+- Zero-dependency HTML re-serialization (`Dom::to_html`, `NodeRef::to_html`) —
+  round-trips a parsed tree back to HTML with correct escaping and void/raw-text
+  handling. Always available (no feature required).
+- `#![forbid(unsafe_code)]` — the crate contains no `unsafe`.
+
+## [0.2.0] — 2026-06-23
 
 A full rewrite. The 0.1 line was a learning-project parser that panicked on
 almost any real-world HTML; 0.2 is a robust, tiny, zero-dependency library.
@@ -19,10 +27,6 @@ almost any real-world HTML; 0.2 is a robust, tiny, zero-dependency library.
 - `find_by_tag` / `find_by_id` / `find_by_class` helpers.
 - Built-in, zero-dependency JSON serialization (`Dom::to_json`, `NodeRef::to_json`)
   behind the default `json` feature.
-- Zero-dependency HTML re-serialization (`Dom::to_html`, `NodeRef::to_html`) —
-  round-trips a parsed tree back to HTML with correct escaping and void/raw-text
-  handling. Always available (no feature required).
-- `#![forbid(unsafe_code)]` — the crate contains no `unsafe`.
 - Optional `serde::Serialize` (`serde` feature) producing the identical JSON shape.
 - Optional CSS-subset selector engine (`Dom::select`, `query` feature):
   type/`*`/`#id`/`.class`/`[attr]`/`[attr=value]`, descendant and child

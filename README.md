@@ -201,6 +201,13 @@ Property-tested for "never panics" + tree invariants (proptest, thousands of
 cases per run), snapshot-tested against a corpus of messy HTML, and CI runs
 fmt / clippy / a `no_std` build / a wasm size gate / `cargo-fuzz`.
 
+## Roadmap
+
+See [ROADMAP.md](./ROADMAP.md) for what's planned (`to_html()` re-serialization,
+wider selectors and entities, streaming events, performance) — and, just as
+importantly, the **non-goals** that keep this crate tiny and honest. Ideas and
+PRs that fit the philosophy are welcome.
+
 ## License
 
 [MIT](./LICENSE).

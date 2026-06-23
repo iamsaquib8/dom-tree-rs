@@ -4,5 +4,6 @@ Cargo.lock
 /dom-tree-wasm/pkg
 *.profraw
 .DS_Store
-corpus/
-artifacts/
+# cargo-fuzz working dirs (not the tests/corpus/ fixtures!)
+/fuzz/corpus/
+/fuzz/artifacts/

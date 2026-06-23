@@ -8,8 +8,8 @@ use proptest::prelude::*;
 /// more likely to exercise tokenizer/builder edge cases than random text.
 fn html_soup() -> impl Strategy<Value = String> {
     let alphabet = vec![
-        '<', '>', '/', '=', '"', '\'', ' ', '\n', '!', '-', '?', '&', ';', '#', '[', ']', 'a',
-        'b', 'p', 'l', 'i', '1', '\u{0}', '🦀',
+        '<', '>', '/', '=', '"', '\'', ' ', '\n', '!', '-', '?', '&', ';', '#', '[', ']', 'a', 'b',
+        'p', 'l', 'i', '1', '\u{0}', '🦀',
     ];
     proptest::collection::vec(proptest::sample::select(alphabet), 0..300)
         .prop_map(|v| v.into_iter().collect())

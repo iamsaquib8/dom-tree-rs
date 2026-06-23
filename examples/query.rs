@@ -16,7 +16,12 @@ fn main() {
 
     let dom = domtree::parse(html);
 
-    println!("title: {:?}", dom.select("article > h1.title").next().map(|n| n.text_content()));
+    println!(
+        "title: {:?}",
+        dom.select("article > h1.title")
+            .next()
+            .map(|n| n.text_content())
+    );
 
     println!("links:");
     for a in dom.select("ul.links a[href]") {

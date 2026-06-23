@@ -35,9 +35,8 @@ impl Dom {
     /// ```
     pub fn select<'a>(&'a self, selector: &str) -> impl Iterator<Item = NodeRef<'a>> + 'a {
         let groups = parse_selector(selector);
-        self.nodes().filter(move |n| {
-            n.is_element() && groups.iter().any(|g| matches_complex(*n, g))
-        })
+        self.nodes()
+            .filter(move |n| n.is_element() && groups.iter().any(|g| matches_complex(*n, g)))
     }
 }
 

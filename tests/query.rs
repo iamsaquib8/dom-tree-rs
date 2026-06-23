@@ -5,9 +5,7 @@ use domtree::parse;
 
 #[test]
 fn selectors() {
-    let dom = parse(
-        "<div class='a'><p id='x'>1</p><p class='y z'>2</p></div><p>3</p>",
-    );
+    let dom = parse("<div class='a'><p id='x'>1</p><p class='y z'>2</p></div><p>3</p>");
     assert_eq!(dom.select("p").count(), 3);
     assert_eq!(dom.select("div p").count(), 2);
     assert_eq!(dom.select("div > p").count(), 2);

@@ -54,7 +54,8 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                     let key_span = dom.intern(&lower(k));
                     let (decoded, unknown) = entities::decode(v.as_str());
                     if unknown {
-                        dom.errors.push(ParseError::new(pos, ErrorKind::UnknownEntity));
+                        dom.errors
+                            .push(ParseError::new(pos, ErrorKind::UnknownEntity));
                     }
                     let val_span = dom.intern(&decoded);
                     built.push((key_span, val_span));
@@ -87,7 +88,9 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                         }
                         open.truncate(idx);
                     }
-                    None => dom.errors.push(ParseError::new(pos, ErrorKind::StrayEndTag)),
+                    None => dom
+                        .errors
+                        .push(ParseError::new(pos, ErrorKind::StrayEndTag)),
                 }
             }
 
@@ -101,7 +104,8 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 } else {
                     let (decoded, unknown) = entities::decode(t);
                     if unknown {
-                        dom.errors.push(ParseError::new(pos, ErrorKind::UnknownEntity));
+                        dom.errors
+                            .push(ParseError::new(pos, ErrorKind::UnknownEntity));
                     }
                     dom.intern(&decoded)
                 };

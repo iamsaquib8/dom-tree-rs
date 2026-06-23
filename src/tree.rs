@@ -262,7 +262,9 @@ impl<'a> NodeRef<'a> {
 
     /// The class names on this element.
     pub fn classes(&self) -> impl Iterator<Item = &'a str> {
-        self.attr("class").into_iter().flat_map(str::split_whitespace)
+        self.attr("class")
+            .into_iter()
+            .flat_map(str::split_whitespace)
     }
 
     /// Whether this element has the given class.
@@ -310,22 +312,30 @@ impl<'a> NodeRef<'a> {
 
     /// The first child, if any.
     pub fn first_child(&self) -> Option<NodeRef<'a>> {
-        self.raw().first_child.map(|id| NodeRef { dom: self.dom, id })
+        self.raw()
+            .first_child
+            .map(|id| NodeRef { dom: self.dom, id })
     }
 
     /// The last child, if any.
     pub fn last_child(&self) -> Option<NodeRef<'a>> {
-        self.raw().last_child.map(|id| NodeRef { dom: self.dom, id })
+        self.raw()
+            .last_child
+            .map(|id| NodeRef { dom: self.dom, id })
     }
 
     /// The next sibling, if any.
     pub fn next_sibling(&self) -> Option<NodeRef<'a>> {
-        self.raw().next_sibling.map(|id| NodeRef { dom: self.dom, id })
+        self.raw()
+            .next_sibling
+            .map(|id| NodeRef { dom: self.dom, id })
     }
 
     /// The previous sibling, if any.
     pub fn prev_sibling(&self) -> Option<NodeRef<'a>> {
-        self.raw().prev_sibling.map(|id| NodeRef { dom: self.dom, id })
+        self.raw()
+            .prev_sibling
+            .map(|id| NodeRef { dom: self.dom, id })
     }
 
     /// This node's direct children, in order.

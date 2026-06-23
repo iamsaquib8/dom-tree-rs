@@ -78,13 +78,13 @@ fn script_content_is_raw() {
 #[test]
 fn entities_decoded_in_text_but_not_in_script() {
     let dom = parse("<p>Tom &amp; Jerry &lt;3 &#169; &#x1F600;</p>");
-    assert_eq!(
-        dom.root().unwrap().text_content(),
-        "Tom & Jerry <3 © 😀"
-    );
+    assert_eq!(dom.root().unwrap().text_content(), "Tom & Jerry <3 © 😀");
 
     let dom = parse("<style>a::before{content:'&amp;'}</style>");
-    assert_eq!(dom.root().unwrap().text_content(), "a::before{content:'&amp;'}");
+    assert_eq!(
+        dom.root().unwrap().text_content(),
+        "a::before{content:'&amp;'}"
+    );
 }
 
 #[test]
@@ -148,9 +148,28 @@ fn tokenizer_stream() {
 #[test]
 fn never_panics_on_garbage() {
     let inputs = [
-        "", "<", "<<>>", "<a", "<!--", "</>", "<a b=>", "<a b='", "<![CDATA[", "&", "&#;",
-        "&#xZZ;", "<a/></a>", "<\u{0}>", "🦀<b>", "<a =", "<!", "<?php ?>", "</",
-        "<div><div><div>", "<p</p>", "=>'\"<>",
+        "",
+        "<",
+        "<<>>",
+        "<a",
+        "<!--",
+        "</>",
+        "<a b=>",
+        "<a b='",
+        "<![CDATA[",
+        "&",
+        "&#;",
+        "&#xZZ;",
+        "<a/></a>",
+        "<\u{0}>",
+        "🦀<b>",
+        "<a =",
+        "<!",
+        "<?php ?>",
+        "</",
+        "<div><div><div>",
+        "<p</p>",
+        "=>'\"<>",
     ];
     for i in inputs {
         let _ = parse(i);

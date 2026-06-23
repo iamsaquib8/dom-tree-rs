@@ -68,7 +68,9 @@ pub(crate) fn decode(input: &str) -> (Cow<'_, str>, bool) {
 /// On success returns the decoded string plus how many bytes of `after` were
 /// consumed (including the trailing `;`).
 fn decode_one(after: &str) -> Option<(Cow<'static, str>, usize)> {
-    let window = after.get(..after.len().min(MAX_ENTITY_LEN)).unwrap_or(after);
+    let window = after
+        .get(..after.len().min(MAX_ENTITY_LEN))
+        .unwrap_or(after);
     let semi = window.find(';')?;
     let name = window.get(..semi)?;
     if name.is_empty() {

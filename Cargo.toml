@@ -12,7 +12,7 @@ readme = "README.md"
 license = "MIT"
 keywords = ["html", "parser", "dom", "wasm", "no-std"]
 categories = ["parser-implementations", "wasm", "web-programming", "no-std"]
-exclude = ["/examples/*.txt", "/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/tests/corpus"]
+exclude = ["/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/docs/launch"]
 
 [lib]
 name = "domtree"

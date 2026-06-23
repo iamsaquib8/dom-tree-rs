@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>dom-tree-wasm demo</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 60rem; }
+    textarea { width: 100%; height: 8rem; font-family: ui-monospace, monospace; }
+    pre { background: #f4f4f5; padding: 1rem; overflow: auto; border-radius: 8px; }
+    .meta { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>dom-tree-wasm</h1>
+  <p class="meta">Type messy HTML; it's parsed to a JSON tree by a tiny wasm module.</p>
+  <textarea id="in"><ul id=list><li class=item>Item 1<li>Item 2 &amp; more</ul></textarea>
+  <p class="meta" id="status"></p>
+  <pre id="out"></pre>
+
+  <!-- Build first:  wasm-pack build --target web  -->
+  <script type="module">
+    import init, { parse, parseErrorCount } from "./pkg/dom_tree_wasm.js";
+
+    const inEl = document.getElementById("in");
+    const outEl = document.getElementById("out");
+    const statusEl = document.getElementById("status");
+
+    function render() {
+      const html = inEl.value;
+      const tree = JSON.parse(parse(html));
+      const errs = parseErrorCount(html);
+      statusEl.textContent = errs === 0 ? "clean parse" : `recovered from ${errs} issue(s)`;
+      outEl.textContent = JSON.stringify(tree, null, 2);
+    }
+
+    await init();
+    inEl.addEventListener("input", render);
+    render();
+  </script>
+</body>
+</html>

@@ -37,6 +37,24 @@ impl Dom {
     }
 }
 
+impl<'a> NodeRef<'a> {
+    /// Serialize just this node and its subtree to a compact JSON string,
+    /// using the same shape as [`Dom::to_json`].
+    ///
+    /// ```
+    /// let dom = domtree::parse("<div><b>hi</b></div>");
+    /// let b = dom.find_by_tag("b").next().unwrap();
+    /// assert_eq!(b.to_json(), r#"{"type":"element","tag":"b","attrs":{},"children":[{"type":"text","value":"hi"}]}"#);
+    /// ```
+    pub fn to_json(&self) -> String {
+        let mut out = String::new();
+        let mut stack: Vec<Step<'a>> = Vec::new();
+        stack.push(Step::Open(*self));
+        process(&mut out, &mut stack);
+        out
+    }
+}
+
 enum Step<'a> {
     Open(NodeRef<'a>),
     Lit(&'static str),
@@ -108,10 +126,11 @@ fn write_open<'a>(out: &mut String, node: NodeRef<'a>, stack: &mut Vec<Step<'a>>
     }
 }
 
-/// Emit a separating comma unless we're right after an array opener (`[`),
-/// which is the only place a node is written without a preceding sibling.
+/// Emit a separating comma unless we're at the very start of the buffer or
+/// right after an array opener (`[`) — the only places a node is written
+/// without a preceding sibling.
 fn maybe_comma(out: &mut String) {
-    if out.as_bytes().last() != Some(&b'[') {
+    if !out.is_empty() && out.as_bytes().last() != Some(&b'[') {
         out.push(',');
     }
 }

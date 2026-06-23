@@ -6,12 +6,11 @@
 //! bailing out. See the crate docs for the exact recovery rules we implement.
 
 use alloc::borrow::Cow;
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use crate::entities;
 use crate::error::{ErrorKind, ParseError};
-use crate::node::{Element, NodeId, NodeKind};
+use crate::node::{NodeId, RawKind, Span};
 use crate::tags;
 use crate::token::Token;
 use crate::tokenizer::Tokenizer;
@@ -21,9 +20,9 @@ use crate::tree::Dom;
 /// [`Dom::errors`].
 pub(crate) fn parse_document(src: &str) -> Dom {
     let mut tk = Tokenizer::new(src);
-    let mut dom = Dom::with_capacity(src.len() / 8 + 4);
+    let mut dom = Dom::with_capacity(src.len());
     // The open-elements stack holds arena ids; names are resolved from the arena
-    // on demand, so we never allocate a separate per-element name string.
+    // string buffer on demand, so no separate per-element name allocation.
     let mut open: Vec<NodeId> = Vec::new();
 
     while let Some((tok, pos)) = tk.next_token() {
@@ -49,21 +48,22 @@ pub(crate) fn parse_document(src: &str) -> Dom {
 
                 let parent = open.last().copied();
 
-                let mut built: Vec<(Box<str>, Box<str>)> = Vec::with_capacity(attrs.len());
+                let name_span = dom.intern(&lname);
+                let mut built: Vec<(Span, Span)> = Vec::with_capacity(attrs.len());
                 for (k, v) in attrs {
-                    let key = box_lower(k);
+                    let key_span = dom.intern(&lower(k));
                     let (decoded, unknown) = entities::decode(v.as_str());
                     if unknown {
                         dom.errors.push(ParseError::new(pos, ErrorKind::UnknownEntity));
                     }
-                    built.push((key, into_box(decoded)));
+                    let val_span = dom.intern(&decoded);
+                    built.push((key_span, val_span));
                 }
 
-                let element = Element {
-                    name: Box::from(lname.as_ref()),
+                let id = dom.alloc(RawKind::Element {
+                    name: name_span,
                     attrs: built,
-                };
-                let id = dom.alloc(NodeKind::Element(element));
+                });
                 dom.append(parent, id);
 
                 if !self_closing && !tags::is_void(&lname) {
@@ -76,7 +76,10 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 if tags::is_void(&lname) {
                     continue; // void elements never have end tags
                 }
-                match open.iter().rposition(|&id| open_name(&dom, id) == lname.as_ref()) {
+                match open
+                    .iter()
+                    .rposition(|&id| open_name(&dom, id) == lname.as_ref())
+                {
                     Some(idx) => {
                         if idx != open.len() - 1 {
                             dom.errors
@@ -93,16 +96,16 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                     continue;
                 }
                 let parent = open.last().copied();
-                let text: Box<str> = if parent_is_raw(&dom, &open) {
-                    Box::from(t)
+                let span = if parent_is_raw(&dom, &open) {
+                    dom.intern(t)
                 } else {
                     let (decoded, unknown) = entities::decode(t);
                     if unknown {
                         dom.errors.push(ParseError::new(pos, ErrorKind::UnknownEntity));
                     }
-                    into_box(decoded)
+                    dom.intern(&decoded)
                 };
-                let id = dom.alloc(NodeKind::Text(text));
+                let id = dom.alloc(RawKind::Text(span));
                 dom.append(parent, id);
             }
 
@@ -111,19 +114,22 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                     continue;
                 }
                 let parent = open.last().copied();
-                let id = dom.alloc(NodeKind::Text(Box::from(c)));
+                let span = dom.intern(c);
+                let id = dom.alloc(RawKind::Text(span));
                 dom.append(parent, id);
             }
 
             Token::Comment(c) => {
                 let parent = open.last().copied();
-                let id = dom.alloc(NodeKind::Comment(Box::from(c)));
+                let span = dom.intern(c);
+                let id = dom.alloc(RawKind::Comment(span));
                 dom.append(parent, id);
             }
 
             Token::Doctype(d) => {
                 let parent = open.last().copied();
-                let id = dom.alloc(NodeKind::Doctype(Box::from(d.trim())));
+                let span = dom.intern(d.trim());
+                let id = dom.alloc(RawKind::Doctype(span));
                 dom.append(parent, id);
             }
         }
@@ -142,8 +148,8 @@ pub(crate) fn parse_document(src: &str) -> Dom {
 
 /// The lower-cased tag name of an open element, looked up in the arena.
 fn open_name(dom: &Dom, id: NodeId) -> &str {
-    match dom.node(id).map(|n| &n.kind) {
-        Some(NodeKind::Element(e)) => e.name(),
+    match dom.node(id).map(|n| &n.raw) {
+        Some(RawKind::Element { name, .. }) => dom.span_str(*name),
         _ => "",
     }
 }
@@ -155,29 +161,11 @@ fn parent_is_raw(dom: &Dom, open: &[NodeId]) -> bool {
 }
 
 /// Lower-case `name`, but borrow it unchanged when it's already lower-case
-/// (the common case) — avoiding an allocation + copy per tag/end-tag.
+/// (the common case) — avoiding an allocation per tag/attribute.
 fn lower(name: &str) -> Cow<'_, str> {
     if name.bytes().any(|b| b.is_ascii_uppercase()) {
         Cow::Owned(name.to_ascii_lowercase())
     } else {
         Cow::Borrowed(name)
-    }
-}
-
-/// Box a lower-cased copy of `name` in a single allocation, skipping the
-/// lower-casing work when it's already lower-case.
-fn box_lower(name: &str) -> Box<str> {
-    if name.bytes().any(|b| b.is_ascii_uppercase()) {
-        name.to_ascii_lowercase().into_boxed_str()
-    } else {
-        Box::from(name)
-    }
-}
-
-/// Turn a `Cow<str>` into a `Box<str>` with at most one allocation.
-fn into_box(c: Cow<'_, str>) -> Box<str> {
-    match c {
-        Cow::Borrowed(s) => Box::from(s),
-        Cow::Owned(s) => s.into_boxed_str(),
     }
 }

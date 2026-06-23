@@ -83,12 +83,12 @@ fn process(out: &mut String, stack: &mut Vec<Step<'_>>) {
 fn write_open<'a>(out: &mut String, node: NodeRef<'a>, stack: &mut Vec<Step<'a>>) {
     maybe_comma(out);
     match node.kind() {
-        NodeKind::Element(e) => {
+        NodeKind::Element { tag } => {
             out.push_str("{\"type\":\"element\",\"tag\":");
-            write_str(out, e.name());
+            write_str(out, tag);
             out.push_str(",\"attrs\":{");
             let mut first = true;
-            for (k, v) in e.attributes() {
+            for (k, v) in node.attributes() {
                 if !first {
                     out.push(',');
                 }

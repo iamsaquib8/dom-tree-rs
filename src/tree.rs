@@ -5,33 +5,53 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use crate::error::ParseError;
-use crate::node::{Element, Node, NodeId, NodeKind};
+use crate::node::{Node, NodeId, NodeKind, RawKind, Span};
 
-/// A parsed HTML document: an arena of nodes plus the list of top-level
-/// (root) nodes and any recovery diagnostics.
+/// A parsed HTML document: an arena of nodes, a single string buffer they
+/// reference, the top-level (root) nodes, and any recovery diagnostics.
 ///
-/// Build one with [`crate::parse`]. It is immutable once built; you traverse it
-/// with [`NodeRef`] handles obtained from [`Dom::root`], [`Dom::roots`],
-/// [`Dom::get`], or the `find_by_*` helpers.
+/// Build one with [`crate::parse`]. It is immutable once built; traverse it with
+/// [`NodeRef`] handles from [`Dom::root`], [`Dom::roots`], [`Dom::get`], or the
+/// `find_by_*` helpers.
 #[derive(Clone)]
 pub struct Dom {
     pub(crate) nodes: Vec<Node>,
+    pub(crate) strings: String,
     pub(crate) roots: Vec<NodeId>,
     pub(crate) errors: Vec<ParseError>,
 }
 
 impl Dom {
-    pub(crate) fn with_capacity(cap: usize) -> Self {
+    pub(crate) fn with_capacity(src_len: usize) -> Self {
         Dom {
-            nodes: Vec::with_capacity(cap),
+            nodes: Vec::with_capacity(src_len / 16 + 8),
+            strings: String::with_capacity(src_len),
             roots: Vec::new(),
             errors: Vec::new(),
         }
     }
 
-    pub(crate) fn alloc(&mut self, kind: NodeKind) -> NodeId {
+    /// Append a string to the arena and return its [`Span`].
+    pub(crate) fn intern(&mut self, s: &str) -> Span {
+        if s.is_empty() {
+            return Span::EMPTY;
+        }
+        let start = self.strings.len() as u32;
+        self.strings.push_str(s);
+        Span {
+            start,
+            len: s.len() as u32,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn span_str(&self, span: Span) -> &str {
+        self.strings.get(span.range()).unwrap_or("")
+    }
+
+    pub(crate) fn alloc(&mut self, raw: RawKind) -> NodeId {
         let id = NodeId(self.nodes.len() as u32);
-        self.nodes.push(Node::new(kind));
+        self.nodes.push(Node::new(raw));
         id
     }
 
@@ -45,8 +65,8 @@ impl Dom {
         self.nodes.get_mut(id.index())
     }
 
-    /// Append `child` under `parent` (or as a new root when `parent` is `None`),
-    /// maintaining all four sibling/child links.
+    /// Append `child` under `parent` (or as a root when `parent` is `None`),
+    /// maintaining all sibling/child links.
     pub(crate) fn append(&mut self, parent: Option<NodeId>, child: NodeId) {
         let parent = match parent {
             None => {
@@ -164,10 +184,9 @@ pub struct NodeRef<'a> {
 impl<'a> NodeRef<'a> {
     #[inline]
     fn raw(&self) -> &'a Node {
-        // Invariant: a `NodeRef` is only ever constructed from an id that is
-        // valid in `dom` (via `Dom::get`/`root`/`roots`/`nodes` or by following
-        // an existing node's links). The arena is append-only and never shrinks,
-        // so this index is always in bounds.
+        // Invariant: a `NodeRef` is only ever constructed from an id valid in
+        // `dom` (via the `Dom` accessors or by following node links). The arena
+        // is append-only and never shrinks, so this index is always in bounds.
         debug_assert!(self.id.index() < self.dom.nodes.len());
         &self.dom.nodes[self.id.index()]
     }
@@ -178,67 +197,91 @@ impl<'a> NodeRef<'a> {
         self.id
     }
 
-    /// The node's kind (element / text / comment / doctype).
-    #[inline]
-    pub fn kind(&self) -> &'a NodeKind {
-        &self.raw().kind
+    /// The node's kind (element / text / comment / doctype) as a borrowed view.
+    pub fn kind(&self) -> NodeKind<'a> {
+        match &self.raw().raw {
+            RawKind::Element { name, .. } => NodeKind::Element {
+                tag: self.dom.span_str(*name),
+            },
+            RawKind::Text(s) => NodeKind::Text(self.dom.span_str(*s)),
+            RawKind::Comment(s) => NodeKind::Comment(self.dom.span_str(*s)),
+            RawKind::Doctype(s) => NodeKind::Doctype(self.dom.span_str(*s)),
+        }
     }
 
     /// Whether this node is an element.
     pub fn is_element(&self) -> bool {
-        matches!(self.raw().kind, NodeKind::Element(_))
+        matches!(self.raw().raw, RawKind::Element { .. })
     }
 
     /// Whether this node is a text node.
     pub fn is_text(&self) -> bool {
-        matches!(self.raw().kind, NodeKind::Text(_))
-    }
-
-    /// The underlying [`Element`], if this node is one.
-    pub fn element(&self) -> Option<&'a Element> {
-        match &self.raw().kind {
-            NodeKind::Element(e) => Some(e),
-            _ => None,
-        }
+        matches!(self.raw().raw, RawKind::Text(_))
     }
 
     /// The tag name (lower-cased), if this node is an element.
     pub fn tag_name(&self) -> Option<&'a str> {
-        self.element().map(Element::name)
+        match &self.raw().raw {
+            RawKind::Element { name, .. } => Some(self.dom.span_str(*name)),
+            _ => None,
+        }
     }
 
     /// The value of attribute `name`, if this is an element with that attribute.
     pub fn attr(&self, name: &str) -> Option<&'a str> {
-        self.element().and_then(|e| e.attr(name))
+        let dom = self.dom;
+        match &self.raw().raw {
+            RawKind::Element { attrs, .. } => attrs
+                .iter()
+                .find(|&&(k, _)| dom.span_str(k) == name)
+                .map(|&(_, v)| dom.span_str(v)),
+            _ => None,
+        }
+    }
+
+    /// Whether attribute `name` is present (including valueless boolean attrs).
+    pub fn has_attr(&self, name: &str) -> bool {
+        let dom = self.dom;
+        match &self.raw().raw {
+            RawKind::Element { attrs, .. } => attrs.iter().any(|&(k, _)| dom.span_str(k) == name),
+            _ => false,
+        }
     }
 
     /// All `(name, value)` attribute pairs (empty iterator for non-elements).
     pub fn attributes(&self) -> impl Iterator<Item = (&'a str, &'a str)> {
-        self.element().into_iter().flat_map(Element::attributes)
+        let dom = self.dom;
+        let attrs: &'a [(Span, Span)] = match &self.raw().raw {
+            RawKind::Element { attrs, .. } => attrs.as_slice(),
+            _ => &[],
+        };
+        attrs
+            .iter()
+            .map(move |&(k, v)| (dom.span_str(k), dom.span_str(v)))
     }
 
     /// The class names on this element.
     pub fn classes(&self) -> impl Iterator<Item = &'a str> {
-        self.element().into_iter().flat_map(Element::classes)
+        self.attr("class").into_iter().flat_map(str::split_whitespace)
     }
 
     /// Whether this element has the given class.
     pub fn has_class(&self, class: &str) -> bool {
-        self.element().is_some_and(|e| e.has_class(class))
+        self.classes().any(|c| c == class)
     }
 
     /// This node's own text, if it is a text node (already entity-decoded).
     pub fn text(&self) -> Option<&'a str> {
-        match &self.raw().kind {
-            NodeKind::Text(t) => Some(t),
+        match &self.raw().raw {
+            RawKind::Text(s) => Some(self.dom.span_str(*s)),
             _ => None,
         }
     }
 
     /// The body text of this comment node, if it is one.
     pub fn comment(&self) -> Option<&'a str> {
-        match &self.raw().kind {
-            NodeKind::Comment(c) => Some(c),
+        match &self.raw().raw {
+            RawKind::Comment(s) => Some(self.dom.span_str(*s)),
             _ => None,
         }
     }
@@ -247,12 +290,12 @@ impl<'a> NodeRef<'a> {
     /// order (entity-decoded). Equivalent to the DOM `textContent`.
     pub fn text_content(&self) -> String {
         let mut out = String::new();
-        if let NodeKind::Text(t) = &self.raw().kind {
-            out.push_str(t);
+        if let RawKind::Text(s) = &self.raw().raw {
+            out.push_str(self.dom.span_str(*s));
         }
         for d in self.descendants() {
-            if let NodeKind::Text(t) = &d.raw().kind {
-                out.push_str(t);
+            if let RawKind::Text(s) = &d.raw().raw {
+                out.push_str(self.dom.span_str(*s));
             }
         }
         out
@@ -321,21 +364,21 @@ impl<'a> NodeRef<'a> {
 
 impl<'a> fmt::Debug for NodeRef<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.raw().kind {
-            NodeKind::Element(e) => f
+        match self.kind() {
+            NodeKind::Element { tag } => f
                 .debug_struct("Element")
-                .field("tag", &e.name())
-                .field("attrs", &Attrs(e))
+                .field("tag", &tag)
+                .field("attrs", &Attrs(*self))
                 .field("children", &Kids(*self))
                 .finish(),
-            NodeKind::Text(t) => f.debug_tuple("Text").field(&t.as_ref()).finish(),
-            NodeKind::Comment(c) => f.debug_tuple("Comment").field(&c.as_ref()).finish(),
-            NodeKind::Doctype(d) => f.debug_tuple("Doctype").field(&d.as_ref()).finish(),
+            NodeKind::Text(t) => f.debug_tuple("Text").field(&t).finish(),
+            NodeKind::Comment(c) => f.debug_tuple("Comment").field(&c).finish(),
+            NodeKind::Doctype(d) => f.debug_tuple("Doctype").field(&d).finish(),
         }
     }
 }
 
-struct Attrs<'a>(&'a Element);
+struct Attrs<'a>(NodeRef<'a>);
 impl<'a> fmt::Debug for Attrs<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut m = f.debug_map();
@@ -375,8 +418,6 @@ impl<'a> Iterator for Descendants<'a> {
 
 impl<'a> Descendants<'a> {
     fn advance(&self, cur: NodeId) -> Option<NodeId> {
-        // Pre-order: descend to first child, else move to a next sibling,
-        // walking up ancestors until we leave the subtree rooted at `root`.
         if let Some(child) = self.dom.node(cur).and_then(|n| n.first_child) {
             return Some(child);
         }

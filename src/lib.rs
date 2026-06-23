@@ -76,7 +76,7 @@ mod serialize;
 mod query;
 
 pub use error::{ErrorKind, ParseError};
-pub use node::{Element, NodeId, NodeKind};
+pub use node::{NodeId, NodeKind};
 pub use token::{AttrValue, Token};
 pub use tokenizer::Tokenizer;
 pub use tree::{Descendants, Dom, NodeRef};

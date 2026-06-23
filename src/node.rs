@@ -1,7 +1,13 @@
 //! Node types stored in the [`Dom`](crate::Dom) arena.
+//!
+//! Strings (tag names, attribute names/values, text) are **not** stored inline
+//! on each node. They live in a single growable buffer on the [`Dom`](crate::Dom)
+//! and nodes reference them by [`Span`] (a byte range). This replaces thousands
+//! of tiny per-node allocations with appends to one buffer — the main reason
+//! parsing is fast despite producing an owned tree.
 
-use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::ops::Range;
 
 /// A handle to a node inside a [`Dom`](crate::Dom). Cheap (`Copy`) and stable
 /// for the lifetime of the tree.
@@ -16,93 +22,75 @@ impl NodeId {
     }
 }
 
-/// What a node *is*.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum NodeKind {
-    /// An element, e.g. `<div class="x">…</div>`.
-    Element(Element),
-    /// A run of text. Stored already entity-decoded (except inside
-    /// `<script>`/`<style>`, whose contents are kept raw).
-    Text(Box<str>),
-    /// The body of an HTML comment.
-    Comment(Box<str>),
-    /// The body of a `<!doctype …>` declaration.
-    Doctype(Box<str>),
+/// A byte range into the [`Dom`](crate::Dom)'s string arena.
+#[derive(Clone, Copy)]
+pub(crate) struct Span {
+    pub(crate) start: u32,
+    pub(crate) len: u32,
 }
 
-/// An HTML element: a lower-cased tag name and its attributes in source order.
-///
-/// Attributes are stored in an insertion-ordered `Vec` rather than a `HashMap`:
-/// real elements carry only a handful of attributes, so linear lookup is faster
-/// in practice *and* dramatically smaller in a WASM build (no `HashMap`/SipHash
-/// machinery), which is the whole point of this crate.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Element {
-    pub(crate) name: Box<str>,
-    pub(crate) attrs: Vec<(Box<str>, Box<str>)>,
-}
+impl Span {
+    pub(crate) const EMPTY: Span = Span { start: 0, len: 0 };
 
-impl Element {
-    /// The tag name, lower-cased (e.g. `"div"`).
     #[inline]
-    pub fn name(&self) -> &str {
-        &self.name
+    pub(crate) fn range(self) -> Range<usize> {
+        let start = self.start as usize;
+        start..start + self.len as usize
     }
+}
 
-    /// The value of attribute `name`, if present. First match wins.
-    pub fn attr(&self, name: &str) -> Option<&str> {
-        self.attrs
-            .iter()
-            .find(|(k, _)| k.as_ref() == name)
-            .map(|(_, v)| v.as_ref())
-    }
+/// What a node is — a borrowed, `Copy` view returned by
+/// [`NodeRef::kind`](crate::NodeRef::kind).
+///
+/// For elements, the tag name is included here; read attributes via the
+/// [`NodeRef`](crate::NodeRef) accessors (`attr`, `attributes`, `classes`, …).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NodeKind<'a> {
+    /// An element, with its lower-cased tag name.
+    Element {
+        /// The lower-cased tag name (e.g. `"div"`).
+        tag: &'a str,
+    },
+    /// A run of text (already entity-decoded, except inside `<script>`/`<style>`).
+    Text(&'a str),
+    /// The body of an HTML comment.
+    Comment(&'a str),
+    /// The body of a `<!doctype …>` declaration.
+    Doctype(&'a str),
+}
 
-    /// Whether attribute `name` is present (including valueless boolean attrs).
-    pub fn has_attr(&self, name: &str) -> bool {
-        self.attrs.iter().any(|(k, _)| k.as_ref() == name)
-    }
-
-    /// All attributes as `(name, value)` pairs, in source order.
-    pub fn attributes(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.attrs.iter().map(|(k, v)| (k.as_ref(), v.as_ref()))
-    }
-
-    /// The `id` attribute, if any.
-    pub fn id(&self) -> Option<&str> {
-        self.attr("id")
-    }
-
-    /// The `class` attribute split into individual class names.
-    pub fn classes(&self) -> impl Iterator<Item = &str> {
-        self.attr("class").into_iter().flat_map(str::split_whitespace)
-    }
-
-    /// Whether the element's `class` attribute contains `class`.
-    pub fn has_class(&self, class: &str) -> bool {
-        self.classes().any(|c| c == class)
-    }
+/// The internal, span-based node kind (not exposed; see [`NodeKind`]).
+#[derive(Clone)]
+pub(crate) enum RawKind {
+    Element {
+        name: Span,
+        attrs: Vec<(Span, Span)>,
+    },
+    Text(Span),
+    Comment(Span),
+    Doctype(Span),
 }
 
 /// The internal arena record: tree links plus the node's kind.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct Node {
     pub(crate) parent: Option<NodeId>,
     pub(crate) first_child: Option<NodeId>,
     pub(crate) last_child: Option<NodeId>,
     pub(crate) next_sibling: Option<NodeId>,
     pub(crate) prev_sibling: Option<NodeId>,
-    pub(crate) kind: NodeKind,
+    pub(crate) raw: RawKind,
 }
 
 impl Node {
-    pub(crate) fn new(kind: NodeKind) -> Self {
+    pub(crate) fn new(raw: RawKind) -> Self {
         Node {
             parent: None,
             first_child: None,
             last_child: None,
             next_sibling: None,
             prev_sibling: None,
-            kind,
+            raw,
         }
     }
 }

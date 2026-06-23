@@ -7,7 +7,7 @@
 
 use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeStruct, Serializer};
 
-use crate::node::{Element, NodeKind};
+use crate::node::NodeKind;
 use crate::tree::{Dom, NodeRef};
 
 impl Serialize for Dom {
@@ -35,11 +35,11 @@ impl Serialize for Forest<'_> {
 impl<'a> Serialize for NodeRef<'a> {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         match self.kind() {
-            NodeKind::Element(e) => {
+            NodeKind::Element { tag } => {
                 let mut st = s.serialize_struct("element", 4)?;
                 st.serialize_field("type", "element")?;
-                st.serialize_field("tag", e.name())?;
-                st.serialize_field("attrs", &AttrMap(e))?;
+                st.serialize_field("tag", tag)?;
+                st.serialize_field("attrs", &AttrMap(*self))?;
                 st.serialize_field("children", &Children(*self))?;
                 st.end()
             }
@@ -57,7 +57,7 @@ fn two_field<S: Serializer>(s: S, ty: &'static str, value: &str) -> Result<S::Ok
     st.end()
 }
 
-struct AttrMap<'a>(&'a Element);
+struct AttrMap<'a>(NodeRef<'a>);
 
 impl Serialize for AttrMap<'_> {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {

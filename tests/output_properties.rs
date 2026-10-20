@@ -230,6 +230,19 @@ fn deep_inline_marks() {
     assert_eq!(dom.to_markdown(), "***[x](/x)***");
 }
 
+#[test]
+fn blank_runs_in_pre_stay_linear() {
+    // Each block inside the `<pre>` owes a line break right after a growing
+    // run of newlines; checking that run must not rescan it every time
+    // (this took ~70 s when it was quadratic).
+    let html = format!("<pre>x{}y</pre>", "<p></p>\n".repeat(DEPTH));
+    let text = parse(&html).to_text();
+    assert!(text.starts_with('x') && text.ends_with('y'));
+    // The first `<p>` owes a blank line; after that the verbatim newlines are
+    // already enough.
+    assert_eq!(text.matches('\n').count(), DEPTH + 2);
+}
+
 #[cfg(feature = "markdown")]
 #[test]
 fn wide_ragged_tables_stay_linear() {

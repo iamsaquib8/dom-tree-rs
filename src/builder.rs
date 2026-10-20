@@ -29,6 +29,17 @@ pub(crate) fn parse_document(src: &str) -> Dom {
     let mut tk = Tokenizer::new(src);
     let mut dom = Dom::with_capacity(src.len());
     let mut open = OpenElements::default();
+    // Source ranges are two `u32`s. Every offset is at most `src.len()`, so one
+    // check here covers them all; an input too big for them gets no ranges
+    // (and `set_end` is then a no-op, so the casts below never matter).
+    let fits = src.len() < u32::MAX as usize;
+    let range = |start: usize, end: usize| {
+        if fits {
+            SrcRange::new(start as u32, end as u32)
+        } else {
+            SrcRange::NONE
+        }
+    };
 
     while let Some((tok, pos)) = tk.next_token() {
         let end = tk.offset();
@@ -70,7 +81,7 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                         name: name_span,
                         attrs: built,
                     },
-                    SrcRange::new(pos, end),
+                    range(pos, end),
                 );
                 dom.append(parent, id);
 
@@ -129,7 +140,7 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                     }
                     dom.intern(&decoded)
                 };
-                let id = dom.alloc(RawKind::Text(span), SrcRange::new(pos, end));
+                let id = dom.alloc(RawKind::Text(span), range(pos, end));
                 dom.append(parent, id);
             }
 
@@ -139,21 +150,21 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 }
                 let parent = open.top();
                 let span = dom.intern(c);
-                let id = dom.alloc(RawKind::Text(span), SrcRange::new(pos, end));
+                let id = dom.alloc(RawKind::Text(span), range(pos, end));
                 dom.append(parent, id);
             }
 
             Token::Comment(c) => {
                 let parent = open.top();
                 let span = dom.intern(c);
-                let id = dom.alloc(RawKind::Comment(span), SrcRange::new(pos, end));
+                let id = dom.alloc(RawKind::Comment(span), range(pos, end));
                 dom.append(parent, id);
             }
 
             Token::Doctype(d) => {
                 let parent = open.top();
                 let span = dom.intern(d.trim());
-                let id = dom.alloc(RawKind::Doctype(span), SrcRange::new(pos, end));
+                let id = dom.alloc(RawKind::Doctype(span), range(pos, end));
                 dom.append(parent, id);
             }
         }
@@ -165,7 +176,7 @@ pub(crate) fn parse_document(src: &str) -> Dom {
         // Everything still open runs to the end of the input.
         for &(id, _) in &open.stack {
             if let Some(n) = dom.node_mut(id) {
-                n.src.set_end(src.len());
+                n.src.set_end(src.len() as u32);
             }
         }
     }
@@ -216,18 +227,11 @@ impl OpenElements {
         self.stack.len()
     }
 
+    #[inline]
     fn push(&mut self, dom: &Dom, id: NodeId, name: Span) {
         self.stack.push((id, name));
-        match &mut self.counts {
-            Some(counts) => count_up(counts, dom.span_str(name)),
-            None if self.stack.len() > DEEP => {
-                let mut counts = BTreeMap::new();
-                for &(_, open) in &self.stack {
-                    count_up(&mut counts, dom.span_str(open));
-                }
-                self.counts = Some(counts);
-            }
-            None => {}
+        if self.counts.is_some() || self.stack.len() > DEEP {
+            self.count_push(dom, name);
         }
     }
 
@@ -238,18 +242,39 @@ impl OpenElements {
             return;
         };
         if let Some(n) = dom.node_mut(id) {
-            n.src.set_end(at);
+            n.src.set_end(at as u32);
         }
-        if let Some(counts) = &mut self.counts {
-            if self.stack.len() < DEEP / 2 {
-                self.counts = None;
-            } else {
-                let name = dom.span_str(name);
-                if let Some(c) = counts.get_mut(name) {
-                    *c = c.saturating_sub(1);
-                    if *c == 0 {
-                        counts.remove(name);
-                    }
+        if self.counts.is_some() {
+            self.count_pop(dom, name);
+        }
+    }
+
+    /// The deep-stack bookkeeping behind `push`: start counting, or count.
+    #[cold]
+    fn count_push(&mut self, dom: &Dom, name: Span) {
+        match &mut self.counts {
+            Some(counts) => count_up(counts, dom.span_str(name)),
+            None => {
+                let mut counts = BTreeMap::new();
+                for &(_, open) in &self.stack {
+                    count_up(&mut counts, dom.span_str(open));
+                }
+                self.counts = Some(counts);
+            }
+        }
+    }
+
+    /// The deep-stack bookkeeping behind `pop`: uncount, or stop counting.
+    #[cold]
+    fn count_pop(&mut self, dom: &Dom, name: Span) {
+        if self.stack.len() < DEEP / 2 {
+            self.counts = None;
+        } else if let Some(counts) = &mut self.counts {
+            let name = dom.span_str(name);
+            if let Some(c) = counts.get_mut(name) {
+                *c = c.saturating_sub(1);
+                if *c == 0 {
+                    counts.remove(name);
                 }
             }
         }

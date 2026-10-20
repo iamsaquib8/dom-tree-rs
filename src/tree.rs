@@ -33,7 +33,10 @@ pub struct Dom {
 impl Dom {
     pub(crate) fn with_capacity(src_len: usize) -> Self {
         Dom {
-            nodes: Vec::with_capacity(src_len / 16 + 8),
+            // About one node per 13 bytes of dense markup, so the arena rarely
+            // reallocates (copying it) mid-parse: ~5 bytes reserved per input
+            // byte with 64-byte nodes.
+            nodes: Vec::with_capacity(src_len / 13 + 8),
             strings: String::with_capacity(src_len),
             first_root: None,
             last_root: None,

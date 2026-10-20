@@ -93,8 +93,9 @@ pub(crate) enum RawKind {
 /// Where a node came from: a byte range into the *original source* (not the
 /// string arena), or [`SrcRange::NONE`] for nodes created by editing.
 ///
-/// Two `u32`s keep the per-node overhead at 8 bytes; offsets that don't fit
-/// (inputs over 4 GiB) degrade to `NONE` rather than wrapping.
+/// Two `u32`s keep the per-node overhead at 8 bytes. The builder records
+/// ranges only when the whole input fits in them (under 4 GiB); for a larger
+/// input every node is `NONE`, never a wrapped offset.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct SrcRange {
     start: u32,
@@ -102,29 +103,29 @@ pub(crate) struct SrcRange {
 }
 
 impl SrcRange {
+    /// No range. `start == u32::MAX` marks it: real offsets are below that.
     pub(crate) const NONE: SrcRange = SrcRange {
         start: u32::MAX,
         end: u32::MAX,
     };
 
-    pub(crate) fn new(start: usize, end: usize) -> Self {
-        match (u32::try_from(start), u32::try_from(end)) {
-            (Ok(start), Ok(end)) if start < u32::MAX && start <= end => SrcRange { start, end },
-            _ => SrcRange::NONE,
-        }
+    /// A range the caller knows is valid (`start <= end < u32::MAX`).
+    #[inline]
+    pub(crate) fn new(start: u32, end: u32) -> Self {
+        SrcRange { start, end }
     }
 
-    /// Move the end (an element's range grows when it is closed).
+    /// Move the end (an element's range grows when it is closed). A no-op on
+    /// [`SrcRange::NONE`].
     #[inline]
-    pub(crate) fn set_end(&mut self, end: usize) {
-        match u32::try_from(end) {
-            Ok(end) if self.start < u32::MAX && self.start <= end => self.end = end,
-            _ => *self = SrcRange::NONE,
+    pub(crate) fn set_end(&mut self, end: u32) {
+        if self.start != u32::MAX {
+            self.end = end;
         }
     }
 
     pub(crate) fn get(self) -> Option<Range<usize>> {
-        (self != SrcRange::NONE).then_some(self.start as usize..self.end as usize)
+        (self.start != u32::MAX).then_some(self.start as usize..self.end.max(self.start) as usize)
     }
 }
 

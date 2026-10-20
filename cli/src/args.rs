@@ -6,6 +6,8 @@
 use std::ffi::OsString;
 use std::fmt;
 
+use crate::extract::Field;
+
 pub const HELP: &str = "\
 domtree — query HTML with CSS selectors
 
@@ -19,7 +21,10 @@ USAGE:
 EXAMPLES:
     curl -s https://example.com | domtree 'a' -a href
     domtree -f page.html -t 'article h2'
-    curl -s https://blog.rust-lang.org | domtree -r 'nav, footer' --markdown main
+    curl -sL https://example.com/post | domtree --main --markdown
+    domtree -e title=h1 -e price=.price -e 'tags=.tag[]' < product.html
+    domtree '.card' -e name=h2 -e url=a@href --jsonl < list.html
+    domtree --csv -1 < report.html > report.csv
     domtree -c 'img:not([alt])' < page.html
 
 OUTPUT (default: matching elements as HTML, one per line):
@@ -29,26 +34,54 @@ OUTPUT (default: matching elements as HTML, one per line):
     -m, --markdown              Print each match as Markdown
     -j, --json                  Print matches as a JSON array (document JSON with
                                 no selector)
+        --jsonl                 Print one JSON value per line (JSON Lines)
+        --csv                   Print matched <table>s as CSV (default selector:
+                                table), separated by a blank line
     -c, --count                 Print the number of matches
     -p, --pretty                Pretty-print HTML output
     -1, --first                 Only use the first match
     -w, --ignore-whitespace     Skip matches whose output is empty or whitespace
 
+EXTRACT:
+    -e, --extract <NAME=SPEC>   Print a JSON object with a NAME key (repeat it);
+                                SPEC is SELECTOR (text of the first match) or
+                                SELECTOR@ATTR (its attribute); end it with []
+                                for an array of all matches. An empty SELECTOR
+                                is the scope element itself. With a SELECTOR
+                                argument, prints one object per match of it, as
+                                a JSON array (or JSON Lines with --jsonl).
+        --links                 Print every link as URL<TAB>text (JSON objects
+                                with --json / --jsonl); a SELECTOR keeps the
+                                links inside its matches
+        --meta                  Print the page metadata (title, description,
+                                canonical, OpenGraph, JSON-LD, ...) as JSON
+
 DOCUMENT:
     -r, --remove-nodes <SEL>    Remove nodes matching SEL before selecting
                                 (repeatable)
+        --main                  Keep only the main content (the article, without
+                                navigation, sidebars and footer)
     -b, --base <URL>            Resolve relative href/src/... URLs against URL
     -B, --detect-base           Use the document's <base href> (falls back to --base)
 
 INPUT / OUTPUT:
     -f, --filename <FILE>       Read from FILE instead of stdin ('-' = stdin)
     -o, --output <FILE>         Write to FILE instead of stdout
+        --encoding <LABEL>      Decode the input as LABEL: utf-8, utf-16le,
+                                utf-16be or windows-1252 (default: detected from
+                                a BOM, then <meta charset>, then UTF-8 validity,
+                                falling back to windows-1252)
 
     -h, --help                  Print this help
     -V, --version               Print the version
 
 Selectors: type, .class, #id, [attr op value], descendant/child/sibling
 combinators, :nth-child(), :not(), :is(), :has(), :contains(\"text\"), and more.
+In --extract SPECs only the last @NAME and a trailing [] are special; write \\@
+for a literal @ in a selector.
+
+Exit codes: 0 success (also when nothing matches), 1 invalid selector or I/O
+error, 2 bad usage.
 Docs: https://github.com/iamsaquib8/dom-tree-rs
 ";
 
@@ -59,7 +92,23 @@ pub enum Mode {
     Text,
     Markdown,
     Json,
+    Jsonl,
+    Csv,
     Count,
+}
+
+impl Mode {
+    fn flag(self) -> &'static str {
+        match self {
+            Mode::Html => "HTML output",
+            Mode::Text => "--text",
+            Mode::Markdown => "--markdown",
+            Mode::Json => "--json",
+            Mode::Jsonl => "--jsonl",
+            Mode::Csv => "--csv",
+            Mode::Count => "--count",
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -70,11 +119,16 @@ pub struct Options {
     pub pretty: bool,
     pub first: bool,
     pub ignore_whitespace: bool,
+    pub extract: Vec<Field>,
+    pub links: bool,
+    pub meta: bool,
     pub remove: Vec<String>,
+    pub main: bool,
     pub base: Option<String>,
     pub detect_base: bool,
     pub input: Option<String>,
     pub output: Option<String>,
+    pub encoding: Option<String>,
 }
 
 #[derive(Debug)]
@@ -118,7 +172,7 @@ pub fn parse<I: IntoIterator<Item = OsString>>(args: I) -> Result<Command, ArgEr
                         .next()
                         .ok_or_else(|| ArgError(format!("option '--{name}' needs a value")))?,
                 };
-                apply_value(&mut opts, flag, value);
+                apply_value(&mut opts, flag, value)?;
             } else if inline.is_some() {
                 return Err(ArgError(format!("option '--{name}' takes no value")));
             } else if let Some(cmd) = apply_switch(&mut opts, flag) {
@@ -138,7 +192,7 @@ pub fn parse<I: IntoIterator<Item = OsString>>(args: I) -> Result<Command, ArgEr
                     } else {
                         rest.to_string()
                     };
-                    apply_value(&mut opts, flag, value);
+                    apply_value(&mut opts, flag, value)?;
                     break;
                 } else if let Some(cmd) = apply_switch(&mut opts, flag) {
                     return Ok(cmd);
@@ -150,7 +204,48 @@ pub fn parse<I: IntoIterator<Item = OsString>>(args: I) -> Result<Command, ArgEr
     }
 
     opts.selector = selector.join(" ").trim().to_string();
+    validate(&opts)?;
     Ok(Command::Run(opts))
+}
+
+/// Reject flag combinations that have no sensible meaning.
+fn validate(opts: &Options) -> Result<(), ArgError> {
+    let err = |msg: String| Err(ArgError(msg));
+    let tasks: Vec<&str> = [
+        (!opts.extract.is_empty(), "--extract"),
+        (opts.links, "--links"),
+        (opts.meta, "--meta"),
+    ]
+    .into_iter()
+    .filter_map(|(on, name)| on.then_some(name))
+    .collect();
+    if let [a, b, ..] = tasks.as_slice() {
+        return err(format!("{a} and {b} cannot be combined"));
+    }
+    if let Some(&task) = tasks.first() {
+        if opts.attribute.is_some() {
+            return err(format!("{task} cannot be combined with --attribute"));
+        }
+        let fits = match opts.mode {
+            Mode::Html | Mode::Json | Mode::Jsonl => true,
+            // Links are text lines (`-t` is the default) and countable.
+            Mode::Text | Mode::Count => opts.links,
+            Mode::Markdown | Mode::Csv => false,
+        };
+        if !fits {
+            return err(format!(
+                "{task} cannot be combined with {}",
+                opts.mode.flag()
+            ));
+        }
+        if opts.meta && !opts.selector.is_empty() {
+            return err("--meta takes no SELECTOR (it describes the whole page)".into());
+        }
+    }
+    if opts.mode == Mode::Csv && opts.attribute.is_some() {
+        return err("--csv cannot be combined with --attribute".into());
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -159,15 +254,22 @@ enum Flag {
     Text,
     Markdown,
     Json,
+    Jsonl,
+    Csv,
     Count,
     Pretty,
     First,
     IgnoreWhitespace,
+    Extract,
+    Links,
+    Meta,
     Remove,
+    Main,
     Base,
     DetectBase,
     Filename,
     Output,
+    Encoding,
     Help,
     Version,
 }
@@ -179,15 +281,22 @@ impl Flag {
             "text" => Flag::Text,
             "markdown" => Flag::Markdown,
             "json" => Flag::Json,
+            "jsonl" => Flag::Jsonl,
+            "csv" => Flag::Csv,
             "count" => Flag::Count,
             "pretty" => Flag::Pretty,
             "first" => Flag::First,
             "ignore-whitespace" => Flag::IgnoreWhitespace,
+            "extract" => Flag::Extract,
+            "links" => Flag::Links,
+            "meta" => Flag::Meta,
             "remove-nodes" | "remove" => Flag::Remove,
+            "main" => Flag::Main,
             "base" => Flag::Base,
             "detect-base" => Flag::DetectBase,
             "filename" | "file" => Flag::Filename,
             "output" => Flag::Output,
+            "encoding" => Flag::Encoding,
             "help" => Flag::Help,
             "version" => Flag::Version,
             _ => return None,
@@ -204,6 +313,7 @@ impl Flag {
             'p' => Flag::Pretty,
             '1' => Flag::First,
             'w' => Flag::IgnoreWhitespace,
+            'e' => Flag::Extract,
             'r' => Flag::Remove,
             'b' => Flag::Base,
             'B' => Flag::DetectBase,
@@ -218,20 +328,38 @@ impl Flag {
     fn takes_value(self) -> bool {
         matches!(
             self,
-            Flag::Attribute | Flag::Remove | Flag::Base | Flag::Filename | Flag::Output
+            Flag::Attribute
+                | Flag::Extract
+                | Flag::Remove
+                | Flag::Base
+                | Flag::Filename
+                | Flag::Output
+                | Flag::Encoding
         )
     }
 }
 
-fn apply_value(opts: &mut Options, flag: Flag, value: String) {
+fn apply_value(opts: &mut Options, flag: Flag, value: String) -> Result<(), ArgError> {
     match flag {
         Flag::Attribute => opts.attribute = Some(value),
+        Flag::Extract => {
+            let field = Field::parse(&value).map_err(ArgError)?;
+            if opts.extract.iter().any(|f| f.name == field.name) {
+                return Err(ArgError(format!(
+                    "--extract name '{}' is used twice",
+                    field.name
+                )));
+            }
+            opts.extract.push(field);
+        }
         Flag::Remove => opts.remove.push(value),
         Flag::Base => opts.base = Some(value),
         Flag::Filename => opts.input = Some(value),
         Flag::Output => opts.output = Some(value),
+        Flag::Encoding => opts.encoding = Some(value),
         _ => {}
     }
+    Ok(())
 }
 
 /// Apply a value-less flag; returns a command that short-circuits parsing.
@@ -240,10 +368,15 @@ fn apply_switch(opts: &mut Options, flag: Flag) -> Option<Command> {
         Flag::Text => opts.mode = Mode::Text,
         Flag::Markdown => opts.mode = Mode::Markdown,
         Flag::Json => opts.mode = Mode::Json,
+        Flag::Jsonl => opts.mode = Mode::Jsonl,
+        Flag::Csv => opts.mode = Mode::Csv,
         Flag::Count => opts.mode = Mode::Count,
         Flag::Pretty => opts.pretty = true,
         Flag::First => opts.first = true,
         Flag::IgnoreWhitespace => opts.ignore_whitespace = true,
+        Flag::Links => opts.links = true,
+        Flag::Meta => opts.meta = true,
+        Flag::Main => opts.main = true,
         Flag::DetectBase => opts.detect_base = true,
         Flag::Help => return Some(Command::Help),
         Flag::Version => return Some(Command::Version),
@@ -256,8 +389,12 @@ fn apply_switch(opts: &mut Options, flag: Flag) -> Option<Command> {
 mod tests {
     use super::*;
 
+    fn try_run(args: &[&str]) -> Result<Command, ArgError> {
+        parse(args.iter().map(OsString::from))
+    }
+
     fn run(args: &[&str]) -> Options {
-        match parse(args.iter().map(OsString::from)) {
+        match try_run(args) {
             Ok(Command::Run(o)) => o,
             other => panic!("unexpected: {other:?}"),
         }
@@ -313,5 +450,41 @@ mod tests {
             parse([OsString::from("--version")]),
             Ok(Command::Version)
         ));
+    }
+
+    #[test]
+    fn extract_fields() {
+        let o = run(&["-e", "title=h1", "--extract=tags=.tag[]", "-eurl=a@href"]);
+        let names: Vec<_> = o.extract.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["title", "tags", "url"]);
+        assert!(try_run(&["-e", "title"]).is_err());
+        assert!(try_run(&["-e", "a=h1", "-e", "a=h2"]).is_err());
+    }
+
+    #[test]
+    fn new_switches() {
+        let o = run(&["--main", "--links", "--jsonl", "--encoding", "latin1"]);
+        assert!(o.main && o.links);
+        assert_eq!(o.mode, Mode::Jsonl);
+        assert_eq!(o.encoding.as_deref(), Some("latin1"));
+        assert_eq!(run(&["--csv"]).mode, Mode::Csv);
+        assert!(run(&["--meta", "-j"]).meta);
+        assert_eq!(run(&["--links", "-c"]).mode, Mode::Count);
+    }
+
+    #[test]
+    fn conflicting_flags() {
+        for args in [
+            &["--links", "--meta"][..],
+            &["-e", "a=h1", "--links"],
+            &["-e", "a=h1", "-t"],
+            &["-e", "a=h1", "-a", "href"],
+            &["--meta", "--csv"],
+            &["--meta", "p"],
+            &["--links", "-m"],
+            &["--csv", "-a", "href"],
+        ] {
+            assert!(try_run(args).is_err(), "{args:?}");
+        }
     }
 }

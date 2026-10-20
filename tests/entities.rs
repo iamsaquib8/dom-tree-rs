@@ -98,3 +98,73 @@ fn far_semicolon_is_not_part_of_a_reference() {
     );
     assert_eq!(decode("<p>&amp;é</p>"), "&é");
 }
+
+#[test]
+fn named_references_need_their_semicolon() {
+    // With or without `entities-full`: the legacy no-semicolon spellings stay
+    // verbatim and are reported.
+    assert_eq!(decode("<p>&amp &copy 2026 &lt</p>"), "&amp &copy 2026 &lt");
+    let dom = parse("<p>AT&ampT</p>");
+    assert!(
+        dom.errors()
+            .iter()
+            .any(|e| e.kind == domtree::ErrorKind::UnknownEntity)
+    );
+    assert_eq!(decode("<p>&amp;&copy;&lt;</p>"), "&©<");
+}
+
+#[cfg(not(feature = "entities-full"))]
+#[test]
+fn curated_table_leaves_rare_names_verbatim() {
+    assert_eq!(
+        decode("<p>&fjlig; &NotNestedGreaterGreater;</p>"),
+        "&fjlig; &NotNestedGreaterGreater;"
+    );
+}
+
+#[cfg(feature = "entities-full")]
+mod full_table {
+    use super::*;
+
+    #[test]
+    fn multi_code_point_and_long_names() {
+        assert_eq!(
+            decode("<p>&NotNestedGreaterGreater;</p>"),
+            "\u{2aa2}\u{338}"
+        );
+        assert_eq!(decode("<p>&fjlig;</p>"), "fj");
+        assert_eq!(decode("<p>&ThickSpace;</p>"), "\u{205f}\u{200a}");
+        // The longest name in the table (31 bytes) still fits the lookahead.
+        assert_eq!(
+            decode("<p>&CounterClockwiseContourIntegral;</p>"),
+            "\u{2233}"
+        );
+        assert_eq!(decode("<p>&bsol;&quot;&Tab;&NewLine;</p>"), "\\\"\t\n");
+    }
+
+    #[test]
+    fn names_are_case_sensitive() {
+        assert_eq!(decode("<p>&AMP; &amp; &Amp;</p>"), "& & &Amp;");
+        assert_eq!(decode("<p>&Aacute;&aacute;</p>"), "\u{c1}\u{e1}");
+    }
+
+    #[test]
+    fn unknown_names_stay_verbatim_and_are_reported() {
+        let dom = parse("<p>&notanentity; &Notanentity;</p>");
+        assert_eq!(
+            dom.root().unwrap().text_content(),
+            "&notanentity; &Notanentity;"
+        );
+        assert!(
+            dom.errors()
+                .iter()
+                .any(|e| e.kind == domtree::ErrorKind::UnknownEntity)
+        );
+    }
+
+    #[test]
+    fn full_names_decode_in_attributes() {
+        let dom = parse("<a title='&fjlig;&ShortRightArrow;'>x</a>");
+        assert_eq!(dom.root().unwrap().attr("title"), Some("fj\u{2192}"));
+    }
+}

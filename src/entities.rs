@@ -1,12 +1,17 @@
 //! HTML character-reference (entity) decoding.
 //!
-//! We decode the ~130 named entities that actually appear in real-world content
-//! plus full numeric references (`&#169;`, `&#xA9;`, with the browser's
-//! Windows-1252 remapping of `&#128;`–`&#159;`). Unknown named references
-//! are left **verbatim** (browser-ish behaviour) and reported via
+//! By default we decode the ~180 named entities that actually appear in
+//! real-world content plus full numeric references (`&#169;`, `&#xA9;`, with
+//! the browser's Windows-1252 remapping of `&#128;`–`&#159;`). Unknown named
+//! references are left **verbatim** (browser-ish behaviour) and reported via
 //! [`ErrorKind::UnknownEntity`](crate::ErrorKind::UnknownEntity). Shipping the
-//! full ~2200-entry WHATWG table would conflict with the crate's "tiny" goal;
-//! the curated subset is documented and covers the common cases.
+//! full WHATWG table by default would conflict with the crate's "tiny" goal, so
+//! it is opt-in: the `entities-full` feature swaps the curated table for all
+//! 2,125 `;`-terminated names (generated into `src/entities_full.rs` by
+//! `scripts/gen_entities.py`; looked up by binary search).
+//!
+//! Either way a named reference needs its `;`: the legacy no-semicolon
+//! spellings browsers also accept (`&amp`, `&copy`) stay verbatim.
 
 use alloc::borrow::Cow;
 use alloc::string::String;
@@ -136,9 +141,33 @@ fn numeric(digits: &str) -> Option<char> {
     )
 }
 
+/// Look up a named reference (the part between `&` and `;`): the curated
+/// table by default, the complete WHATWG one with the `entities-full`
+/// feature. `None` means unknown (the caller leaves it verbatim).
+#[inline]
+fn named(name: &str) -> Option<&'static str> {
+    #[cfg(feature = "entities-full")]
+    {
+        full(name)
+    }
+    #[cfg(not(feature = "entities-full"))]
+    {
+        curated(name)
+    }
+}
+
+/// Binary search of the generated, name-sorted WHATWG table.
+#[cfg(feature = "entities-full")]
+fn full(name: &str) -> Option<&'static str> {
+    use crate::entities_full::ENTITIES;
+    let i = ENTITIES.binary_search_by(|&(k, _)| k.cmp(name)).ok()?;
+    ENTITIES.get(i).map(|&(_, v)| v)
+}
+
 /// Curated named-entity table. Returns the UTF-8 replacement, or `None` if the
 /// name is not recognised (caller leaves it verbatim).
-fn named(name: &str) -> Option<&'static str> {
+#[cfg(any(not(feature = "entities-full"), test))]
+fn curated(name: &str) -> Option<&'static str> {
     Some(match name {
         // Core / markup-significant
         "amp" => "&",
@@ -328,4 +357,32 @@ fn named(name: &str) -> Option<&'static str> {
         "Pi" => "\u{3a0}",
         _ => return None,
     })
+}
+
+#[cfg(all(test, feature = "entities-full"))]
+mod tests {
+    use crate::entities_full::ENTITIES;
+
+    #[test]
+    fn full_table_is_sorted_for_binary_search() {
+        assert!(ENTITIES.windows(2).all(|w| w[0].0 < w[1].0));
+        assert!(
+            ENTITIES
+                .iter()
+                .all(|(k, _)| k.len() < super::MAX_ENTITY_LEN)
+        );
+    }
+
+    #[test]
+    fn curated_table_is_a_subset_of_the_full_one() {
+        // Turning the feature on must never change how a curated name decodes.
+        let mut found = 0;
+        for &(name, value) in &ENTITIES {
+            if let Some(curated) = super::curated(name) {
+                assert_eq!(curated, value, "&{name};");
+                found += 1;
+            }
+        }
+        assert_eq!(found, 178, "every curated name is a WHATWG name");
+    }
 }

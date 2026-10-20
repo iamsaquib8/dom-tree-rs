@@ -27,6 +27,9 @@ serde = ["dep:serde"]
 query = []
 # Zero-dependency HTML -> Markdown (`Dom::to_markdown`).
 markdown = []
+# The complete WHATWG named character reference table (2,125 names) instead of
+# the curated ~180. Off by default to keep the default build small.
+entities-full = []
 # Enables std-only conveniences (e.g. `std::error::Error` for `ParseError`).
 # The crate is `no_std + alloc` by default.
 std = []

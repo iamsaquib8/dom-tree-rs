@@ -85,6 +85,8 @@
 //! - `markdown` *(default)* — the zero-dependency [`Dom::to_markdown`].
 //! - `serde` — optional `serde::Serialize` for the tree (adds the `serde` dep).
 //! - `query` — a zero-dependency CSS selector engine ([`Dom::select`], [`Selector`]).
+//! - `entities-full` — decode all 2,125 WHATWG named character references
+//!   instead of the curated ~180 (a sorted static table, about 70 KB).
 //! - `std` — adds `std`-only conveniences; the crate is `no_std + alloc` by default.
 
 #![no_std]
@@ -104,6 +106,8 @@ extern crate std;
 mod builder;
 mod edit;
 mod entities;
+#[cfg(feature = "entities-full")]
+mod entities_full;
 mod error;
 mod node;
 mod source;

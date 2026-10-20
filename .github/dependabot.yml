@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # Keep the CI/release/pages workflow actions current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Dev-dependencies of the core crate (insta, proptest, serde_json) and the
+  # optional serde dependency. The default build has no dependencies.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      cargo:
+        patterns: ["*"]

@@ -1,19 +1,20 @@
 <div align="center">
 
-<img src="docs/assets/logo.svg" width="96" height="96" alt="">
-
-# dom-tree-rs
-
-**Messy HTML in. Clean tree, text, Markdown, or JSON out.**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+  <img src="docs/assets/banner-light.svg" width="100%" alt="dom-tree-rs — messy HTML in, clean tree, text, Markdown, or JSON out">
+</picture>
 
 A tiny, zero-dependency, never-panicking HTML parser with CSS selectors —
 for Rust, your shell, and JavaScript (via a ~20 KB WebAssembly module).
 
-[![crates.io](https://img.shields.io/crates/v/dom-tree-rs.svg)](https://crates.io/crates/dom-tree-rs)
-[![docs.rs](https://img.shields.io/docsrs/dom-tree-rs)](https://docs.rs/dom-tree-rs)
+[![crates.io](https://img.shields.io/crates/v/dom-tree-rs.svg?logo=rust)](https://crates.io/crates/dom-tree-rs)
+[![npm](https://img.shields.io/npm/v/dom-tree-wasm.svg?logo=npm)](https://www.npmjs.com/package/dom-tree-wasm)
+[![docs.rs](https://img.shields.io/docsrs/dom-tree-rs?logo=docs.rs)](https://docs.rs/dom-tree-rs)
 [![CI](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml)
 ![dependencies](https://img.shields.io/badge/dependencies-0-success)
 ![no_std](https://img.shields.io/badge/no__std-yes-success)
+![unsafe](https://img.shields.io/badge/unsafe-forbidden-success)
 [![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](#msrv)
 [![license](https://img.shields.io/github/license/iamsaquib8/dom-tree-rs)](./LICENSE)
 
@@ -23,7 +24,7 @@ for Rust, your shell, and JavaScript (via a ~20 KB WebAssembly module).
 [JavaScript](./dom-tree-wasm) ·
 [Roadmap](./ROADMAP.md)
 
-<img src="docs/assets/demo.svg" width="760" alt="Terminal demo: domtree prints a page's heading as text, its links as URLs, a fragment as Markdown, and counts images missing alt text.">
+<img src="docs/assets/demo.svg" width="760" alt="Terminal demo: domtree lists the navigation links of rust-lang.org, converts its first section to Markdown, counts images without alt text, and pretty-prints a fragment with unclosed list items.">
 
 </div>
 
@@ -303,9 +304,13 @@ corpus of messy HTML, fuzzed with `cargo-fuzz`, and CI-checked for fmt, clippy,
 
 ## Contributing
 
-Issues and PRs are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) and the
-[roadmap](./ROADMAP.md). If dom-tree-rs saved you some time, a ⭐ helps other
-people find it.
+Issues and PRs are welcome! Start with [CONTRIBUTING.md](./CONTRIBUTING.md), the
+[architecture guide](./docs/ARCHITECTURE.md), and the [roadmap](./ROADMAP.md) —
+issues labelled **good first issue** are a friendly way in. Please follow the
+[code of conduct](./CODE_OF_CONDUCT.md), and report security problems privately
+as described in [SECURITY.md](./SECURITY.md).
+
+If dom-tree-rs saved you some time, a ⭐ helps other people find it.
 
 ## License
 

@@ -40,9 +40,9 @@
 //!   (unless the attribute selector has the ` i` flag).
 //! - Structural pseudo-classes and sibling combinators count **elements only**;
 //!   text and comment nodes are skipped.
-//! - Top-level nodes have no parent and are not linked as siblings in this
-//!   crate's tree, so every top-level element is `:root` and is its own
-//!   first/last/only child.
+//! - Top-level nodes have no parent but are siblings of each other (as if
+//!   children of an implicit document node), so `li + li` and `:first-child`
+//!   work on fragments. Every top-level element is `:root`.
 //! - `:scope` is the element a query runs on ([`NodeRef::select`],
 //!   [`NodeRef::matches`], [`NodeRef::closest`]); for [`Dom::select`] and
 //!   [`Selector::matches`] it is the same as `:root`.
@@ -94,10 +94,9 @@ const MAX_DEPTH: u32 = 32;
 /// classes and attribute values are case-sensitive. Anything else (`:hover`,
 /// `::before`, namespaces, …) is a parse error, never silently ignored.
 ///
-/// Sibling combinators and positional pseudo-classes count elements only, and
-/// only among children of the same parent: the top-level nodes of a fragment
-/// are not linked as siblings, so each top-level element is `:root` and its
-/// own `:first-child`.
+/// Sibling combinators and positional pseudo-classes count elements only.
+/// Top-level nodes count as siblings of each other, so `li + li` works on a
+/// fragment like `<li>a</li><li>b</li>`; each top-level element is `:root`.
 ///
 /// ```
 /// use domtree::Selector;

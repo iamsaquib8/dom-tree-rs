@@ -126,10 +126,10 @@ pub fn parse<I: IntoIterator<Item = OsString>>(args: I) -> Result<Command, ArgEr
             }
         } else if arg.len() > 1 && arg.starts_with('-') {
             // One or more bundled short flags: `-tw`, `-ahref`, `-a href`.
-            let mut chars = arg.char_indices().skip(1);
-            while let Some((i, c)) = chars.next() {
-                let flag =
-                    Flag::from_short(c).ok_or_else(|| ArgError(format!("unknown option '-{c}'")))?;
+            let chars = arg.char_indices().skip(1);
+            for (i, c) in chars {
+                let flag = Flag::from_short(c)
+                    .ok_or_else(|| ArgError(format!("unknown option '-{c}'")))?;
                 if flag.takes_value() {
                     let rest = arg.get(i + c.len_utf8()..).unwrap_or("");
                     let value = if rest.is_empty() {
@@ -272,7 +272,10 @@ mod tests {
     fn short_value_forms() {
         assert_eq!(run(&["-a", "href", "a"]).attribute.as_deref(), Some("href"));
         assert_eq!(run(&["-ahref", "a"]).attribute.as_deref(), Some("href"));
-        assert_eq!(run(&["--attribute=href"]).attribute.as_deref(), Some("href"));
+        assert_eq!(
+            run(&["--attribute=href"]).attribute.as_deref(),
+            Some("href")
+        );
     }
 
     #[test]
@@ -285,7 +288,10 @@ mod tests {
 
     #[test]
     fn repeatable_remove() {
-        assert_eq!(run(&["-r", "nav", "-r", "footer"]).remove, ["nav", "footer"]);
+        assert_eq!(
+            run(&["-r", "nav", "-r", "footer"]).remove,
+            ["nav", "footer"]
+        );
     }
 
     #[test]

@@ -79,6 +79,10 @@ pub(crate) struct Node {
     pub(crate) last_child: Option<NodeId>,
     pub(crate) next_sibling: Option<NodeId>,
     pub(crate) prev_sibling: Option<NodeId>,
+    /// Set once the node (or an ancestor) is removed with
+    /// [`Dom::remove`](crate::Dom::remove): it stays in the arena but is no
+    /// longer part of the document.
+    pub(crate) detached: bool,
     pub(crate) raw: RawKind,
 }
 
@@ -90,6 +94,7 @@ impl Node {
             last_child: None,
             next_sibling: None,
             prev_sibling: None,
+            detached: false,
             raw,
         }
     }

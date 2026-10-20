@@ -70,6 +70,16 @@ impl Dom {
     pub(crate) fn append(&mut self, parent: Option<NodeId>, child: NodeId) {
         let parent = match parent {
             None => {
+                // Top-level nodes are siblings of each other, like children of
+                // an implicit document node (so `li + li` works on fragments).
+                if let Some(&last) = self.roots.last() {
+                    if let Some(l) = self.node_mut(last) {
+                        l.next_sibling = Some(child);
+                    }
+                    if let Some(c) = self.node_mut(child) {
+                        c.prev_sibling = Some(last);
+                    }
+                }
                 self.roots.push(child);
                 return;
             }
@@ -97,6 +107,131 @@ impl Dom {
                     p.last_child = Some(child);
                 }
             }
+        }
+    }
+
+    // --- editing ---------------------------------------------------------
+
+    /// Remove a node (and its subtree) from the document.
+    ///
+    /// The node stays valid — handles to it and its descendants still work and
+    /// can still be serialized — but it is no longer reachable from the
+    /// document: [`Dom::nodes`], `find_by_*`, `select`, and every serializer
+    /// skip it. Removing an already-removed node is a no-op.
+    ///
+    /// ```
+    /// let mut dom = domtree::parse("<p>Hi <script>track()</script>there</p>");
+    /// let script = dom.find_by_tag("script").next().unwrap().id();
+    /// dom.remove(script);
+    /// assert_eq!(dom.to_html(), "<p>Hi there</p>");
+    /// assert_eq!(dom.find_by_tag("script").count(), 0);
+    /// ```
+    pub fn remove(&mut self, id: NodeId) {
+        let Some(node) = self.node(id) else { return };
+        let (parent, prev, next) = (node.parent, node.prev_sibling, node.next_sibling);
+
+        match prev {
+            Some(p) => {
+                if let Some(p) = self.node_mut(p) {
+                    p.next_sibling = next;
+                }
+            }
+            None => {
+                if let Some(par) = parent.and_then(|p| self.node_mut(p)) {
+                    par.first_child = next;
+                }
+            }
+        }
+        match next {
+            Some(n) => {
+                if let Some(n) = self.node_mut(n) {
+                    n.prev_sibling = prev;
+                }
+            }
+            None => {
+                if let Some(par) = parent.and_then(|p| self.node_mut(p)) {
+                    par.last_child = prev;
+                }
+            }
+        }
+        if parent.is_none() {
+            self.roots.retain(|&r| r != id);
+        }
+        if let Some(n) = self.node_mut(id) {
+            n.parent = None;
+            n.prev_sibling = None;
+            n.next_sibling = None;
+        }
+
+        let subtree: Vec<NodeId> = match self.get(id) {
+            Some(n) => core::iter::once(id)
+                .chain(n.descendants().map(|d| d.id()))
+                .collect(),
+            None => Vec::new(),
+        };
+        for d in subtree {
+            if let Some(n) = self.node_mut(d) {
+                n.detached = true;
+            }
+        }
+    }
+
+    /// Set attribute `name` (ASCII-lower-cased) to `value` on an element,
+    /// replacing any existing value. Does nothing for non-element nodes.
+    ///
+    /// ```
+    /// let mut dom = domtree::parse("<a href=/x>x</a>");
+    /// let a = dom.find_by_tag("a").next().unwrap().id();
+    /// dom.set_attr(a, "href", "https://example.com/x");
+    /// dom.set_attr(a, "rel", "nofollow");
+    /// assert_eq!(dom.to_html(), r#"<a href="https://example.com/x" rel="nofollow">x</a>"#);
+    /// ```
+    pub fn set_attr(&mut self, id: NodeId, name: &str, value: &str) {
+        let name = name.to_ascii_lowercase();
+        let existing = match self.node(id).map(|n| &n.raw) {
+            Some(RawKind::Element { attrs, .. }) => {
+                attrs.iter().position(|&(k, _)| self.span_str(k) == name)
+            }
+            _ => return,
+        };
+        let value = self.intern(value);
+        let key = match existing {
+            Some(_) => Span::EMPTY,
+            None => self.intern(&name),
+        };
+        if let Some(Node {
+            raw: RawKind::Element { attrs, .. },
+            ..
+        }) = self.node_mut(id)
+        {
+            match existing.and_then(|i| attrs.get_mut(i)) {
+                Some(slot) => slot.1 = value,
+                None => attrs.push((key, value)),
+            }
+        }
+    }
+
+    /// Remove attribute `name` (ASCII case-insensitive) from an element, if
+    /// present.
+    ///
+    /// ```
+    /// let mut dom = domtree::parse(r#"<p style="color:red" class=x>hi</p>"#);
+    /// let p = dom.find_by_tag("p").next().unwrap().id();
+    /// dom.remove_attr(p, "style");
+    /// assert_eq!(dom.to_html(), r#"<p class="x">hi</p>"#);
+    /// ```
+    pub fn remove_attr(&mut self, id: NodeId, name: &str) {
+        let strings = &self.strings;
+        if let Some(Node {
+            raw: RawKind::Element { attrs, .. },
+            ..
+        }) = self.nodes.get_mut(id.index())
+        {
+            attrs.retain(|&(k, _)| {
+                !strings
+                    .get(k.range())
+                    .is_some_and(|k| k.eq_ignore_ascii_case(name))
+            });
         }
     }
 
@@ -136,12 +271,17 @@ impl Dom {
         self.roots.iter().map(move |&id| NodeRef { dom: self, id })
     }
 
-    /// Every node in the arena, in document (pre-order) order.
+    /// Every node in the document, in document (pre-order) order. Nodes
+    /// removed with [`Dom::remove`] are skipped.
     pub fn nodes(&self) -> impl Iterator<Item = NodeRef<'_>> {
-        (0..self.nodes.len()).map(move |i| NodeRef {
-            dom: self,
-            id: NodeId(i as u32),
-        })
+        self.nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| !n.detached)
+            .map(move |(i, _)| NodeRef {
+                dom: self,
+                id: NodeId(i as u32),
+            })
     }
 
     /// All elements whose tag name equals `name` (ASCII case-insensitive).

@@ -226,7 +226,10 @@ fn emit(path: Option<&str>, out: &str) -> ExitCode {
         Some(p) if p != "-" => fs::write(p, out).map_err(|e| format!("writing {p}: {e}")),
         _ => {
             let mut stdout = io::stdout().lock();
-            match stdout.write_all(out.as_bytes()).and_then(|()| stdout.flush()) {
+            match stdout
+                .write_all(out.as_bytes())
+                .and_then(|()| stdout.flush())
+            {
                 Err(e) if e.kind() != io::ErrorKind::BrokenPipe => Err(format!("writing: {e}")),
                 _ => Ok(()),
             }

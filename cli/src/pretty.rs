@@ -8,6 +8,9 @@ use domtree::{NodeKind, NodeRef};
 
 const INDENT: &str = "  ";
 const INLINE_MAX: usize = 80;
+/// Indentation stops growing past this depth, so pathological nesting can't
+/// make the output quadratic in size.
+const MAX_INDENT: usize = 32;
 
 enum Step<'a> {
     Open(NodeRef<'a>, usize),
@@ -55,7 +58,7 @@ pub fn write(node: NodeRef<'_>, out: &mut String) {
 }
 
 fn line(out: &mut String, depth: usize, s: &str) {
-    for _ in 0..depth {
+    for _ in 0..depth.min(MAX_INDENT) {
         out.push_str(INDENT);
     }
     out.push_str(s);
@@ -94,6 +97,7 @@ fn is_void(tag: &str) -> bool {
             | "input"
             | "link"
             | "meta"
+            | "param"
             | "source"
             | "track"
             | "wbr"
@@ -134,6 +138,14 @@ mod tests {
             pretty("<ul class=x><li>a<li><b>b</b> c</ul>"),
             "<ul class=\"x\">\n  <li>a</li>\n  <li>\n    <b>b</b>\n    c\n  </li>\n</ul>\n"
         );
+    }
+
+    #[test]
+    fn indentation_is_capped() {
+        let html = "<div>".repeat(100) + "x";
+        let out = pretty(&html);
+        let widest = out.lines().map(|l| l.len() - l.trim_start().len()).max();
+        assert_eq!(widest, Some(MAX_INDENT * INDENT.len()));
     }
 
     #[test]

@@ -1,0 +1,55 @@
+[build-system]
+# maturin >= 1.9.4 sets PYO3_BUILD_EXTENSION_MODULE (which replaces PyO3's old
+# `extension-module` feature) and understands PEP 639 license metadata.
+requires = ["maturin>=1.9.4,<2"]
+build-backend = "maturin"
+
+[project]
+# `domtree` is taken on PyPI by an unrelated project, so the distribution is
+# published as `dom-tree-rs`; the import name is still `domtree`.
+name = "dom-tree-rs"
+dynamic = ["version"]
+description = "Tiny, forgiving HTML parser written in Rust: CSS selectors, readable text and HTML-to-Markdown for scraping and LLM pipelines."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE-MIT"]
+authors = [{ name = "iamsaquib8", email = "saquibulhassan6@gmail.com" }]
+keywords = ["html", "parser", "css-selector", "markdown", "scraping", "llm", "rag"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Rust",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+    "Topic :: Text Processing :: Markup :: HTML",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/iamsaquib8/dom-tree-rs"
+Repository = "https://github.com/iamsaquib8/dom-tree-rs"
+Documentation = "https://github.com/iamsaquib8/dom-tree-rs/tree/main/python#readme"
+Changelog = "https://github.com/iamsaquib8/dom-tree-rs/blob/main/CHANGELOG.md"
+Issues = "https://github.com/iamsaquib8/dom-tree-rs/issues"
+
+[dependency-groups]
+test = ["pytest>=7"]
+
+[tool.maturin]
+# A mixed Rust/Python package: `domtree/` holds `__init__.py` (re-exports),
+# the type stubs and `py.typed`; the compiled extension is `domtree._domtree`.
+# `python-source` is spelled out so the sdist (which maturin re-roots at the
+# repository root to include the core crate) still finds the package.
+# The version comes from Cargo.toml.
+module-name = "domtree._domtree"
+python-source = "."
+profile = "release"
+strip = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

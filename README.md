@@ -72,7 +72,7 @@ cargo install domtree-cli
 ```
 
 ```sh
-curl -s example.com \
+curl -sL rust-lang.org \
   | domtree -t h1
 ```
 
@@ -96,7 +96,7 @@ select(html, "a[href]");
 ## Why dom-tree-rs?
 
 - **Zero dependencies.** One crate in your `cargo tree`. A clean build takes
-  **0.3 s** — `scraper` pulls in 42 crates and takes 5.2 s.¹
+  **0.6 s** — `scraper` pulls in 42 crates and takes 5.3 s.¹
 - **Never panics.** Any byte sequence gives you a best-effort tree. Proptested and
   fuzzed: `parse`, `select`, `to_text`, `to_markdown`. Deep nesting can't blow the
   stack.
@@ -111,8 +111,9 @@ select(html, "a[href]");
 - **Fast enough.** ~250 MiB/s — within 5–15 % of [`tl`] while building an owned
   tree (see [Performance](#performance)).
 
-<sub>¹ Clean `cargo build` of a crate depending only on the parser, Apple M4 Pro.
-dom-tree-rs 0.28 s · tl 0.36 s · html5ever 2.7 s · scraper 5.2 s.</sub>
+<sub>¹ Clean debug `cargo build` of an empty crate depending only on the parser (default
+features), Apple M4 Pro, 14 cores: dom-tree-rs 0.6 s · tl 0.4 s · html5ever 2.9 s ·
+scraper 5.3 s · lol_html 6.9 s. Fewer cores widens the gap.</sub>
 
 ## Cookbook
 
@@ -139,7 +140,7 @@ let article = dom.select_first("article, main").map(|n| n.to_markdown());
 Or from the shell, stripping the chrome first:
 
 ```sh
-curl -s https://example.com/post | domtree -r 'nav, footer, script' --markdown article
+curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer, script' --markdown body
 ```
 </details>
 
@@ -167,7 +168,7 @@ for page in pages {
 }
 
 let err = Selector::parse("a:hover").unwrap_err();
-println!("{err}"); // explains what's unsupported, and where
+println!("{err}"); // unsupported pseudo-class ':hover' at byte 1
 ```
 </details>
 
@@ -204,10 +205,11 @@ assert_eq!(dom.to_html(), r#"<p>Hi <a href="/x">x</a></p>"#);
 `--json`, `--count` and modern selectors. [Full CLI docs →](./cli)
 
 ```sh
-curl -s https://news.ycombinator.com | domtree -t '.titleline > a'     # headlines
-curl -s https://www.rust-lang.org | domtree -B -b https://www.rust-lang.org -a href a
-domtree -c 'img:not([alt])' < page.html                                 # accessibility check
-echo '<ul><li>a<li>b</ul>' | domtree -p                                 # pretty-print
+curl -s https://news.ycombinator.com | domtree -t '.titleline > a'           # headlines
+curl -sL https://www.rust-lang.org | domtree -b https://www.rust-lang.org -a href 'nav a'
+curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer' --markdown body # page → Markdown
+domtree -c 'img:not([alt])' < page.html                                       # a11y check
+echo '<ul><li>a<li>b</ul>' | domtree -p                                       # pretty-print
 ```
 
 ## JavaScript & WebAssembly
@@ -229,7 +231,7 @@ const md = toMarkdown(html);
 
 | | dom-tree-rs | [tl] | [scraper] | [html5ever] | [lol_html] |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Crates in a clean build | **1** | 2 | 43 | 20 | 11+ |
+| Transitive dependencies | **0** | 0 | 42 | 19 | 41 |
 | CSS selectors | **✅** | limited | ✅ | ❌ | ✅ |
 | Text / Markdown output | **✅** | ❌ | ❌ | ❌ | ❌ |
 | JSON output | **✅** | ❌ | ❌ | ❌ | ❌ |

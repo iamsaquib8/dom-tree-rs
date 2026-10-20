@@ -14,14 +14,14 @@ cargo install domtree-cli
 ## Examples
 
 ```sh
-# Every link on a page, as absolute URLs
-curl -s https://www.rust-lang.org | domtree -B -b https://www.rust-lang.org -a href a
+# Every navigation link on a page, as absolute URLs
+curl -sL https://www.rust-lang.org | domtree -b https://www.rust-lang.org -a href 'nav a'
 
 # Headlines as plain text
 curl -s https://news.ycombinator.com | domtree -t '.titleline > a'
 
-# An article as Markdown, without the chrome — ready for an LLM prompt
-curl -s https://blog.rust-lang.org/ | domtree -r 'nav, header, footer, script' --markdown main
+# A page as Markdown, without the chrome — ready for an LLM prompt
+curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer, script' --markdown body
 
 # Count images that are missing alt text
 domtree -c 'img:not([alt])' < page.html

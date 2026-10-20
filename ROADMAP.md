@@ -78,42 +78,42 @@ These are deliberately *out of scope* — reach for the right tool instead:
 - `no_std + alloc`; ~19.5 KB-gzipped WASM bindings.
 - Property tests, snapshot corpus, `cargo-fuzz` harness, criterion benches, CI.
 
-## 0.3 — "One-line scraping"
+## 0.3 — "One-line scraping" (shipped)
 
 Make the everyday job — find things, read their text — trivial in every
 environment.
 
 **Selectors** (now on by default)
 
-- [ ] `+` / `~` sibling combinators.
-- [ ] Attribute operators `^=` `$=` `*=` `~=` `|=` and the `i` flag.
-- [ ] Structural pseudo-classes: `:first-child`, `:last-child`, `:only-child`,
+- [x] `+` / `~` sibling combinators.
+- [x] Attribute operators `^=` `$=` `*=` `~=` `|=` and the `i` flag.
+- [x] Structural pseudo-classes: `:first-child`, `:last-child`, `:only-child`,
       `:nth-child(an+b)`, `:nth-last-child`, `:first-of-type`, `:last-of-type`,
       `:only-of-type`, `:nth-of-type`, `:nth-last-of-type`, `:empty`, `:root`.
-- [ ] Logical pseudo-classes: `:not()`, `:is()`, `:where()`, `:has()`.
-- [ ] `:contains("text")` — non-standard, but the single most-requested
+- [x] Logical pseudo-classes: `:not()`, `:is()`, `:where()`, `:has()`.
+- [x] `:contains("text")` — non-standard, but the single most-requested
       scraping helper (jQuery, cheerio, pup all have it). Clearly labelled.
-- [ ] `Selector::parse` — compile once, reuse in loops, get a positioned error
+- [x] `Selector::parse` — compile once, reuse in loops, get a positioned error
       instead of silently matching nothing.
-- [ ] Scoped queries: `NodeRef::select`, `select_first`, `matches`, `closest`;
+- [x] Scoped queries: `NodeRef::select`, `select_first`, `matches`, `closest`;
       `Dom::select_first`.
 
 **Getting content out**
 
-- [ ] `to_text()` — readable plain text: block elements become line breaks,
+- [x] `to_text()` — readable plain text: block elements become line breaks,
       whitespace collapsed, `<script>`/`<style>` dropped. Not `textContent`.
-- [ ] `to_markdown()` — zero-dependency HTML → CommonMark/GFM (headings, lists,
+- [x] `to_markdown()` — zero-dependency HTML → CommonMark/GFM (headings, lists,
       links, images, code blocks, tables, quotes). For LLM prompts, docs, notes.
-- [ ] `inner_html()` / `outer_html()`; element-only sibling helpers.
+- [x] `inner_html()` / `outer_html()`; element-only sibling helpers.
 
 **Correctness**
 
-- [ ] Windows-1252 remapping for numeric references in `0x80–0x9F`
+- [x] Windows-1252 remapping for numeric references in `0x80–0x9F`
       (browser behaviour, e.g. `&#150;` → `–`).
 
 **Tools**
 
-- [ ] **`domtree` CLI** (`cargo install domtree-cli`) — htmlq-compatible flags
+- [x] **`domtree` CLI** (`cargo install domtree-cli`) — htmlq-compatible flags
       (`-a`, `-t`, `-r`, `-p`, `-w`, `-B`) plus `--markdown`, `--json`,
       `--count`. Zero dependencies.
 - [ ] **WASM / npm 0.3** — expose selectors, text, Markdown and HTML output;
@@ -126,9 +126,10 @@ environment.
 From read-only to a small HTML rewriter, and from "a tree" to "a tree that knows
 where it came from".
 
-- [ ] **Mutation API** — detach/remove nodes, set/remove attributes, replace
-      text, insert a parsed fragment; then `to_html()`. Unlocks CLI `--remove`
-      for boilerplate stripping before `--markdown`.
+- [x] **Editing, part 1** — `Dom::remove`, `set_attr`, `remove_attr` (shipped
+      early in 0.3; powers the CLI's `--remove-nodes` and `--base`).
+- [ ] **Editing, part 2** — replace text, insert a parsed fragment, wrap/unwrap,
+      move nodes; then `to_html()`. Turns the crate into a small HTML rewriter.
 - [ ] **Source spans** — `NodeRef::source_range()` mapping each node back to its
       byte range in the input (linters, editors, precise error reporting).
 - [ ] **Main-content extraction** — a small, documented heuristic
@@ -158,8 +159,9 @@ where it came from".
 
 Being easy to *get* matters as much as features.
 
-- [ ] Prebuilt CLI binaries on GitHub Releases (Linux/macOS/Windows) and a
-      Homebrew tap.
+- [x] Prebuilt CLI binaries on GitHub Releases (Linux/macOS/Windows), also
+      installable with `cargo binstall domtree-cli`.
+- [ ] Homebrew tap.
 - [ ] npm package kept in lock-step with the crate version.
 - [ ] Python bindings (PyO3 wheel) — *exploring*. Python is where most scraping
       and RAG code lives; a tiny, fast, never-panicking parser with selectors and

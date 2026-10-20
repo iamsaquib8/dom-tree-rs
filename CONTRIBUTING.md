@@ -28,8 +28,15 @@ cargo test --all-features        # unit + corpus snapshots + proptest + doctests
 cargo clippy --all-features --all-targets -- -D warnings
 cargo fmt --all
 
+# CLI (workspace member)
+cargo test -p domtree-cli
+cargo run -p domtree-cli -- --help
+
 # WASM
 cd dom-tree-wasm && wasm-pack build --target web --release && wasm-pack test --node
+
+# Playground (after building the wasm into playground/pkg — see playground/README.md)
+python3 -m http.server -d playground 8000
 
 # Benchmarks
 cd benchmarks && cargo bench
@@ -50,3 +57,4 @@ committing the updated `.snap` files.
 - Add a test for the behaviour you changed (a corpus fixture is great for
   parsing changes).
 - Keep the MSRV at 1.85 (edition 2024); the CI `msrv` job enforces it.
+- Add an entry to `CHANGELOG.md` for anything user-visible.

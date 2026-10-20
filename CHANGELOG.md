@@ -4,6 +4,47 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — Unreleased
+
+"One-line scraping": find things and get their content out, in Rust, in the
+shell, and in JavaScript.
+
+### Added
+- **CSS selector engine v2** (`query` feature, now **on by default**):
+  `+`/`~` combinators; every attribute operator (`^=` `$=` `*=` `~=` `|=`) with
+  the `i`/`s` flags; `:first-child`, `:last-child`, `:only-child`,
+  `:nth-child(An+B [of S])`, `:nth-last-child`, the `*-of-type` family,
+  `:empty`, `:root`, `:scope`, `:not()`, `:is()`, `:where()`, `:has()` (with
+  relative selectors), `:checked`/`:disabled`/`:enabled`, CSS escapes, and the
+  non-standard `:contains("text")`. Matching never backtracks exponentially and
+  never recurses on document depth.
+- `Selector::parse` (and `FromStr`) — compile once, reuse, and get a
+  `SelectorError` with a byte position instead of silently matching nothing.
+  `Dom::select` accepts `&str`, `&String`, or `&Selector`.
+- Scoped queries: `Dom::select_first`, `NodeRef::select`, `select_first`,
+  `matches`, `closest`.
+- `to_text()` on `Dom`/`NodeRef` — readable plain text (block elements become
+  line breaks, whitespace collapsed, `<script>`/`<style>`/`<head>` dropped).
+- `to_markdown()` (new `markdown` feature, on by default) — zero-dependency HTML
+  → CommonMark + GFM: headings, emphasis, links, images, nested lists, code
+  blocks with languages, blockquotes, tables.
+- `NodeRef::inner_html`, `outer_html`, `next_element_sibling`,
+  `prev_element_sibling`.
+- Editing: `Dom::remove` (detach a subtree), `Dom::set_attr`, `Dom::remove_attr`.
+- **`domtree` CLI** (`cargo install domtree-cli`) — htmlq-compatible flags
+  (`-a`, `-t`, `-p`, `-w`, `-r`, `-b`, `-B`, `-f`, `-o`) plus `--markdown`,
+  `--json`, `--count`, `--first`; zero dependencies. Prebuilt binaries are
+  attached to GitHub releases.
+
+### Changed
+- Top-level nodes are now linked as siblings (`next_sibling`/`prev_sibling`),
+  so sibling combinators and `:first-child` work on multi-root fragments.
+- Numeric character references in `0x80–0x9F` are remapped per the WHATWG
+  Windows-1252 table (`&#150;` → `–`), as browsers do; `&#0;`, surrogates and
+  out-of-range values become U+FFFD.
+- Default features are now `json`, `query`, `markdown` (still zero
+  dependencies). Use `default-features = false` for the smallest build.
+
 ## [0.2.1] — 2026-06-24
 
 ### Added

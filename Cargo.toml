@@ -31,6 +31,10 @@ markdown = []
 # The crate is `no_std + alloc` by default.
 std = []
 
+[[example]]
+name = "to_markdown"
+required-features = ["query", "markdown"]
+
 [dependencies]
 serde = { version = "1", default-features = false, features = ["alloc"], optional = true }
 

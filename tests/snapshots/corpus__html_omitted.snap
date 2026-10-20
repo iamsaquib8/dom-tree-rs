@@ -1,0 +1,30 @@
+---
+source: tests/corpus.rs
+expression: parse(html).to_html()
+---
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Omitted end tags</title>
+</head><body>
+  <h1>Title
+  </h1><h2>Subtitle</h2>
+  <p>Intro paragraph
+  </p><ul>
+    <li><p>Item one
+    </p></li><li><p>Item two
+  </p></li></ul>
+  <p>Terms
+  </p><dl>
+    <dt><p>Term
+    </p></dt><dd><p>Definition
+  </p></dd></dl>
+  <p>Before details
+  </p><details><summary>More</summary>Hidden</details>
+  <p>Before a centered block
+  </p><center>Centered</center>
+  <p>Before a dialog</p><dialog open>Hi</dialog>
+  <p>Before a search</p><search>q</search>
+</body>
+</html>

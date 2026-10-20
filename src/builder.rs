@@ -110,6 +110,16 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 if t.is_empty() {
                     continue;
                 }
+                // Real text means an omitted `</head>` or `</colgroup>`.
+                if open
+                    .top()
+                    .is_some_and(|top| tags::text_closes(open_name(&dom, top)))
+                    && t.bytes().any(|b| !b.is_ascii_whitespace())
+                {
+                    open.pop(&mut dom, pos);
+                    dom.errors
+                        .push(ParseError::new(pos, ErrorKind::ImplicitlyClosed));
+                }
                 let parent = open.top();
                 let span = if parent.is_some_and(|p| tags::is_raw_text(open_name(&dom, p))) {
                     dom.intern(t)

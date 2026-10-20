@@ -25,6 +25,13 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "select"
+path = "fuzz_targets/select.rs"
+test = false
+doc = false
+bench = false
+
 # Fuzz binaries want a release-ish profile with debug assertions on.
 [profile.release]
 debug = 1

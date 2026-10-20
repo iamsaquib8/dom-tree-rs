@@ -6,7 +6,6 @@
 //! of tiny per-node allocations with appends to one buffer — the main reason
 //! parsing is fast despite producing an owned tree.
 
-use alloc::vec::Vec;
 use core::fmt;
 use core::num::NonZeroU32;
 use core::ops::Range;
@@ -15,7 +14,7 @@ use core::ops::Range;
 /// for the lifetime of the tree.
 //
 // Stored as index + 1 so that `Option<NodeId>` is 4 bytes: every node holds
-// five tree links, so this keeps a node at 64 bytes.
+// five tree links, so this keeps a node at 52 bytes.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(NonZeroU32);
 
@@ -42,7 +41,7 @@ impl fmt::Debug for NodeId {
 }
 
 /// A byte range into the [`Dom`](crate::Dom)'s string arena.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Span {
     pub(crate) start: u32,
     pub(crate) len: u32,
@@ -78,13 +77,32 @@ pub enum NodeKind<'a> {
     Doctype(&'a str),
 }
 
+/// An element's attributes: a run of `len` consecutive `(name, value)` pairs
+/// starting at `start` in the [`Dom`](crate::Dom)'s attribute arena.
+///
+/// Storing every element's attributes in one shared `Vec` (instead of a `Vec`
+/// per element) saves a heap allocation per element with attributes and
+/// shrinks a node from 64 to 52 bytes. The parser lays the runs out in
+/// document order; editing may move an element's run to the end of the arena
+/// (see `Dom::set_attr`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct AttrRange {
+    pub(crate) start: u32,
+    pub(crate) len: u32,
+}
+
+impl AttrRange {
+    #[inline]
+    pub(crate) fn range(self) -> Range<usize> {
+        let start = self.start as usize;
+        start..start + self.len as usize
+    }
+}
+
 /// The internal, span-based node kind (not exposed; see [`NodeKind`]).
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub(crate) enum RawKind {
-    Element {
-        name: Span,
-        attrs: Vec<(Span, Span)>,
-    },
+    Element { name: Span, attrs: AttrRange },
     Text(Span),
     Comment(Span),
     Doctype(Span),
@@ -167,9 +185,12 @@ mod tests {
 
     #[test]
     fn nodes_stay_small() {
-        // Parse speed is mostly memory traffic: keep a node in one cache line.
+        // Parse speed is mostly memory traffic: keep nodes small. Five links
+        // (20 bytes), the source range (8), the kind with its two spans (20)
+        // and the detached flag.
         assert_eq!(core::mem::size_of::<Option<NodeId>>(), 4);
-        assert!(core::mem::size_of::<Node>() <= 64);
+        assert_eq!(core::mem::size_of::<RawKind>(), 20);
+        assert!(core::mem::size_of::<Node>() <= 52);
     }
 
     #[test]

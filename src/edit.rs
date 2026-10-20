@@ -21,7 +21,7 @@
 use alloc::vec::Vec;
 
 use crate::builder;
-use crate::node::{Node, NodeId, RawKind, Span, SrcRange};
+use crate::node::{AttrRange, Node, NodeId, RawKind, Span, SrcRange};
 use crate::tags;
 use crate::tree::Dom;
 
@@ -150,23 +150,36 @@ impl Dom {
     }
 
     /// Copy every node of the freshly parsed `frag` into this arena —
-    /// re-interning its strings, detached, with no source range — and return
-    /// the copies of its top-level nodes. `frag` was only ever appended to, so
-    /// its arena holds exactly its document and ids shift by a constant.
+    /// detached, with no source range — and return the copies of its
+    /// top-level nodes. `frag` was only ever appended to, so its arenas hold
+    /// exactly its document: they are appended wholesale, and node ids, string
+    /// spans and attribute runs all shift by a constant.
     fn graft(&mut self, frag: &Dom) -> Vec<NodeId> {
         let base = self.nodes.len();
         let shift = |id: Option<NodeId>| id.map(|i| NodeId::from_index(base + i.index()));
+        // `as u32` like `intern`: an arena past 4 GiB is out of reach anyway.
+        let str_base = self.strings.len() as u32;
+        let attr_base = self.attrs.len() as u32;
+        let span = |s: Span| Span {
+            start: s.start.wrapping_add(str_base),
+            len: s.len,
+        };
+        self.strings.push_str(&frag.strings);
+        self.attrs
+            .extend(frag.attrs.iter().map(|&(k, v)| (span(k), span(v))));
         self.nodes.reserve(frag.nodes.len());
         for node in &frag.nodes {
-            let mut copy = |s: Span| self.intern(frag.span_str(s));
-            let raw = match &node.raw {
+            let raw = match node.raw {
                 RawKind::Element { name, attrs } => RawKind::Element {
-                    name: copy(*name),
-                    attrs: attrs.iter().map(|&(k, v)| (copy(k), copy(v))).collect(),
+                    name: span(name),
+                    attrs: AttrRange {
+                        start: attrs.start.wrapping_add(attr_base),
+                        len: attrs.len,
+                    },
                 },
-                RawKind::Text(s) => RawKind::Text(copy(*s)),
-                RawKind::Comment(s) => RawKind::Comment(copy(*s)),
-                RawKind::Doctype(s) => RawKind::Doctype(copy(*s)),
+                RawKind::Text(s) => RawKind::Text(span(s)),
+                RawKind::Comment(s) => RawKind::Comment(span(s)),
+                RawKind::Doctype(s) => RawKind::Doctype(span(s)),
             };
             self.nodes.push(Node {
                 parent: shift(node.parent),
@@ -230,28 +243,46 @@ impl Dom {
     /// assert_eq!(dom.to_html(), r#"<a href="https://example.com/x" rel="nofollow">x</a>"#);
     /// ```
     pub fn set_attr(&mut self, id: NodeId, name: &str, value: &str) {
+        let Some(attrs) = self.attr_range(id) else {
+            return;
+        };
         let name = name.to_ascii_lowercase();
-        let existing = match self.node(id).map(|n| &n.raw) {
-            Some(RawKind::Element { attrs, .. }) => {
-                attrs.iter().position(|&(k, _)| self.span_str(k) == name)
-            }
-            _ => return,
-        };
+        let existing = self
+            .attr_slice(attrs)
+            .iter()
+            .position(|&(k, _)| self.span_str(k) == name);
         let value = self.intern(value);
-        let key = match existing {
-            Some(_) => Span::EMPTY,
-            None => self.intern(&name),
-        };
-        if let Some(Node {
-            raw: RawKind::Element { attrs, .. },
-            ..
-        }) = self.node_mut(id)
-        {
-            match existing.and_then(|i| attrs.get_mut(i)) {
-                Some(slot) => slot.1 = value,
-                None => attrs.push((key, value)),
+        if let Some(i) = existing {
+            if let Some(slot) = self.attrs.get_mut(attrs.start as usize + i) {
+                slot.1 = value;
             }
+            return;
         }
+        let key = self.intern(&name);
+        // Appending needs the run to end where the arena does: move it there
+        // unless it already does (it always does for the element parsed or
+        // created last, and after the first move).
+        let start = if attrs.range().end == self.attrs.len() {
+            attrs.start
+        } else {
+            let start = self.attrs.len() as u32;
+            for i in attrs.range() {
+                if let Some(&pair) = self.attrs.get(i) {
+                    self.attrs.push(pair);
+                }
+            }
+            self.attr_waste += attrs.len as usize;
+            start
+        };
+        self.attrs.push((key, value));
+        self.set_attr_range(
+            id,
+            AttrRange {
+                start,
+                len: attrs.len + 1,
+            },
+        );
+        self.maybe_compact_attrs();
     }
 
     /// Remove attribute `name` (ASCII case-insensitive) from an element, if
@@ -264,18 +295,83 @@ impl Dom {
     /// assert_eq!(dom.to_html(), r#"<p class="x">hi</p>"#);
     /// ```
     pub fn remove_attr(&mut self, id: NodeId, name: &str) {
-        let strings = &self.strings;
+        let Some(attrs) = self.attr_range(id) else {
+            return;
+        };
+        // Pack the attributes that stay at the front of the run, in order.
+        let mut kept = 0;
+        for i in attrs.range() {
+            let Some(&(k, v)) = self.attrs.get(i) else {
+                break;
+            };
+            if self.span_str(k).eq_ignore_ascii_case(name) {
+                continue;
+            }
+            if let Some(slot) = self.attrs.get_mut(attrs.start as usize + kept) {
+                *slot = (k, v);
+            }
+            kept += 1;
+        }
+        let removed = attrs.len as usize - kept;
+        if removed == 0 {
+            return;
+        }
+        if attrs.range().end == self.attrs.len() {
+            self.attrs.truncate(attrs.start as usize + kept);
+        } else {
+            self.attr_waste += removed;
+        }
+        self.set_attr_range(
+            id,
+            AttrRange {
+                start: attrs.start,
+                len: kept as u32,
+            },
+        );
+        self.maybe_compact_attrs();
+    }
+
+    /// The attribute run of element `id` (`None` for other nodes).
+    fn attr_range(&self, id: NodeId) -> Option<AttrRange> {
+        match self.node(id)?.raw {
+            RawKind::Element { attrs, .. } => Some(attrs),
+            _ => None,
+        }
+    }
+
+    fn set_attr_range(&mut self, id: NodeId, range: AttrRange) {
         if let Some(Node {
             raw: RawKind::Element { attrs, .. },
             ..
-        }) = self.nodes.get_mut(id.index())
+        }) = self.node_mut(id)
         {
-            attrs.retain(|&(k, _)| {
-                !strings
-                    .get(k.range())
-                    .is_some_and(|k| k.eq_ignore_ascii_case(name))
-            });
+            *attrs = range;
         }
+    }
+
+    /// Rebuild the attribute arena without the slots edits left behind, once
+    /// they outnumber the live ones plus the nodes. That bounds the arena at
+    /// about twice what the document needs however edits move runs around,
+    /// and the rebuild (linear in nodes + slots) is paid for by the moves that
+    /// made the waste.
+    fn maybe_compact_attrs(&mut self) {
+        let live = self.attrs.len() - self.attr_waste;
+        if self.attr_waste <= live + self.nodes.len() {
+            return;
+        }
+        let mut packed = Vec::with_capacity(live);
+        for node in &mut self.nodes {
+            if let RawKind::Element { attrs, .. } = &mut node.raw {
+                let start = packed.len();
+                packed.extend_from_slice(self.attrs.get(attrs.range()).unwrap_or(&[]));
+                *attrs = AttrRange {
+                    start: start as u32,
+                    len: (packed.len() - start) as u32,
+                };
+            }
+        }
+        self.attrs = packed;
+        self.attr_waste = 0;
     }
 
     // --- text and names --------------------------------------------------
@@ -365,10 +461,13 @@ impl Dom {
     /// ```
     pub fn create_element(&mut self, tag: &str) -> NodeId {
         let name = self.intern(&tag.to_ascii_lowercase());
-        self.alloc_detached(RawKind::Element {
-            name,
-            attrs: Vec::new(),
-        })
+        // An empty run at the end of the arena: the first `set_attr` appends
+        // in place.
+        let attrs = AttrRange {
+            start: self.attrs.len() as u32,
+            len: 0,
+        };
+        self.alloc_detached(RawKind::Element { name, attrs })
     }
 
     /// Create a new, detached text node holding `text` literally (see
@@ -568,5 +667,49 @@ impl Dom {
             }
             None => Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::format;
+    use alloc::string::ToString;
+    use alloc::vec::Vec;
+
+    /// Appending to two elements in turn moves one run to the end of the arena
+    /// on every call. Without compaction that would be quadratic (~250k
+    /// slots here); with it the arena stays within about twice what is live.
+    #[test]
+    fn moved_attribute_runs_are_compacted() {
+        let mut dom = crate::parse("<a x=1></a><b y=2 z=3></b><i></i>");
+        let ids: Vec<_> = dom.nodes().map(|n| n.id()).collect();
+        let (a, b) = (ids[0], ids[1]);
+        for i in 0..500 {
+            dom.set_attr(a, &format!("a{i}"), "v");
+            dom.set_attr(b, &format!("b{i}"), &i.to_string());
+            let live = 3 + 2 * (i + 1);
+            assert!(dom.attrs.len() <= 2 * (live + dom.nodes.len()) + 2);
+        }
+        let a_attrs: Vec<_> = dom.get(a).unwrap().attributes().collect();
+        assert_eq!(a_attrs.len(), 501);
+        assert_eq!(a_attrs[0], ("x", "1"));
+        assert_eq!(a_attrs[500], ("a499", "v"));
+        let b = dom.get(b).unwrap();
+        assert_eq!(b.attributes().count(), 502);
+        assert_eq!(b.attr("z"), Some("3"));
+        assert_eq!(b.attr("b250"), Some("250"));
+        assert_eq!(dom.get(ids[2]).unwrap().attributes().count(), 0);
+
+        // Removing from a run that is not at the end leaves waste behind,
+        // and compaction keeps that bounded too.
+        for i in 0..500 {
+            dom.remove_attr(a, &format!("a{i}"));
+        }
+        assert_eq!(
+            dom.get(a).unwrap().attributes().collect::<Vec<_>>(),
+            [("x", "1")]
+        );
+        assert!(dom.attrs.len() <= 2 * (504 + dom.nodes.len()) + 2);
+        assert_eq!(dom.get(ids[1]).unwrap().attr("b499"), Some("499"));
     }
 }

@@ -4,10 +4,16 @@
 //! [`Token`]s without allocating anything except each tag's attribute list. All
 //! cursor access goes through `get()`/iterators, so it never panics on
 //! malformed or truncated input — the whole point of the crate.
+//!
+//! The tree builder uses the crate-internal [`Tokenizer::next_token`], which
+//! leaves a start tag's attributes in a buffer that is reused for every tag
+//! ([`Tokenizer::attrs`]), so parsing allocates nothing per tag at all. The
+//! scans for the next `<`, quote, `-->` or `>` go through [`crate::scan`].
 
 use alloc::vec::Vec;
 
 use crate::error::{ErrorKind, ParseError};
+use crate::scan;
 use crate::token::{AttrValue, Token};
 
 /// A streaming HTML tokenizer. Construct with [`Tokenizer::new`] (or the
@@ -19,6 +25,8 @@ pub struct Tokenizer<'a> {
     /// When set, the next token is the raw-text content up to this element's
     /// matching end tag (used for `<script>`/`<style>`/`<title>`/`<textarea>`).
     raw_text_end: Option<&'a str>,
+    /// The attributes of the start tag read last (see [`Tokenizer::attrs`]).
+    attrs: Vec<(&'a str, AttrValue<'a>)>,
     pub(crate) errors: Vec<ParseError>,
 }
 
@@ -30,6 +38,7 @@ impl<'a> Tokenizer<'a> {
             bytes: src.as_bytes(),
             pos: 0,
             raw_text_end: None,
+            attrs: Vec::new(),
             errors: Vec::new(),
         }
     }
@@ -66,6 +75,15 @@ impl<'a> Tokenizer<'a> {
             .is_some_and(|p| p.eq_ignore_ascii_case(s))
     }
 
+    /// Advance to the next `needle` byte, or to the end of the input.
+    #[inline]
+    fn skip_to(&mut self, needle: u8) {
+        match scan::find_byte(needle, self.rest()) {
+            Some(rel) => self.pos += rel,
+            None => self.pos = self.bytes.len(),
+        }
+    }
+
     fn skip_whitespace(&mut self) {
         while let Some(b) = self.peek() {
             if b.is_ascii_whitespace() {
@@ -88,8 +106,16 @@ impl<'a> Tokenizer<'a> {
 
     // --- token production ------------------------------------------------
 
+    /// The attributes of the start tag returned last by
+    /// [`Tokenizer::next_token`], in source order.
+    #[inline]
+    pub(crate) fn attrs(&self) -> &[(&'a str, AttrValue<'a>)] {
+        &self.attrs
+    }
+
     /// Like `Iterator::next`, but also returns the byte offset the token
-    /// started at (used internally by the tree builder for diagnostics).
+    /// started at, and a [`Token::StartTag`]'s `attrs` is always empty: the
+    /// attributes are in [`Tokenizer::attrs`] until the next call.
     pub(crate) fn next_token(&mut self) -> Option<(Token<'a>, usize)> {
         if self.pos >= self.bytes.len() {
             return None;
@@ -107,12 +133,8 @@ impl<'a> Tokenizer<'a> {
 
     fn read_text(&mut self) -> Token<'a> {
         let start = self.pos;
-        // Scan to the next '<' in one shot — the iterator `position` loop
-        // auto-vectorizes far better than a byte-at-a-time `peek` loop.
-        match self.rest().iter().position(|&b| b == b'<') {
-            Some(rel) => self.pos += rel,
-            None => self.pos = self.bytes.len(),
-        }
+        // Scan to the next '<' in one shot, not a byte-at-a-time `peek` loop.
+        self.skip_to(b'<');
         Token::Text(self.slice(start, self.pos))
     }
 
@@ -147,7 +169,7 @@ impl<'a> Tokenizer<'a> {
         let open = self.pos;
         self.pos += 1; // consume '<'
         let name = self.read_tag_name();
-        let mut attrs = Vec::new();
+        self.attrs.clear();
         let mut self_closing = false;
 
         loop {
@@ -170,7 +192,7 @@ impl<'a> Tokenizer<'a> {
                     self.pos += 1; // stray slash
                 }
                 Some(_) => match self.read_attribute() {
-                    Some(attr) => attrs.push(attr),
+                    Some(attr) => self.attrs.push(attr),
                     None => self.pos += 1, // couldn't form an attr; make progress
                 },
             }
@@ -182,7 +204,7 @@ impl<'a> Tokenizer<'a> {
 
         Token::StartTag {
             name,
-            attrs,
+            attrs: Vec::new(),
             self_closing,
         }
     }
@@ -214,12 +236,7 @@ impl<'a> Tokenizer<'a> {
             Some(q @ (b'"' | b'\'')) => {
                 self.pos += 1; // opening quote
                 let start = self.pos;
-                while let Some(b) = self.peek() {
-                    if b == q {
-                        break;
-                    }
-                    self.pos += 1;
-                }
+                self.skip_to(q);
                 let val = self.slice(start, self.pos);
                 if self.peek() == Some(q) {
                     self.pos += 1; // closing quote
@@ -243,18 +260,11 @@ impl<'a> Tokenizer<'a> {
         let open = self.pos;
         self.pos += 2; // consume '</'
         let name = self.read_tag_name();
-        loop {
-            match self.peek() {
-                None => {
-                    self.error(open, ErrorKind::UnterminatedTag);
-                    break;
-                }
-                Some(b'>') => {
-                    self.pos += 1;
-                    break;
-                }
-                Some(_) => self.pos += 1,
-            }
+        self.skip_to(b'>');
+        if self.peek() == Some(b'>') {
+            self.pos += 1;
+        } else {
+            self.error(open, ErrorKind::UnterminatedTag);
         }
         Token::EndTag { name }
     }
@@ -275,14 +285,13 @@ impl<'a> Tokenizer<'a> {
         let open = self.pos;
         self.pos += 4; // consume '<!--'
         let start = self.pos;
-        while !self.rest().is_empty() {
-            if self.starts_with(b"-->") {
-                let s = self.slice(start, self.pos);
-                self.pos += 3;
-                return Token::Comment(s);
-            }
-            self.pos += 1;
+        if let Some(rel) = scan::find(b"-->", self.rest()) {
+            self.pos += rel;
+            let s = self.slice(start, self.pos);
+            self.pos += 3;
+            return Token::Comment(s);
         }
+        self.pos = self.bytes.len();
         self.error(open, ErrorKind::UnterminatedComment);
         Token::Comment(self.slice(start, self.pos))
     }
@@ -291,14 +300,13 @@ impl<'a> Tokenizer<'a> {
         let open = self.pos;
         self.pos += 9; // consume '<![CDATA['
         let start = self.pos;
-        while !self.rest().is_empty() {
-            if self.starts_with(b"]]>") {
-                let s = self.slice(start, self.pos);
-                self.pos += 3;
-                return Token::Cdata(s);
-            }
-            self.pos += 1;
+        if let Some(rel) = scan::find(b"]]>", self.rest()) {
+            self.pos += rel;
+            let s = self.slice(start, self.pos);
+            self.pos += 3;
+            return Token::Cdata(s);
         }
+        self.pos = self.bytes.len();
         self.error(open, ErrorKind::UnterminatedCdata);
         Token::Cdata(self.slice(start, self.pos))
     }
@@ -308,12 +316,7 @@ impl<'a> Tokenizer<'a> {
         self.pos += 9; // consume '<!doctype'
         self.skip_whitespace();
         let start = self.pos;
-        while let Some(b) = self.peek() {
-            if b == b'>' {
-                break;
-            }
-            self.pos += 1;
-        }
+        self.skip_to(b'>');
         let s = self.slice(start, self.pos);
         if self.peek() == Some(b'>') {
             self.pos += 1;
@@ -332,12 +335,7 @@ impl<'a> Tokenizer<'a> {
             self.pos += 1;
         }
         let start = self.pos;
-        while let Some(b) = self.peek() {
-            if b == b'>' {
-                break;
-            }
-            self.pos += 1;
-        }
+        self.skip_to(b'>');
         let s = self.slice(start, self.pos);
         if self.peek() == Some(b'>') {
             self.pos += 1;
@@ -350,7 +348,7 @@ impl<'a> Tokenizer<'a> {
     fn read_raw_text(&mut self, end_name: &str) -> Token<'a> {
         let start = self.pos;
         loop {
-            match self.rest().iter().position(|&b| b == b'<') {
+            match scan::find_byte(b'<', self.rest()) {
                 None => {
                     self.pos = self.bytes.len();
                     break;
@@ -390,7 +388,12 @@ impl<'a> Iterator for Tokenizer<'a> {
     type Item = Token<'a>;
 
     fn next(&mut self) -> Option<Token<'a>> {
-        self.next_token().map(|(tok, _)| tok)
+        let (mut tok, _) = self.next_token()?;
+        if let Token::StartTag { attrs, .. } = &mut tok {
+            // Hand the buffer over: the next tag starts a fresh one.
+            *attrs = core::mem::take(&mut self.attrs);
+        }
+        Some(tok)
     }
 }
 

@@ -13,8 +13,9 @@
 //! Either way a named reference needs its `;`: the legacy no-semicolon
 //! spellings browsers also accept (`&amp`, `&copy`) stay verbatim.
 
-use alloc::borrow::Cow;
 use alloc::string::String;
+
+use crate::scan;
 
 /// Maximum length we will scan looking for a closing `;`. Real entity names are
 /// short; capping avoids treating a far-away `;` (as in `&nbsp ; foo`) as part
@@ -24,21 +25,14 @@ const MAX_ENTITY_LEN: usize = 32;
 /// The Unicode replacement character, used for out-of-range / null numeric refs.
 const REPLACEMENT: char = '\u{FFFD}';
 
-/// Decode HTML entities in `input`.
-///
-/// Returns the decoded text (borrowed unchanged when there is nothing to do)
-/// and a flag that is `true` if at least one unknown named reference was left
-/// verbatim.
-pub(crate) fn decode(input: &str) -> (Cow<'_, str>, bool) {
-    if !input.as_bytes().contains(&b'&') {
-        return (Cow::Borrowed(input), false);
-    }
-
-    let mut out = String::with_capacity(input.len());
+/// Append `input` to `out` with its HTML entities decoded (the tree builder
+/// decodes straight into its string arena, with no temporary). Returns `true`
+/// if at least one unknown named reference was left verbatim.
+pub(crate) fn decode_into(input: &str, out: &mut String) -> bool {
     let mut unknown = false;
     let mut rest = input;
 
-    while let Some(amp) = rest.find('&') {
+    while let Some(amp) = scan::find_byte(b'&', rest.as_bytes()) {
         // Everything before the '&' is literal.
         if let Some(literal) = rest.get(..amp) {
             out.push_str(literal);
@@ -53,11 +47,8 @@ pub(crate) fn decode(input: &str) -> (Cow<'_, str>, bool) {
             }
         };
 
-        match decode_one(after) {
-            Some((decoded, consumed)) => {
-                out.push_str(&decoded);
-                rest = after.get(consumed..).unwrap_or("");
-            }
+        match decode_one(after, out) {
+            Some(consumed) => rest = after.get(consumed..).unwrap_or(""),
             None => {
                 // Not a valid reference: keep the '&' verbatim and continue.
                 unknown = true;
@@ -67,13 +58,13 @@ pub(crate) fn decode(input: &str) -> (Cow<'_, str>, bool) {
         }
     }
     out.push_str(rest);
-    (Cow::Owned(out), unknown)
+    unknown
 }
 
 /// Try to decode a single reference whose text begins right after the `&`.
-/// On success returns the decoded string plus how many bytes of `after` were
-/// consumed (including the trailing `;`).
-fn decode_one(after: &str) -> Option<(Cow<'static, str>, usize)> {
+/// On success appends what it decodes to to `out` and returns how many bytes
+/// of `after` were consumed (including the trailing `;`).
+fn decode_one(after: &str, out: &mut String) -> Option<usize> {
     // Search bytes, not a `&str` window: a window cut at a fixed byte count can
     // land inside a multi-byte character. `;` is ASCII, so `semi` is always a
     // char boundary.
@@ -88,13 +79,11 @@ fn decode_one(after: &str) -> Option<(Cow<'static, str>, usize)> {
     }
 
     if let Some(stripped) = name.strip_prefix('#') {
-        let ch = numeric(stripped)?;
-        let mut s = String::new();
-        s.push(ch);
-        return Some((Cow::Owned(s), semi + 1));
+        out.push(numeric(stripped)?);
+    } else {
+        out.push_str(named(name)?);
     }
-
-    named(name).map(|s| (Cow::Borrowed(s), semi + 1))
+    Some(semi + 1)
 }
 
 /// What numeric references `&#x80;`–`&#x9F;` decode to (WHATWG): the C1

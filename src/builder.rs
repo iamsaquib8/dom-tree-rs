@@ -13,9 +13,8 @@
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 
-use crate::entities;
 use crate::error::{ErrorKind, ParseError};
-use crate::node::{NodeId, RawKind, Span, SrcRange};
+use crate::node::{AttrRange, NodeId, RawKind, Span, SrcRange};
 use crate::tags;
 use crate::token::Token;
 use crate::tokenizer::Tokenizer;
@@ -43,9 +42,7 @@ pub(crate) fn parse_document(src: &str) -> Dom {
         let end = tk.offset();
         match tok {
             Token::StartTag {
-                name,
-                attrs,
-                self_closing,
+                name, self_closing, ..
             } => {
                 let lname = lower(name);
 
@@ -60,24 +57,27 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 let parent = open.top();
 
                 let name_span = dom.intern(&lname);
-                let mut built: Vec<(Span, Span)> = Vec::with_capacity(attrs.len());
-                for (k, v) in attrs {
-                    let key_span = dom.intern(&lower(k));
-                    let (decoded, unknown) = entities::decode(v.as_str());
+                let first = dom.attrs.len();
+                for &(k, v) in tk.attrs() {
+                    let key = dom.intern_lower(k);
+                    let (value, unknown) = dom.intern_decoded(v.as_str());
                     if unknown {
                         dom.errors
                             .push(ParseError::new(pos, ErrorKind::UnknownEntity));
                     }
-                    let val_span = dom.intern(&decoded);
-                    built.push((key_span, val_span));
+                    dom.attrs.push((key, value));
                 }
+                let attrs = AttrRange {
+                    start: first as u32,
+                    len: (dom.attrs.len() - first) as u32,
+                };
 
                 // Provisional range (just the start tag); a non-void element's
                 // end is moved when it is closed.
                 let id = dom.alloc(
                     RawKind::Element {
                         name: name_span,
-                        attrs: built,
+                        attrs,
                     },
                     range(pos, end),
                 );
@@ -131,12 +131,12 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 let span = if raw {
                     dom.intern(t)
                 } else {
-                    let (decoded, unknown) = entities::decode(t);
+                    let (span, unknown) = dom.intern_decoded(t);
                     if unknown {
                         dom.errors
                             .push(ParseError::new(pos, ErrorKind::UnknownEntity));
                     }
-                    dom.intern(&decoded)
+                    span
                 };
                 let id = dom.alloc(RawKind::Text(span), range(pos, end));
                 dom.append(parent, id);

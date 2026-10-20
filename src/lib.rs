@@ -144,6 +144,7 @@ mod entities_full;
 mod error;
 mod extract;
 mod node;
+mod scan;
 mod source;
 mod tags;
 mod token;

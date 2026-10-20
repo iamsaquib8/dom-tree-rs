@@ -33,6 +33,10 @@ entities-full = []
 # Enables std-only conveniences (e.g. `std::error::Error` for `ParseError`).
 # The crate is `no_std + alloc` by default.
 std = []
+# SIMD-accelerated scanning of text and attribute values via `memchr` (adds
+# that one dependency, `no_std`). Off by default: the default build stays
+# zero-dependency and produces exactly the same tokens.
+simd = ["dep:memchr"]
 
 [[example]]
 name = "to_markdown"
@@ -40,6 +44,7 @@ required-features = ["query", "markdown"]
 
 [dependencies]
 serde = { version = "1", default-features = false, features = ["alloc"], optional = true }
+memchr = { version = "2.7", default-features = false, optional = true }
 
 [dev-dependencies]
 # Snapshot testing for the corpus suite (dev-only; not a runtime dependency).

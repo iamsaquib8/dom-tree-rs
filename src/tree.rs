@@ -6,7 +6,7 @@ use core::fmt;
 use core::ops::Range;
 
 use crate::error::ParseError;
-use crate::node::{Node, NodeId, NodeKind, RawKind, Span, SrcRange};
+use crate::node::{AttrRange, Node, NodeId, NodeKind, RawKind, Span, SrcRange};
 
 /// A parsed HTML document: an arena of nodes, a single string buffer they
 /// reference, the top-level (root) nodes, and any recovery diagnostics.
@@ -19,6 +19,13 @@ use crate::node::{Node, NodeId, NodeKind, RawKind, Span, SrcRange};
 pub struct Dom {
     pub(crate) nodes: Vec<Node>,
     pub(crate) strings: String,
+    /// Every element's attributes as `(name, value)` spans, each element
+    /// owning one contiguous run ([`AttrRange`]). The parser appends runs in
+    /// document order.
+    pub(crate) attrs: Vec<(Span, Span)>,
+    /// Slots of `attrs` that no element owns any more (left behind when an
+    /// edit moved or shrank a run); see `Dom::compact_attrs`.
+    pub(crate) attr_waste: usize,
     /// The first and last top-level node. Top-level nodes are linked as
     /// siblings, like the children of an implicit document node.
     pub(crate) first_root: Option<NodeId>,
@@ -34,10 +41,13 @@ impl Dom {
     pub(crate) fn with_capacity(src_len: usize) -> Self {
         Dom {
             // About one node per 13 bytes of dense markup, so the arena rarely
-            // reallocates (copying it) mid-parse: ~5 bytes reserved per input
-            // byte with 64-byte nodes.
+            // reallocates (copying it) mid-parse: ~4 bytes reserved per input
+            // byte with 52-byte nodes.
             nodes: Vec::with_capacity(src_len / 13 + 8),
             strings: String::with_capacity(src_len),
+            // About one attribute per 48 bytes of dense markup.
+            attrs: Vec::with_capacity(src_len / 48 + 4),
+            attr_waste: 0,
             first_root: None,
             last_root: None,
             reordered: false,
@@ -58,9 +68,43 @@ impl Dom {
         }
     }
 
+    /// The [`Span`] of everything appended to the arena since `start`.
+    #[inline]
+    fn span_since(&self, start: usize) -> Span {
+        Span {
+            start: start as u32,
+            len: (self.strings.len() - start) as u32,
+        }
+    }
+
+    /// Append `s` ASCII-lower-cased (a tag or attribute name), without a
+    /// temporary string.
+    pub(crate) fn intern_lower(&mut self, s: &str) -> Span {
+        let start = self.strings.len();
+        self.strings.push_str(s);
+        if let Some(new) = self.strings.get_mut(start..) {
+            new.make_ascii_lowercase();
+        }
+        self.span_since(start)
+    }
+
+    /// Append `s` with its character references decoded straight into the
+    /// arena. Also returns whether an unknown named reference was left as is.
+    pub(crate) fn intern_decoded(&mut self, s: &str) -> (Span, bool) {
+        let start = self.strings.len();
+        let unknown = crate::entities::decode_into(s, &mut self.strings);
+        (self.span_since(start), unknown)
+    }
+
     #[inline]
     pub(crate) fn span_str(&self, span: Span) -> &str {
         self.strings.get(span.range()).unwrap_or("")
+    }
+
+    /// An element's `(name, value)` attribute spans.
+    #[inline]
+    pub(crate) fn attr_slice(&self, attrs: AttrRange) -> &[(Span, Span)] {
+        self.attrs.get(attrs.range()).unwrap_or(&[])
     }
 
     pub(crate) fn alloc(&mut self, raw: RawKind, src: SrcRange) -> NodeId {
@@ -419,35 +463,38 @@ impl<'a> NodeRef<'a> {
         }
     }
 
-    /// The value of attribute `name`, if this is an element with that attribute.
+    /// This element's attribute spans (empty for non-elements).
+    #[inline]
+    fn attr_spans(&self) -> &'a [(Span, Span)] {
+        match self.raw().raw {
+            RawKind::Element { attrs, .. } => self.dom.attr_slice(attrs),
+            _ => &[],
+        }
+    }
+
+    /// The value of attribute `name`, if this is an element with that
+    /// attribute. With duplicate attributes, the first one wins.
     pub fn attr(&self, name: &str) -> Option<&'a str> {
         let dom = self.dom;
-        match &self.raw().raw {
-            RawKind::Element { attrs, .. } => attrs
-                .iter()
-                .find(|&&(k, _)| dom.span_str(k) == name)
-                .map(|&(_, v)| dom.span_str(v)),
-            _ => None,
-        }
+        self.attr_spans()
+            .iter()
+            .find(|&&(k, _)| dom.span_str(k) == name)
+            .map(|&(_, v)| dom.span_str(v))
     }
 
     /// Whether attribute `name` is present (including valueless boolean attrs).
     pub fn has_attr(&self, name: &str) -> bool {
         let dom = self.dom;
-        match &self.raw().raw {
-            RawKind::Element { attrs, .. } => attrs.iter().any(|&(k, _)| dom.span_str(k) == name),
-            _ => false,
-        }
+        self.attr_spans()
+            .iter()
+            .any(|&(k, _)| dom.span_str(k) == name)
     }
 
-    /// All `(name, value)` attribute pairs (empty iterator for non-elements).
+    /// All `(name, value)` attribute pairs in source order, duplicates
+    /// included (empty iterator for non-elements).
     pub fn attributes(&self) -> impl Iterator<Item = (&'a str, &'a str)> {
         let dom = self.dom;
-        let attrs: &'a [(Span, Span)] = match &self.raw().raw {
-            RawKind::Element { attrs, .. } => attrs.as_slice(),
-            _ => &[],
-        };
-        attrs
+        self.attr_spans()
             .iter()
             .map(move |&(k, v)| (dom.span_str(k), dom.span_str(v)))
     }

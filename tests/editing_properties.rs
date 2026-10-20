@@ -206,6 +206,141 @@ fn apply(dom: &mut Dom, known: &mut Vec<NodeId>, op: &Op) {
     known.extend(new);
 }
 
+// --- attribute storage ---------------------------------------------------
+//
+// Elements share one attribute arena; editing moves an element's run to the
+// end of it (and every so often compacts it). Whatever the interleaving of
+// attribute edits with everything else, each element must keep exactly the
+// attributes a plain per-element list would have.
+
+/// An attribute edit, or any other edit (which must leave attributes alone,
+/// except on the nodes it creates).
+#[derive(Debug, Clone)]
+enum AttrOp {
+    Set(usize, String, String),
+    Remove(usize, String),
+    Other(Op),
+}
+
+fn attr_name() -> impl Strategy<Value = String> {
+    // Enough distinct names that runs keep growing (and moving), with case
+    // variants of the same name.
+    "[a-fA-F]{1,2}"
+}
+
+fn attr_op() -> impl Strategy<Value = AttrOp> {
+    let i = || any::<usize>();
+    prop_oneof![
+        4 => (i(), attr_name(), "[a-z&\"]{0,3}").prop_map(|(a, k, v)| AttrOp::Set(a, k, v)),
+        2 => (i(), attr_name()).prop_map(|(a, k)| AttrOp::Remove(a, k)),
+        2 => op().prop_map(AttrOp::Other),
+    ]
+}
+
+/// Documents whose elements already have attributes, duplicates included.
+fn html_with_attrs() -> impl Strategy<Value = String> {
+    let pieces = vec![
+        "<div a=1 b='2'>",
+        "<p A=x a=y>",
+        "<span c d=\"&amp;\">",
+        "</div>",
+        "</span>",
+        "<img src=i.png alt=\"\">",
+        "<b>",
+        "text",
+        "<li class=x id=y>",
+        "<br>",
+    ];
+    proptest::collection::vec(proptest::sample::select(pieces), 0..16).prop_map(|v| v.concat())
+}
+
+type Model = std::collections::HashMap<NodeId, Vec<(String, String)>>;
+
+fn attributes_of(dom: &Dom, id: NodeId) -> Vec<(String, String)> {
+    dom.get(id)
+        .map(|n| {
+            n.attributes()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Start tracking every element we do not know yet, as it is now.
+fn track_new(dom: &Dom, known: &[NodeId], model: &mut Model) {
+    for &id in known {
+        if dom.get(id).is_some_and(|n| n.is_element()) && !model.contains_key(&id) {
+            model.insert(id, attributes_of(dom, id));
+        }
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 512, ..ProptestConfig::default() })]
+
+    #[test]
+    fn attribute_edits_match_a_per_element_model(
+        doc in html_with_attrs(),
+        ops in proptest::collection::vec(attr_op(), 0..48),
+    ) {
+        let mut dom = parse(&doc);
+        let mut known = Vec::new();
+        check(&dom, &mut known)?;
+        let mut model = Model::new();
+        track_new(&dom, &known, &mut model);
+        for op in &ops {
+            // `Op::SetAttr` is `set_attr(_, "data-x", "1")`: model it too.
+            let op = match op {
+                AttrOp::Other(Op::SetAttr(a)) => &AttrOp::Set(*a, "data-x".into(), "1".into()),
+                op => op,
+            };
+            match op {
+                AttrOp::Set(a, k, v) => {
+                    if let Some(&id) = known.get(a % known.len().max(1)) {
+                        dom.set_attr(id, k, v);
+                        if let Some(attrs) = model.get_mut(&id) {
+                            let k = k.to_ascii_lowercase();
+                            // The first attribute with that name is replaced.
+                            match attrs.iter_mut().find(|(n, _)| *n == k) {
+                                Some(slot) => slot.1 = v.clone(),
+                                None => attrs.push((k, v.clone())),
+                            }
+                        }
+                    }
+                }
+                AttrOp::Remove(a, k) => {
+                    if let Some(&id) = known.get(a % known.len().max(1)) {
+                        dom.remove_attr(id, k);
+                        if let Some(attrs) = model.get_mut(&id) {
+                            attrs.retain(|(n, _)| !n.eq_ignore_ascii_case(k));
+                        }
+                    }
+                }
+                AttrOp::Other(op) => apply(&mut dom, &mut known, op),
+            }
+            check(&dom, &mut known)?;
+            track_new(&dom, &known, &mut model);
+            for (&id, attrs) in &model {
+                prop_assert_eq!(&attributes_of(&dom, id), attrs, "attributes of {:?}", id);
+                let n = dom.get(id).expect("ids stay valid");
+                for (k, _) in attrs {
+                    // `attr` is the first occurrence.
+                    let first = attrs.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
+                    prop_assert_eq!(n.attr(k), first);
+                    prop_assert!(n.has_attr(k));
+                }
+            }
+        }
+        // Attribute values survive serialization (escaped) and re-parsing.
+        for (&id, attrs) in &model {
+            let html = dom.get(id).expect("ids stay valid").to_html();
+            let reparsed = parse(&html);
+            let root = reparsed.root().expect("an element serializes to a start tag");
+            prop_assert_eq!(&attributes_of(&reparsed, root.id()), attrs, "{}", html);
+        }
+    }
+}
+
 proptest! {
     #![proptest_config(ProptestConfig { cases: 1024, ..ProptestConfig::default() })]
 

@@ -151,12 +151,37 @@ curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer, script' --markdow
 </details>
 
 <details>
-<summary><b>Read a table</b></summary>
+<summary><b>Keep just the article, chunked for RAG</b></summary>
 
 ```rust
-for row in dom.select("table#prices tr:has(td)") {
-    let cells: Vec<String> = row.select("td").map(|td| td.to_text()).collect();
-    println!("{}", cells.join(" | "));
+let dom = domtree::parse(html);
+let article = dom.main_content();                   // reader mode: drops nav, ads, comments…
+let chunks = match article {
+    Some(node) => node.to_markdown_chunks(1500),
+    None => dom.to_markdown_chunks(1500),
+};
+for chunk in &chunks {
+    println!("[{}]\n{}", chunk.context(), chunk.markdown); // e.g. "[Guide > Install]"
+}
+```
+</details>
+
+<details>
+<summary><b>Links, page metadata, and tables as data</b></summary>
+
+```rust
+let dom = domtree::parse(html);
+
+for link in dom.links(Some("https://example.com/blog/")) {
+    println!("{} -> {}", link.text, link.url);       // resolved, honours <base href>
+}
+
+let meta = dom.metadata();                          // title, description, OpenGraph, JSON-LD…
+println!("{:?} {:?}", meta.title, meta.canonical);
+
+if let Some(table) = dom.select_first("table#prices") {
+    let rows = table.table_rows();                  // colspan/rowspan expanded
+    print!("{}", domtree::to_csv(&rows));
 }
 ```
 </details>
@@ -312,7 +337,7 @@ recovers from is recorded in
 |---|:---:|---|
 | `json` | ✅ | `to_json()` — zero-dependency JSON |
 | `query` | ✅ | CSS selectors: `select`, `select_first`, `Selector`, `closest`, `matches` |
-| `markdown` | ✅ | `to_markdown()` — zero-dependency HTML → Markdown |
+| `markdown` | ✅ | `to_markdown()` and `to_markdown_chunks()` — zero-dependency HTML → Markdown |
 | `serde` | | `serde::Serialize` for the tree (same JSON shape; adds `serde`) |
 | `std` | | `std::error::Error` impls; the crate is `no_std + alloc` otherwise |
 

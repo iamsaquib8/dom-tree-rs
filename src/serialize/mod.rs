@@ -7,7 +7,9 @@
 //! - [`Dom::to_text`](crate::Dom::to_text) / [`NodeRef::to_text`](crate::NodeRef::to_text)
 //!   produce readable plain text — always available, zero-dependency.
 //! - The default [`markdown`](crate#features) feature adds the zero-dependency
-//!   `Dom::to_markdown` / `NodeRef::to_markdown` (CommonMark + GFM tables).
+//!   `Dom::to_markdown` / `NodeRef::to_markdown` (CommonMark + GFM tables),
+//!   and `to_markdown_chunks` (`chunk.rs`), which splits that Markdown into
+//!   heading-aware chunks for retrieval.
 //! - The default [`json`](crate#features) feature adds the hand-rolled,
 //!   zero-dependency [`Dom::to_json`](crate::Dom::to_json).
 //! - The optional `serde` feature adds `serde::Serialize` impls that produce the
@@ -25,6 +27,12 @@ mod text;
 
 #[cfg(feature = "markdown")]
 mod markdown;
+
+#[cfg(feature = "markdown")]
+mod chunk;
+
+#[cfg(feature = "markdown")]
+pub use chunk::Chunk;
 
 #[cfg(feature = "json")]
 mod json;

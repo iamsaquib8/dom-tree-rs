@@ -84,6 +84,35 @@ fn detect_base_uses_base_tag() {
 }
 
 #[test]
+fn base_keeps_commas_inside_srcset_urls() {
+    let html = r#"<img srcset="https://c.io/up/c_fill,w_300/a.jpg 300w, https://c.io/up/c_fill,w_600/a.jpg 600w">"#;
+    assert_eq!(
+        ok(&["-b", "https://x.dev/", "-a", "srcset", "img"], html),
+        "https://c.io/up/c_fill,w_300/a.jpg 300w, https://c.io/up/c_fill,w_600/a.jpg 600w\n"
+    );
+    // A trailing comma is not an extra (empty) candidate.
+    assert_eq!(
+        ok(
+            &["-b", "https://x.dev/", "-a", "srcset", "img"],
+            r#"<img srcset="a.png 1x,">"#
+        ),
+        "https://x.dev/a.png 1x\n"
+    );
+}
+
+#[test]
+fn base_rewrites_the_attribute_that_counts() {
+    // With a repeated attribute the first one wins, as in `NodeRef::attr`.
+    assert_eq!(
+        ok(
+            &["-b", "https://x.dev/d/", "-a", "href", "a"],
+            "<a href=a href=b>x</a>"
+        ),
+        "https://x.dev/d/a\n"
+    );
+}
+
+#[test]
 fn remove_nodes_before_selecting() {
     assert_eq!(
         ok(&["-r", "nav", "-r", "footer", "-a", "href", "a"], PAGE),

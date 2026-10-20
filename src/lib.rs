@@ -47,6 +47,8 @@
 //! - [`Dom::to_markdown`] — CommonMark + GFM (headings, lists, links, images,
 //!   code blocks, tables, quotes): for LLM prompts, RAG indexes and notes.
 //! - [`Dom::to_html`], [`NodeRef::inner_html`], [`NodeRef::outer_html`] — HTML.
+//! - [`Dom::to_markdown_chunks`] — that Markdown split at headings into
+//!   chunks under a size budget, each with its heading path: for RAG indexes.
 //!
 //! ```
 //! let dom = domtree::parse(
@@ -79,11 +81,42 @@
 //! assert_eq!(dom.to_html(), "<p>Hello <strong>world</strong>!</p>");
 //! ```
 //!
+//! ## Structure and data
+//!
+//! - [`Dom::main_content`] — the article / post / docs body without the
+//!   navigation, sidebars, comments and footer ("reader mode").
+//! - [`Dom::links`] / [`Dom::resources`] — every link (with its text) and
+//!   every embedded URL, resolved against the page URL and `<base href>`
+//!   ([`resolve_url`], [`resolve_srcset`]: RFC 3986, zero-dependency).
+//! - [`Dom::metadata`] — title, description, canonical URL, language,
+//!   OpenGraph / Twitter-card fields, JSON-LD blocks and feeds.
+//! - [`NodeRef::table_rows`] — a `<table>` as rows of cell text with
+//!   `colspan`/`rowspan` expanded; [`to_csv`] formats them.
+//!
+//! ```
+//! let dom = domtree::parse(r#"<html lang="en"><head><title>Release notes</title></head>
+//!   <body><nav><a href="/">Home</a></nav>
+//!   <article><h1>Version 2</h1>
+//!     <p>This release adds link extraction, page metadata, tables as data and a
+//!        reader mode, all without a single new dependency.</p>
+//!     <p>See the <a href="changelog.html">full changelog</a> for details.</p>
+//!   </article></body></html>"#);
+//!
+//! assert_eq!(dom.metadata().title.as_deref(), Some("Release notes"));
+//! let article = dom.main_content().unwrap();
+//! assert_eq!(article.tag_name(), Some("article"));
+//! let links = dom.links(Some("https://example.com/news/"));
+//! assert_eq!(links[1].url, "https://example.com/news/changelog.html");
+//! assert_eq!(links[1].text, "full changelog");
+//! ```
+//!
 //! ## Features
 //!
 //! - `json` *(default)* — the zero-dependency [`Dom::to_json`] serializer.
-//! - `markdown` *(default)* — the zero-dependency [`Dom::to_markdown`].
-//! - `serde` — optional `serde::Serialize` for the tree (adds the `serde` dep).
+//! - `markdown` *(default)* — the zero-dependency [`Dom::to_markdown`] and
+//!   [`Dom::to_markdown_chunks`].
+//! - `serde` — optional `serde::Serialize` for the tree, [`Metadata`] and
+//!   [`Chunk`] (adds the `serde` dep).
 //! - `query` — a zero-dependency CSS selector engine ([`Dom::select`], [`Selector`]).
 //! - `entities-full` — decode all 2,125 WHATWG named character references
 //!   instead of the curated ~180 (a sorted static table, about 70 KB).
@@ -109,12 +142,14 @@ mod entities;
 #[cfg(feature = "entities-full")]
 mod entities_full;
 mod error;
+mod extract;
 mod node;
 mod source;
 mod tags;
 mod token;
 mod tokenizer;
 mod tree;
+mod url;
 
 mod serialize;
 
@@ -122,11 +157,16 @@ mod serialize;
 mod query;
 
 pub use error::{ErrorKind, ParseError};
+pub use extract::{Link, Metadata, Resource, to_csv};
 pub use node::{NodeId, NodeKind};
 pub use source::line_col;
 pub use token::{AttrValue, Token};
 pub use tokenizer::Tokenizer;
 pub use tree::{Descendants, Dom, NodeRef};
+pub use url::{resolve_srcset, resolve_url};
+
+#[cfg(feature = "markdown")]
+pub use serialize::Chunk;
 
 #[cfg(feature = "query")]
 pub use query::{AsSelector, Selector, SelectorError};

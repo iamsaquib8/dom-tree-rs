@@ -24,8 +24,11 @@ jobs:
       matrix:
         include:
           - { target: x86_64-unknown-linux-musl, os: ubuntu-latest }
+          # Native arm64 runner (free for public repositories).
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
           - { target: aarch64-apple-darwin, os: macos-14 }
-          - { target: x86_64-apple-darwin, os: macos-13 }
+          # Cross-compiled on Apple Silicon (the Intel macos-13 image is retired).
+          - { target: x86_64-apple-darwin, os: macos-14 }
           - { target: x86_64-pc-windows-msvc, os: windows-latest }
     steps:
       - uses: actions/checkout@v4

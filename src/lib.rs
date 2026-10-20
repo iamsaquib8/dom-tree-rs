@@ -47,6 +47,8 @@
 //! - [`Dom::to_markdown`] — CommonMark + GFM (headings, lists, links, images,
 //!   code blocks, tables, quotes): for LLM prompts, RAG indexes and notes.
 //! - [`Dom::to_html`], [`NodeRef::inner_html`], [`NodeRef::outer_html`] — HTML.
+//! - [`Dom::to_markdown_chunks`] — that Markdown split at headings into
+//!   chunks under a size budget, each with its heading path: for RAG indexes.
 //!
 //! ```
 //! let dom = domtree::parse(
@@ -89,9 +91,10 @@
 //! ## Features
 //!
 //! - `json` *(default)* — the zero-dependency [`Dom::to_json`] serializer.
-//! - `markdown` *(default)* — the zero-dependency [`Dom::to_markdown`].
-//! - `serde` — optional `serde::Serialize` for the tree and [`Metadata`]
-//!   (adds the `serde` dep).
+//! - `markdown` *(default)* — the zero-dependency [`Dom::to_markdown`] and
+//!   [`Dom::to_markdown_chunks`].
+//! - `serde` — optional `serde::Serialize` for the tree, [`Metadata`] and
+//!   [`Chunk`] (adds the `serde` dep).
 //! - `query` — a zero-dependency CSS selector engine ([`Dom::select`], [`Selector`]).
 //! - `std` — adds `std`-only conveniences; the crate is `no_std + alloc` by default.
 
@@ -132,6 +135,9 @@ pub use token::{AttrValue, Token};
 pub use tokenizer::Tokenizer;
 pub use tree::{Descendants, Dom, NodeRef};
 pub use url::{resolve_srcset, resolve_url};
+
+#[cfg(feature = "markdown")]
+pub use serialize::Chunk;
 
 #[cfg(feature = "query")]
 pub use query::{AsSelector, Selector, SelectorError};

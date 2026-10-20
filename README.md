@@ -85,7 +85,8 @@ npm install dom-tree-wasm
 ```
 
 ```js
-import init, { select } from "dom-tree-wasm";
+import init, { select }
+  from "dom-tree-wasm";
 await init();
 select(html, "a[href]");
 ```
@@ -109,7 +110,7 @@ select(html, "a[href]");
 - **Runs everywhere.** `no_std + alloc`, `#![forbid(unsafe_code)]`, a ~20 KB
   gzipped wasm module for browsers, Cloudflare Workers, Deno, Bun and Node, and a
   single static binary for your shell.
-- **Fast enough.** ~250 MiB/s — within 5–15 % of [`tl`] while building an owned
+- **Fast enough.** ~250 MiB/s — within 5–15 % of [`tl`][tl] while building an owned
   tree (see [Performance](#performance)).
 
 <sub>¹ Clean debug `cargo build` of an empty crate depending only on the parser (default
@@ -236,7 +237,7 @@ const md = toMarkdown(html);
 | CSS selectors | **✅** | limited | ✅ | ❌ | ✅ |
 | Text / Markdown output | **✅** | ❌ | ❌ | ❌ | ❌ |
 | JSON output | **✅** | ❌ | ❌ | ❌ | ❌ |
-| WASM + npm package | **✅** | ✅ | ❌ | ❌ | ❌ |
+| WASM + npm package | **✅** | ❌ | ❌ | ❌ | ❌ |
 | CLI | **✅** | ❌ | ❌ | ❌ | ❌ |
 | `no_std` | **✅** | ❌ | ❌ | ❌ | ❌ |
 | Edit + re-serialize | basic | ❌ | ❌ | ✅ | ✅ (streaming) |
@@ -244,7 +245,7 @@ const md = toMarkdown(html);
 | WHATWG spec-compliant tree | ❌ | ❌ | ✅ | ✅ | ❌ |
 
 **When to pick something else:** if you need byte-exact browser parsing, use
-[`html5ever`]/[`scraper`]. If raw throughput is all that matters, use [`tl`]. If
+[`html5ever`][html5ever]/[`scraper`][scraper]. If raw throughput is all that matters, use [`tl`][tl]. If
 you're sanitizing untrusted HTML, use [`ammonia`](https://crates.io/crates/ammonia)
 — never a forgiving, non-spec parser.
 

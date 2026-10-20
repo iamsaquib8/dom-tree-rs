@@ -1,0 +1,34 @@
+name: Feature request
+description: Something that would make dom-tree-rs more useful to you.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read the [roadmap](https://github.com/iamsaquib8/dom-tree-rs/blob/main/ROADMAP.md) first —
+        especially the **non-goals**. The bar for new features is "does it keep the crate tiny,
+        zero-dependency, forgiving, and honest?"
+  - type: dropdown
+    id: who
+    attributes:
+      label: Where do you use dom-tree-rs?
+      options:
+        - Rust library (scraping / extraction)
+        - CLI (shell pipelines)
+        - LLM / RAG pipeline (text or Markdown output)
+        - JavaScript / WASM (browser, edge, Node, Deno, Bun)
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the real task, not just the API you'd like. Example inputs help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would help?
+      description: An API sketch, a CLI flag, or how another tool does it.

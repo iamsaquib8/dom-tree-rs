@@ -7,3 +7,4 @@ Cargo.lock
 # cargo-fuzz working dirs (not the tests/corpus/ fixtures!)
 /fuzz/corpus/
 /fuzz/artifacts/
+/.claude/worktrees/

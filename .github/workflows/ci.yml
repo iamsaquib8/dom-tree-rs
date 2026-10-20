@@ -28,6 +28,13 @@ jobs:
         run: cargo test
       - name: Test (no default features, json only)
         run: cargo test --no-default-features --features json
+      - name: Test CLI
+        run: cargo test -p domtree-cli
+      - name: Zero runtime dependencies (default features)
+        run: |
+          DEPS=$(cargo tree -p dom-tree-rs -e normal --prefix none | sort -u | wc -l)
+          echo "crates in default graph: $DEPS (expect 1: this crate)"
+          test "$DEPS" -eq 1
 
   msrv:
     name: msrv (1.85)
@@ -37,7 +44,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.85.0
       - uses: Swatinem/rust-cache@v2
       - name: Check library on MSRV (all lib features)
-        run: cargo check --no-default-features --features json,serde,query
+        run: cargo check --no-default-features --features json,serde,query,markdown,std
+      - name: Check CLI on MSRV
+        run: cargo check -p domtree-cli
 
   lint:
     name: rustfmt + clippy
@@ -49,7 +58,7 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-features --all-targets -- -D warnings
+      - run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
   no_std:
     name: no_std (thumbv7em)
@@ -61,7 +70,7 @@ jobs:
           targets: thumbv7em-none-eabi
       - uses: Swatinem/rust-cache@v2
       - name: Build for a bare-metal target (alloc only)
-        run: cargo build --no-default-features --features json,query --target thumbv7em-none-eabi
+        run: cargo build --no-default-features --features json,query,markdown --target thumbv7em-none-eabi
 
   wasm:
     name: wasm build + size gate

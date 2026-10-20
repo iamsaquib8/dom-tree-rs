@@ -44,7 +44,7 @@
 //!
 //! - `json` *(default)* — the zero-dependency [`Dom::to_json`] serializer.
 //! - `serde` — optional `serde::Serialize` for the tree (adds the `serde` dep).
-//! - `query` — a small CSS-selector engine, [`Dom::select`].
+//! - `query` — a zero-dependency CSS selector engine ([`Dom::select`], [`Selector`]).
 //! - `std` — adds `std`-only conveniences; the crate is `no_std + alloc` by default.
 
 #![no_std]
@@ -80,6 +80,9 @@ pub use node::{NodeId, NodeKind};
 pub use token::{AttrValue, Token};
 pub use tokenizer::Tokenizer;
 pub use tree::{Descendants, Dom, NodeRef};
+
+#[cfg(feature = "query")]
+pub use query::{AsSelector, Selector, SelectorError};
 
 /// Parse a full HTML document into a best-effort tree.
 ///

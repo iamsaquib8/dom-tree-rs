@@ -190,12 +190,13 @@ Being easy to *get* matters as much as features.
 
 - [x] Prebuilt CLI binaries on GitHub Releases (Linux/macOS/Windows), also
       installable with `cargo binstall domtree-cli`.
-- [ ] Homebrew formula (`brew install iamsaquib8/tap/domtree`).
+- [x] Homebrew formula (`brew install iamsaquib8/tap/domtree`) — filled in by the
+      release workflow (`packaging/homebrew/`).
 - [ ] npm package published from CI in lock-step with the crate version.
-- [ ] **Python package** (`pip install domtree`, PyO3 + maturin wheels):
-      `parse`, `select`, `to_text`, `to_markdown`. Python is where most scraping
-      and RAG code lives.
-- [ ] WASI build of the CLI (run `domtree` under `wasmtime`/`wasmer`).
+- [x] **Python package** (`pip install dom-tree-rs`, `import domtree`; PyO3 +
+      maturin abi3 wheels, typed stubs, GIL released on large inputs). Python is
+      where most scraping and RAG code lives.
+- [x] WASI build of the CLI (`domtree.wasm` on releases; runs under `wasmtime`).
 
 ## Exploring
 

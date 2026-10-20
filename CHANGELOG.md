@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Python package** `dom-tree-rs` on PyPI (import `domtree`): `parse`,
+  `Document.select`/`select_first`/`to_text`/`to_markdown`/`to_html`/`to_json`,
+  `Element` with attributes, text, HTML and traversal; typed stubs; abi3 wheels
+  for Linux, macOS and Windows; the GIL is released while parsing large inputs.
+- **Homebrew formula** for the `domtree` CLI (`packaging/homebrew/`), filled in
+  with release checksums by the release workflow.
+- **WASI build** of the CLI (`domtree.wasm`, attached to releases, smoke-tested
+  under wasmtime). Note: under WASI a closed stdout pipe is reported as an I/O
+  error rather than ignored.
+- Prebuilt CLI binaries for Linux arm64.
+
 ## [0.3.0] — Unreleased
 
 "One-line scraping": find things and get their content out, in Rust, in the

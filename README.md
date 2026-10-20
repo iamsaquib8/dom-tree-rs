@@ -95,6 +95,10 @@ select(html, "a[href]");
 </tr>
 </table>
 
+Also: 🐍 **Python** — `pip install dom-tree-rs` ([docs](./python)) · 🍺 **Homebrew** —
+`brew install iamsaquib8/tap/domtree` · ⚡ **WASI** — `domtree.wasm` on every
+[release](https://github.com/iamsaquib8/dom-tree-rs/releases).
+
 ## Why dom-tree-rs?
 
 - **Zero dependencies.** One crate in your `cargo tree`. A clean build takes
@@ -232,6 +236,20 @@ const md = toMarkdown(html, "article");      // just the article, as Markdown
 const page = new Document(html);             // parse once, query many times
 const headings = page.select("h2").map((h) => h.text);
 page.free();
+```
+
+## Python
+
+Same engine, Pythonic API, abi3 wheels for Linux, macOS and Windows (Python ≥ 3.9).
+The GIL is released while parsing large documents. [Package docs →](./python)
+
+```python
+import domtree
+
+doc = domtree.parse(html)
+links = [a.attr("href") for a in doc.select("a[href]")]
+price = doc.select_first(".product:has(.in-stock) .price").text
+markdown = doc.select_first("article").to_markdown()   # ready for an LLM prompt
 ```
 
 ## How it compares

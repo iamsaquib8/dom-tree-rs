@@ -8,8 +8,14 @@ compatible with [`htmlq`](https://github.com/mgdm/htmlq), so it drops into exist
 scripts.
 
 ```sh
-cargo install domtree-cli
+cargo install domtree-cli            # from source
+cargo binstall domtree-cli           # prebuilt binary
+brew install iamsaquib8/tap/domtree  # Homebrew (macOS / Linux)
 ```
+
+Prebuilt binaries for Linux (x86_64, arm64), macOS (Intel, Apple Silicon) and
+Windows, plus a WASI build (`wasmtime domtree.wasm …`), are attached to every
+[GitHub release](https://github.com/iamsaquib8/dom-tree-rs/releases).
 
 ## Examples
 

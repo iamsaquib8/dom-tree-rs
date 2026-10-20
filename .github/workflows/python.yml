@@ -41,7 +41,9 @@ env:
 jobs:
   test:
     name: test (python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    # Pinned: setup-python has no 3.9 build for newer Ubuntu images, and 3.9 is
+    # the oldest version the abi3 wheels support, so it stays in the matrix.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:

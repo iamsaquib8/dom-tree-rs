@@ -134,7 +134,7 @@ where it came from".
 - [ ] **Source spans** — `NodeRef::source_range()` mapping each node back to its
       byte range in the input, plus a line/column helper (linters, editors,
       precise error reporting).
-- [ ] **Main-content extraction** — a small, documented heuristic
+- [x] **Main-content extraction** — a small, documented heuristic
       (`Dom::main_content()`) that drops nav/header/footer/aside and picks the
       densest text block. The "reader mode" step most LLM pipelines need.
 - [ ] **More implicit-close rules** — `<colgroup>`/implicit `<tbody>`,
@@ -162,13 +162,13 @@ where it came from".
 
 Most scraping code is the same five helpers rewritten by hand. Ship them.
 
-- [ ] **Links** — `Dom::links(base)`: every `href`/`src` resolved against a base
+- [x] **Links** — `Dom::links(base)`: every `href`/`src` resolved against a base
       URL (RFC 3986, zero-dependency), with the link text.
-- [ ] **Page metadata** — `Dom::metadata()`: title, description, canonical URL,
+- [x] **Page metadata** — `Dom::metadata()`: title, description, canonical URL,
       language, OpenGraph and Twitter-card fields, and raw JSON-LD blocks.
-- [ ] **Tables as data** — `NodeRef::table_rows()` → rows of cell text, with
+- [x] **Tables as data** — `NodeRef::table_rows()` → rows of cell text, with
       `colspan`/`rowspan` expanded; CLI `--csv`.
-- [ ] **RAG chunking** — `to_markdown_chunks(max_chars)`: split at headings,
+- [x] **RAG chunking** — `to_markdown_chunks(max_chars)`: split at headings,
       keep each chunk under a size budget, and carry the heading path
       (`# Guide > ## Install`) so every chunk stands on its own.
 

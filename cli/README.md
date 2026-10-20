@@ -1,9 +1,9 @@
 # domtree — query HTML from your shell
 
 `domtree` reads HTML on stdin and prints what your CSS selector matches — as HTML,
-attribute values, readable text, **Markdown**, JSON or CSV — or pulls named fields
-out of a page as JSON, and lints HTML for common accessibility and markup problems. It's a tiny,
-zero-dependency, never-panicking CLI built on
+attribute values, readable text, **Markdown**, JSON or CSV. It also pulls named
+fields out of a page as JSON, and **lints** HTML for common accessibility and
+markup problems. It's a tiny, zero-dependency, never-panicking CLI built on
 [`dom-tree-rs`](https://github.com/iamsaquib8/dom-tree-rs), and its flags are
 compatible with [`htmlq`](https://github.com/mgdm/htmlq), so it drops into existing
 scripts.
@@ -38,6 +38,9 @@ domtree --csv -1 '#results' < report.html > results.csv
 
 # Count images that are missing alt text
 domtree -c 'img:not([alt])' < page.html
+
+# Lint pages in CI: file:line:col findings, exit 1 on errors or warnings
+domtree lint index.html docs/*.html
 
 # Pretty-print a messy fragment
 echo '<ul><li>a<li>b</ul>' | domtree -p
@@ -143,7 +146,51 @@ Input is decoded the way a browser would, minus HTTP headers: a byte-order mark
 bytes are valid UTF-8 (a character cut off at the very end still counts);
 otherwise Windows-1252. `iso-8859-1`, `latin1` and `ascii` mean Windows-1252,
 as in browsers. Other encodings are not supported: an unknown `--encoding`
-label prints a warning and decodes as UTF-8, with invalid bytes as U+FFFD.
+label prints a warning and decodes as UTF-8, with invalid bytes as U+FFFD (a
+page declaring an unsupported charset is decoded as UTF-8 if it is valid UTF-8,
+else as Windows-1252 with a warning).
+
+## Lint
+
+`domtree lint [FILE]...` checks HTML (stdin when no file is given, or for `-`)
+and prints one line per finding, in document order — the format editors and CI
+problem matchers understand:
+
+```console
+$ domtree lint post.html
+post.html:96:34: error: <a> link has no text or accessible name [empty-link]
+post.html:290:13: warning: heading level skipped: <h4> after <h2> [heading-order]
+$ domtree lint tests/pages/messy.html
+tests/pages/messy.html:5:1: note: <p> implicitly closed by <ul> [implicitly-closed]
+tests/pages/messy.html:7:44: warning: missing </b> before </i> (<b> opened at 7:37) [mismatched-end-tag]
+tests/pages/messy.html:7:54: warning: stray end tag with no matching open element: </b> [stray-end-tag]
+```
+
+| rule | level | finds |
+|---|---|---|
+| `img-alt` | error | `<img>` without `alt` (`alt=""` marks a decorative image; `aria-label`, `title`, `role=presentation` also count) |
+| `empty-link` | error | `<a href>` / `<area href>` with no text, `aria-label`, `title` or image `alt` (hidden content does not count) |
+| `empty-button` | error | `<button>` / `<input type=button>` with no text or accessible name |
+| `duplicate-id` | error | an `id` already used — reported where it repeats, naming the first use |
+| `heading-order` | warning | a skipped heading level (`<h4>` right after `<h2>`) |
+| `unclosed-element` | warning | an element whose end tag HTML requires, closed by another tag or never closed |
+| `mismatched-end-tag` | warning | an end tag that also closed such elements (`<b><i>x</b>`) |
+| `stray-end-tag`, `unterminated-tag`, `unterminated-comment`, `unterminated-cdata`, `unexpected-eof`, `bogus-comment` | warning | other markup the parser recovered from |
+| `implicitly-closed` | note | an omitted *optional* end tag (`</li>`, `</p>`, `</td>`, …) — valid HTML |
+| `unknown-entity` | note | an `&` that starts no known character reference (also a bare `&` in a URL) |
+
+Every parse error the parser recovers from is reported; the source positions of
+the elements it closed decide whether it was valid HTML (a note) or a real
+problem (a warning). Notes never fail a run, and `-q`/`--quiet` hides them.
+
+`--format json` prints one JSON array of
+`{"file", "line", "column", "level", "rule", "message"}` objects instead.
+Columns count characters, and lines end at `\n`, `\r\n` or `\r`.
+`--encoding` works as above.
+
+Exit codes: `0` no errors or warnings, `1` errors or warnings found, `2` bad
+usage or an unreadable file (the other files are still checked). To query an
+element named `<lint>`, write `domtree -- lint`.
 
 ## Selectors
 

@@ -7,6 +7,7 @@ mod args;
 mod encoding;
 mod extract;
 mod json;
+mod lint;
 mod pretty;
 
 use std::fs;
@@ -23,12 +24,23 @@ const URL_ATTRS: &[&str] = &["href", "src", "action", "cite", "poster", "formact
 fn main() -> ExitCode {
     let opts = match args::parse(std::env::args_os().skip(1)) {
         Ok(Command::Run(opts)) => opts,
+        Ok(Command::Lint(opts)) => {
+            let (report, code) = lint::run(&opts);
+            return match write_output(None, &report) {
+                Ok(()) => ExitCode::from(code),
+                Err(e) => {
+                    eprintln!("domtree: {e}");
+                    ExitCode::from(2)
+                }
+            };
+        }
         Ok(Command::Help) => return emit(None, args::HELP),
+        Ok(Command::LintHelp) => return emit(None, args::LINT_HELP),
         Ok(Command::Version) => {
             return emit(None, &format!("domtree {}\n", env!("CARGO_PKG_VERSION")));
         }
         Err(e) => {
-            eprintln!("domtree: {e}\nTry 'domtree --help' for more information.");
+            eprintln!("domtree: {e}\nTry '{}' for more information.", e.help);
             return ExitCode::from(2);
         }
     };
@@ -368,15 +380,19 @@ fn read_input(path: Option<&str>, encoding: Option<&str>) -> Result<String, Stri
     };
     let decoded = encoding::decode(bytes, encoding);
     if let Some(warning) = &decoded.warning {
-        eprintln!("domtree: warning: {warning}");
+        let name = match path {
+            None | Some("-") => "<stdin>",
+            Some(p) => p,
+        };
+        eprintln!("domtree: warning: {name}: {warning}");
     }
     Ok(decoded.text)
 }
 
 /// Write `out` to a file or stdout. A closed pipe (`domtree … | head`) is not
 /// an error.
-fn emit(path: Option<&str>, out: &str) -> ExitCode {
-    let result = match path {
+fn write_output(path: Option<&str>, out: &str) -> Result<(), String> {
+    match path {
         Some(p) if p != "-" => fs::write(p, out).map_err(|e| format!("writing {p}: {e}")),
         _ => {
             let mut stdout = io::stdout().lock();
@@ -388,8 +404,12 @@ fn emit(path: Option<&str>, out: &str) -> ExitCode {
                 _ => Ok(()),
             }
         }
-    };
-    match result {
+    }
+}
+
+/// [`write_output`], as the exit code.
+fn emit(path: Option<&str>, out: &str) -> ExitCode {
+    match write_output(path, out) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("domtree: {e}");

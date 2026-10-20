@@ -13,6 +13,7 @@ domtree — query HTML with CSS selectors
 
 USAGE:
     domtree [OPTIONS] [SELECTOR]...
+    domtree lint [OPTIONS] [FILE]...    (see 'domtree lint --help')
 
     Reads HTML from stdin (or --filename) and prints every element matching
     SELECTOR. Several SELECTOR arguments are joined with spaces. With no
@@ -26,6 +27,7 @@ EXAMPLES:
     domtree '.card' -e name=h2 -e url=a@href --jsonl < list.html
     domtree --csv -1 < report.html > report.csv
     domtree -c 'img:not([alt])' < page.html
+    domtree lint index.html docs/*.html
 
 OUTPUT (default: matching elements as HTML, one per line):
     -a, --attribute <NAME>      Print this attribute of each match (skips matches
@@ -85,6 +87,52 @@ error, 2 bad usage.
 Docs: https://github.com/iamsaquib8/dom-tree-rs
 ";
 
+pub const LINT_HELP: &str = "\
+domtree lint — check HTML for common accessibility and markup problems
+
+USAGE:
+    domtree lint [OPTIONS] [FILE]...
+
+    Checks each FILE (stdin when none are given, or for '-') and prints one
+    line per finding, in document order:
+
+        FILE:LINE:COLUMN: LEVEL: MESSAGE [RULE]
+
+RULES:
+    img-alt             error    <img> without alt (alt=\"\" marks a decorative
+                                 image; aria-label, title or role=presentation
+                                 also count)
+    empty-link          error    <a href> / <area href> without text,
+                                 aria-label, title or image alt
+    empty-button        error    <button> / <input type=button> without a name
+    duplicate-id        error    an id that is already used (reported where it
+                                 repeats, naming the first use)
+    heading-order       warning  a skipped heading level (<h4> after <h2>)
+    unclosed-element    warning  an element whose end tag HTML requires was
+                                 closed by another tag, or never closed
+    mismatched-end-tag  warning  an end tag that also closed such elements
+                                 (<b><i>x</b>)
+    stray-end-tag, unterminated-tag, unterminated-comment, unterminated-cdata,
+    unexpected-eof, bogus-comment
+                        warning  other markup the parser had to recover from
+    implicitly-closed   note     an omitted optional end tag (</li>, </p>,
+                                 </td>, ...): valid HTML
+    unknown-entity      note     an & that starts no known character reference
+                                 (a bare & in a URL, too)
+
+OPTIONS:
+        --format <FORMAT>       text (default) or json: one JSON array of
+                                {file, line, column, level, rule, message}
+    -q, --quiet                 Do not print notes
+        --encoding <LABEL>      Decode the input as LABEL (see 'domtree --help')
+    -h, --help                  Print this help
+
+EXIT CODES:
+    0  no errors or warnings (notes do not count)
+    1  errors or warnings found
+    2  bad usage, or a FILE could not be read
+";
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     #[default]
@@ -131,27 +179,68 @@ pub struct Options {
     pub encoding: Option<String>,
 }
 
+/// `domtree lint` options.
+#[derive(Debug, Default)]
+pub struct LintOptions {
+    /// Files to check; empty = stdin.
+    pub files: Vec<String>,
+    pub json: bool,
+    /// Leave out notes.
+    pub quiet: bool,
+    pub encoding: Option<String>,
+}
+
 #[derive(Debug)]
 pub enum Command {
     Run(Options),
+    Lint(LintOptions),
     Help,
+    LintHelp,
     Version,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct ArgError(String);
+pub struct ArgError {
+    message: String,
+    /// The help command to point at.
+    pub help: &'static str,
+}
+
+impl ArgError {
+    fn new(message: String) -> ArgError {
+        ArgError {
+            message,
+            help: "domtree --help",
+        }
+    }
+
+    fn lint(message: String) -> ArgError {
+        ArgError {
+            message,
+            help: "domtree lint --help",
+        }
+    }
+}
 
 impl fmt::Display for ArgError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(&self.message)
     }
 }
 
 /// Parse command-line arguments (without the program name).
 pub fn parse<I: IntoIterator<Item = OsString>>(args: I) -> Result<Command, ArgError> {
+    let args: Vec<String> = args
+        .into_iter()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    if args.first().is_some_and(|a| a == "lint") {
+        return parse_lint(args.into_iter().skip(1));
+    }
+
     let mut opts = Options::default();
     let mut selector: Vec<String> = Vec::new();
-    let mut args = args.into_iter().map(|a| a.to_string_lossy().into_owned());
+    let mut args = args.into_iter();
 
     while let Some(arg) = args.next() {
         if arg == "--" {
@@ -164,17 +253,17 @@ pub fn parse<I: IntoIterator<Item = OsString>>(args: I) -> Result<Command, ArgEr
                 None => (long, None),
             };
             let flag = Flag::from_long(name)
-                .ok_or_else(|| ArgError(format!("unknown option '--{name}'")))?;
+                .ok_or_else(|| ArgError::new(format!("unknown option '--{name}'")))?;
             if flag.takes_value() {
                 let value = match inline {
                     Some(v) => v,
                     None => args
                         .next()
-                        .ok_or_else(|| ArgError(format!("option '--{name}' needs a value")))?,
+                        .ok_or_else(|| ArgError::new(format!("option '--{name}' needs a value")))?,
                 };
                 apply_value(&mut opts, flag, value)?;
             } else if inline.is_some() {
-                return Err(ArgError(format!("option '--{name}' takes no value")));
+                return Err(ArgError::new(format!("option '--{name}' takes no value")));
             } else if let Some(cmd) = apply_switch(&mut opts, flag) {
                 return Ok(cmd);
             }
@@ -183,12 +272,12 @@ pub fn parse<I: IntoIterator<Item = OsString>>(args: I) -> Result<Command, ArgEr
             let chars = arg.char_indices().skip(1);
             for (i, c) in chars {
                 let flag = Flag::from_short(c)
-                    .ok_or_else(|| ArgError(format!("unknown option '-{c}'")))?;
+                    .ok_or_else(|| ArgError::new(format!("unknown option '-{c}'")))?;
                 if flag.takes_value() {
                     let rest = arg.get(i + c.len_utf8()..).unwrap_or("");
                     let value = if rest.is_empty() {
                         args.next()
-                            .ok_or_else(|| ArgError(format!("option '-{c}' needs a value")))?
+                            .ok_or_else(|| ArgError::new(format!("option '-{c}' needs a value")))?
                     } else {
                         rest.to_string()
                     };
@@ -208,9 +297,49 @@ pub fn parse<I: IntoIterator<Item = OsString>>(args: I) -> Result<Command, ArgEr
     Ok(Command::Run(opts))
 }
 
+/// Parse the arguments after `lint`.
+fn parse_lint(mut args: impl Iterator<Item = String>) -> Result<Command, ArgError> {
+    let mut opts = LintOptions::default();
+    while let Some(arg) = args.next() {
+        if arg == "--" {
+            opts.files.extend(args.by_ref());
+            break;
+        }
+        let (name, inline) = match arg.split_once('=') {
+            Some((n, v)) if n.starts_with("--") => (n, Some(v.to_string())),
+            _ => (arg.as_str(), None),
+        };
+        let mut value = |inline: Option<String>| {
+            inline
+                .or_else(|| args.next())
+                .ok_or_else(|| ArgError::lint(format!("option '{name}' needs a value")))
+        };
+        match name {
+            "-h" | "--help" => return Ok(Command::LintHelp),
+            "-q" | "--quiet" if inline.is_none() => opts.quiet = true,
+            "--format" => match value(inline)?.as_str() {
+                "text" => opts.json = false,
+                "json" => opts.json = true,
+                other => {
+                    return Err(ArgError::lint(format!(
+                        "--format must be 'text' or 'json', not '{other}'"
+                    )));
+                }
+            },
+            "--encoding" => opts.encoding = Some(value(inline)?),
+            "-" => opts.files.push(arg),
+            _ if name.starts_with('-') => {
+                return Err(ArgError::lint(format!("unknown lint option '{arg}'")));
+            }
+            _ => opts.files.push(arg),
+        }
+    }
+    Ok(Command::Lint(opts))
+}
+
 /// Reject flag combinations that have no sensible meaning.
 fn validate(opts: &Options) -> Result<(), ArgError> {
-    let err = |msg: String| Err(ArgError(msg));
+    let err = |msg: String| Err(ArgError::new(msg));
     let tasks: Vec<&str> = [
         (!opts.extract.is_empty(), "--extract"),
         (opts.links, "--links"),
@@ -343,9 +472,9 @@ fn apply_value(opts: &mut Options, flag: Flag, value: String) -> Result<(), ArgE
     match flag {
         Flag::Attribute => opts.attribute = Some(value),
         Flag::Extract => {
-            let field = Field::parse(&value).map_err(ArgError)?;
+            let field = Field::parse(&value).map_err(ArgError::new)?;
             if opts.extract.iter().any(|f| f.name == field.name) {
-                return Err(ArgError(format!(
+                return Err(ArgError::new(format!(
                     "--extract name '{}' is used twice",
                     field.name
                 )));
@@ -470,6 +599,39 @@ mod tests {
         assert_eq!(run(&["--csv"]).mode, Mode::Csv);
         assert!(run(&["--meta", "-j"]).meta);
         assert_eq!(run(&["--links", "-c"]).mode, Mode::Count);
+    }
+
+    #[test]
+    fn lint_options() {
+        let Ok(Command::Lint(o)) = try_run(&[
+            "lint",
+            "-q",
+            "--format=json",
+            "a.html",
+            "-",
+            "--encoding",
+            "latin1",
+            "--",
+            "-b.html",
+        ]) else {
+            panic!("not lint");
+        };
+        assert!(o.quiet && o.json);
+        assert_eq!(o.files, ["a.html", "-", "-b.html"]);
+        assert_eq!(o.encoding.as_deref(), Some("latin1"));
+        assert!(matches!(try_run(&["lint", "-h"]), Ok(Command::LintHelp)));
+        for bad in [
+            &["lint", "--format", "xml"][..],
+            &["lint", "-x"],
+            &["lint", "--encoding"],
+        ] {
+            assert_eq!(
+                try_run(bad).map(|_| ()).map_err(|e| e.help),
+                Err("domtree lint --help")
+            );
+        }
+        // Only the first argument names the subcommand.
+        assert_eq!(run(&["-c", "lint"]).selector, "lint");
     }
 
     #[test]

@@ -591,3 +591,133 @@ fn closed_stdout_pipe_is_not_an_error() {
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(String::from_utf8_lossy(&out.stderr), "");
 }
+
+// --- lint --------------------------------------------------------------------
+
+const LINTED: &str = "<h1 id=top>Shop</h1>
+<ul><li>a<li>b</ul>
+<h3 id=top>Deals</h3>
+<a href=/cart><img src=cart.png></a>
+<button></button>
+<p>ok</p></div>
+";
+
+#[test]
+fn lint_reports_findings_in_document_order() {
+    let (out, err, code) = domtree(&["lint"], LINTED);
+    assert_eq!(code, 1, "{err}");
+    assert_eq!(
+        out,
+        "<stdin>:2:10: note: <li> implicitly closed by <li> [implicitly-closed]
+<stdin>:2:15: note: <li> implicitly closed by </ul> [implicitly-closed]
+<stdin>:3:1: warning: heading level skipped: <h3> after <h1> [heading-order]
+<stdin>:3:1: error: duplicate id \"top\" (first used at 1:1) [duplicate-id]
+<stdin>:4:1: error: <a> link has no text or accessible name [empty-link]
+<stdin>:4:15: error: <img> has no alt attribute (use alt=\"\" for a decorative image) [img-alt]
+<stdin>:5:1: error: <button> has no text or accessible name [empty-button]
+<stdin>:6:10: warning: stray end tag with no matching open element: </div> [stray-end-tag]
+"
+    );
+}
+
+#[test]
+fn lint_quiet_and_notes() {
+    let (out, _, code) = domtree(&["lint", "-q"], LINTED);
+    assert_eq!(code, 1);
+    assert!(!out.contains("note:"), "{out}");
+    // Notes alone (valid HTML with omitted end tags) do not fail the run.
+    let (out, _, code) = domtree(&["lint"], "<ul><li>a<li>b</ul>");
+    assert_eq!(code, 0);
+    assert_eq!(out.lines().count(), 2);
+    let (out, _, code) = domtree(&["lint", "--quiet"], "<ul><li>a<li>b</ul>");
+    assert_eq!((out.as_str(), code), ("", 0));
+}
+
+#[test]
+fn lint_clean_input() {
+    let html = "<!doctype html><html lang=en><head><title>x</title></head>\
+                <body><h1>Hi</h1><img src=a.png alt=''><a href=/>Home</a></body></html>";
+    let (out, err, code) = domtree(&["lint"], html);
+    assert_eq!((out.as_str(), err.as_str(), code), ("", "", 0));
+}
+
+#[test]
+fn lint_json() {
+    let (out, _, code) = domtree(&["lint", "--format=json"], "<div>\n<img>");
+    assert_eq!(code, 1);
+    assert_eq!(
+        out,
+        concat!(
+            r#"[{"file":"<stdin>","line":1,"column":1,"level":"warning","rule":"unclosed-element","message":"<div> is never closed"},"#,
+            r#"{"file":"<stdin>","line":2,"column":1,"level":"error","rule":"img-alt","message":"<img> has no alt attribute (use alt=\"\" for a decorative image)"}]"#,
+            "\n"
+        )
+    );
+    let (out, _, code) = domtree(&["lint", "--format", "json"], "<p>fine</p>");
+    assert_eq!((out.as_str(), code), ("[]\n", 0));
+}
+
+#[test]
+fn lint_files() {
+    let dir = std::env::temp_dir().join(format!("domtree-lint-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    let good = dir.join("good.html");
+    let bad = dir.join("bad.html");
+    std::fs::write(&good, "<p>fine</p>").expect("write");
+    // Windows-1252: columns count characters of the decoded text.
+    std::fs::write(&bad, b"<p>caf\xe9</p><img>").expect("write");
+    let (good, bad) = (good.to_str().expect("path"), bad.to_str().expect("path"));
+    let missing = dir.join("missing.html");
+    let missing = missing.to_str().expect("path");
+
+    let (out, _, code) = domtree(&["lint", good, bad], "");
+    assert_eq!(code, 1);
+    assert_eq!(
+        out,
+        format!(
+            "{bad}:1:12: error: <img> has no alt attribute (use alt=\"\" for a decorative image) [img-alt]\n"
+        )
+    );
+    assert_eq!(domtree(&["lint", good], "").2, 0);
+    // An unreadable file: exit 2, the others are still checked.
+    let (out, err, code) = domtree(&["lint", missing, bad], "");
+    assert_eq!(code, 2);
+    assert!(err.contains("missing.html"), "{err}");
+    assert!(out.contains("[img-alt]"), "{out}");
+    // `-` is stdin.
+    let (out, _, _) = domtree(&["lint", "-"], "<img>");
+    assert!(out.starts_with("<stdin>:1:1: error:"), "{out}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn lint_usage() {
+    let err = usage_error(&["lint", "--format", "xml"], "");
+    assert!(
+        err.contains("--format") && err.contains("domtree lint --help"),
+        "{err}"
+    );
+    assert!(usage_error(&["lint", "--bogus"], "").contains("--bogus"));
+    assert!(usage_error(&["lint", "--format"], "").contains("needs a value"));
+    let help = ok(&["lint", "--help"], "");
+    for rule in [
+        "img-alt",
+        "empty-link",
+        "empty-button",
+        "duplicate-id",
+        "heading-order",
+        "implicitly-closed",
+        "unclosed-element",
+        "mismatched-end-tag",
+        "EXIT CODES",
+    ] {
+        assert!(help.contains(rule), "{rule}");
+    }
+    assert!(ok(&["--help"], "").contains("domtree lint"));
+}
+
+#[test]
+fn lint_is_only_a_subcommand_in_first_position() {
+    assert_eq!(ok(&["--", "lint"], "<lint>x</lint>"), "<lint>x</lint>\n");
+    assert_eq!(ok(&["-c", "lint"], "<lint>x</lint>"), "1\n");
+}

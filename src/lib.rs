@@ -62,12 +62,17 @@
 //! - [`Dom::links`] / [`Dom::resources`] — every link (with its text) and
 //!   every embedded URL, resolved against the page URL and `<base href>`
 //!   ([`resolve_url`], [`resolve_srcset`]: RFC 3986, zero-dependency).
+//! - [`Dom::metadata`] — title, description, canonical URL, language,
+//!   OpenGraph / Twitter-card fields, JSON-LD blocks and feeds.
+//! - [`NodeRef::table_rows`] — a `<table>` as rows of cell text with
+//!   `colspan`/`rowspan` expanded; [`to_csv`] formats them.
 //!
 //! ## Features
 //!
 //! - `json` *(default)* — the zero-dependency [`Dom::to_json`] serializer.
 //! - `markdown` *(default)* — the zero-dependency [`Dom::to_markdown`].
-//! - `serde` — optional `serde::Serialize` for the tree (adds the `serde` dep).
+//! - `serde` — optional `serde::Serialize` for the tree and [`Metadata`]
+//!   (adds the `serde` dep).
 //! - `query` — a zero-dependency CSS selector engine ([`Dom::select`], [`Selector`]).
 //! - `std` — adds `std`-only conveniences; the crate is `no_std + alloc` by default.
 
@@ -102,7 +107,7 @@ mod serialize;
 mod query;
 
 pub use error::{ErrorKind, ParseError};
-pub use extract::{Link, Resource};
+pub use extract::{Link, Metadata, Resource, to_csv};
 pub use node::{NodeId, NodeKind};
 pub use token::{AttrValue, Token};
 pub use tokenizer::Tokenizer;

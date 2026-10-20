@@ -33,19 +33,33 @@ docs.rs builds automatically from the published crate (config is already in
 
 ## 2. npm (WASM bindings)
 
+The npm version comes from `dom-tree-wasm/Cargo.toml`; bump it there. The
+package is one `--target web` build plus a small Node entry point
+(`npm/node.js`) and an `"exports"` map that `npm/finish.mjs` adds. Don't build
+with `--target nodejs` or `bundler`: the one package serves every runtime.
+
 ```sh
 cd dom-tree-wasm
-wasm-pack build --target web --release      # also: --target bundler / nodejs as needed
-# sanity-check the gzipped size
-gzip -9 -c pkg/dom_tree_wasm_bg.wasm | wc -c   # expect ~19-20 KB
+wasm-pack build --target web --release
+node npm/finish.mjs                             # Node entry point + "exports" in pkg/package.json
+wasm-pack test --node                           # binding tests
+sh npm/smoke-test.sh                            # npm-pack pkg/, install it, run tests/node.mjs
+gzip -9 -c pkg/dom_tree_wasm_bg.wasm | wc -c    # expect ~36-37 KB (CI gate: 40960 bytes)
 
 cd pkg
+npm pack --dry-run                              # expect 7 files, incl. node.js and the .wasm
 npm login
 npm publish --access public
 ```
 
-The npm package name is `dom-tree-wasm` (from the crate name; edit
-`pkg/package.json` first if you want a different name/scope).
+The npm package name is `dom-tree-wasm` (from the crate name). The existing
+0.1.0 on npm is an older, different API; 0.3.0 replaces it, and the package
+README has an "Upgrading from 0.1 or 0.2" section.
+
+The playground (<https://iamsaquib8.github.io/dom-tree-rs/>) redeploys by
+itself on pushes to `main` that touch `src/`, `dom-tree-wasm/` or `playground/`
+(`.github/workflows/pages.yml`). It needs a one-time setting: Settings → Pages
+→ Build and deployment → Source: **GitHub Actions**.
 
 ## 3. Post-publish
 

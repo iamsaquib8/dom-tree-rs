@@ -2,6 +2,8 @@
 **/target
 Cargo.lock
 /dom-tree-wasm/pkg
+# wasm build output for the playground (built in CI by .github/workflows/pages.yml)
+/playground/pkg
 *.profraw
 .DS_Store
 # cargo-fuzz working dirs (not the tests/corpus/ fixtures!)

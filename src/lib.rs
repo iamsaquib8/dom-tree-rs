@@ -57,6 +57,28 @@
 //! assert_eq!(dom.to_markdown(), "## News\n\nIt *works*!");
 //! ```
 //!
+//! ## Editing and source positions
+//!
+//! A [`Dom`] doubles as a small HTML rewriter: [`Dom::remove`],
+//! [`Dom::set_text`], [`Dom::set_attr`], [`Dom::rename`], [`Dom::wrap`],
+//! [`Dom::unwrap`], parsed-fragment insertion ([`Dom::append_html`] and
+//! friends) and node moves ([`Dom::append_child`], [`Dom::insert_before`]).
+//! Parsed nodes also remember where they came from:
+//! [`NodeRef::source_range`] plus [`line_col`].
+//!
+//! ```
+//! let src = "<p>Hello <b>world</b></p>";
+//! let mut dom = domtree::parse(src);
+//! let b = dom.find_by_tag("b").next().unwrap();
+//! assert_eq!(b.source_range(), Some(9..21));
+//! assert_eq!(domtree::line_col(src, 9), (1, 10));
+//!
+//! let b = b.id();
+//! dom.rename(b, "strong");
+//! dom.insert_html_after(b, "!");
+//! assert_eq!(dom.to_html(), "<p>Hello <strong>world</strong>!</p>");
+//! ```
+//!
 //! ## Features
 //!
 //! - `json` *(default)* — the zero-dependency [`Dom::to_json`] serializer.
@@ -80,9 +102,11 @@ extern crate alloc;
 extern crate std;
 
 mod builder;
+mod edit;
 mod entities;
 mod error;
 mod node;
+mod source;
 mod tags;
 mod token;
 mod tokenizer;
@@ -95,6 +119,7 @@ mod query;
 
 pub use error::{ErrorKind, ParseError};
 pub use node::{NodeId, NodeKind};
+pub use source::line_col;
 pub use token::{AttrValue, Token};
 pub use tokenizer::Tokenizer;
 pub use tree::{Descendants, Dom, NodeRef};

@@ -80,6 +80,12 @@ impl<'a> Tokenizer<'a> {
         self.errors.push(ParseError::new(pos, kind));
     }
 
+    /// The byte offset just past the last token returned (its end).
+    #[inline]
+    pub(crate) fn offset(&self) -> usize {
+        self.pos
+    }
+
     // --- token production ------------------------------------------------
 
     /// Like `Iterator::next`, but also returns the byte offset the token

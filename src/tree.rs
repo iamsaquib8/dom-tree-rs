@@ -3,23 +3,30 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
+use core::ops::Range;
 
 use crate::error::ParseError;
-use crate::node::{Node, NodeId, NodeKind, RawKind, Span};
+use crate::node::{Node, NodeId, NodeKind, RawKind, Span, SrcRange};
 
 /// A parsed HTML document: an arena of nodes, a single string buffer they
 /// reference, the top-level (root) nodes, and any recovery diagnostics.
 ///
-/// Build one with [`crate::parse`]. It is immutable once built; traverse it with
-/// [`NodeRef`] handles from [`Dom::root`], [`Dom::roots`], [`Dom::get`], or the
-/// `find_by_*` helpers.
+/// Build one with [`crate::parse`] and traverse it with [`NodeRef`] handles
+/// from [`Dom::root`], [`Dom::roots`], [`Dom::get`], or the `find_by_*`
+/// helpers. The editing methods ([`Dom::remove`], [`Dom::set_text`],
+/// [`Dom::append_html`], [`Dom::wrap`], …) rewrite it in place.
 #[derive(Clone)]
 pub struct Dom {
     pub(crate) nodes: Vec<Node>,
     pub(crate) strings: String,
-    /// Top-level nodes in document order. May still hold ids removed with
-    /// [`Dom::remove`]; go through [`Dom::roots`], which skips them.
-    pub(crate) roots: Vec<NodeId>,
+    /// The first and last top-level node. Top-level nodes are linked as
+    /// siblings, like the children of an implicit document node.
+    pub(crate) first_root: Option<NodeId>,
+    pub(crate) last_root: Option<NodeId>,
+    /// Set by any edit that can put a node out of arena order. While it is
+    /// clear, arena order *is* document order (the parser only ever appends)
+    /// and [`Dom::nodes`] is a plain scan of the arena.
+    pub(crate) reordered: bool,
     pub(crate) errors: Vec<ParseError>,
 }
 
@@ -28,7 +35,9 @@ impl Dom {
         Dom {
             nodes: Vec::with_capacity(src_len / 16 + 8),
             strings: String::with_capacity(src_len),
-            roots: Vec::new(),
+            first_root: None,
+            last_root: None,
+            reordered: false,
             errors: Vec::new(),
         }
     }
@@ -51,9 +60,9 @@ impl Dom {
         self.strings.get(span.range()).unwrap_or("")
     }
 
-    pub(crate) fn alloc(&mut self, raw: RawKind) -> NodeId {
+    pub(crate) fn alloc(&mut self, raw: RawKind, src: SrcRange) -> NodeId {
         let id = NodeId(self.nodes.len() as u32);
-        self.nodes.push(Node::new(raw));
+        self.nodes.push(Node::new(raw, src));
         id
     }
 
@@ -69,182 +78,114 @@ impl Dom {
 
     /// Append `child` under `parent` (or as a root when `parent` is `None`),
     /// maintaining all sibling/child links.
+    #[inline]
     pub(crate) fn append(&mut self, parent: Option<NodeId>, child: NodeId) {
-        let parent = match parent {
-            None => {
-                // Top-level nodes are siblings of each other, like children of
-                // an implicit document node (so `li + li` works on fragments).
-                if let Some(&last) = self.roots.last() {
-                    if let Some(l) = self.node_mut(last) {
-                        l.next_sibling = Some(child);
-                    }
-                    if let Some(c) = self.node_mut(child) {
-                        c.prev_sibling = Some(last);
-                    }
-                }
-                self.roots.push(child);
-                return;
-            }
-            Some(p) => p,
+        self.link(parent, None, child);
+    }
+
+    /// Link the unlinked node `id` into `parent` (`None`: the top level),
+    /// before its child `before` (`None`: as the last child). Touches links
+    /// only; callers keep `detached` and `reordered` right.
+    pub(crate) fn link(&mut self, parent: Option<NodeId>, before: Option<NodeId>, id: NodeId) {
+        let prev = match (before, parent) {
+            (Some(b), _) => self.node(b).and_then(|n| n.prev_sibling),
+            (None, Some(p)) => self.node(p).and_then(|n| n.last_child),
+            (None, None) => self.last_root,
         };
-        if let Some(c) = self.node_mut(child) {
-            c.parent = Some(parent);
+        if let Some(n) = self.node_mut(id) {
+            n.parent = parent;
+            n.prev_sibling = prev;
+            n.next_sibling = before;
         }
-        let last = self.node(parent).and_then(|n| n.last_child);
-        match last {
-            None => {
-                if let Some(p) = self.node_mut(parent) {
-                    p.first_child = Some(child);
-                    p.last_child = Some(child);
+        match (prev, parent) {
+            (Some(p), _) => {
+                if let Some(p) = self.node_mut(p) {
+                    p.next_sibling = Some(id);
                 }
             }
-            Some(last) => {
-                if let Some(l) = self.node_mut(last) {
-                    l.next_sibling = Some(child);
-                }
-                if let Some(c) = self.node_mut(child) {
-                    c.prev_sibling = Some(last);
-                }
-                if let Some(p) = self.node_mut(parent) {
-                    p.last_child = Some(child);
+            (None, Some(p)) => {
+                if let Some(p) = self.node_mut(p) {
+                    p.first_child = Some(id);
                 }
             }
+            (None, None) => self.first_root = Some(id),
+        }
+        match (before, parent) {
+            (Some(b), _) => {
+                if let Some(b) = self.node_mut(b) {
+                    b.prev_sibling = Some(id);
+                }
+            }
+            (None, Some(p)) => {
+                if let Some(p) = self.node_mut(p) {
+                    p.last_child = Some(id);
+                }
+            }
+            (None, None) => self.last_root = Some(id),
         }
     }
 
-    // --- editing ---------------------------------------------------------
-
-    /// Remove a node (and its subtree) from the document.
-    ///
-    /// The node stays valid — handles to it and its descendants still work and
-    /// can still be serialized — but it is no longer reachable from the
-    /// document: [`Dom::nodes`], `find_by_*`, `select`, and every serializer
-    /// skip it. Removing an already-removed node is a no-op.
-    ///
-    /// ```
-    /// let mut dom = domtree::parse("<p>Hi <script>track()</script>there</p>");
-    /// let script = dom.find_by_tag("script").next().unwrap().id();
-    /// dom.remove(script);
-    /// assert_eq!(dom.to_html(), "<p>Hi there</p>");
-    /// assert_eq!(dom.find_by_tag("script").count(), 0);
-    /// ```
-    pub fn remove(&mut self, id: NodeId) {
+    /// Unlink `id` from its parent and siblings (or from the top level). Its
+    /// subtree stays intact; `detached` flags are left to the caller.
+    pub(crate) fn unlink(&mut self, id: NodeId) {
         let Some(node) = self.node(id) else { return };
         let (parent, prev, next) = (node.parent, node.prev_sibling, node.next_sibling);
-        // Inside an already-removed subtree every descendant is flagged too, so
-        // only the links need fixing (keeps `-r div` on deep nesting linear).
-        let already_detached = node.detached;
-
-        match prev {
-            Some(p) => {
+        // A parentless node is top-level only while attached; a detached one
+        // (removed or created) is an orphan with no siblings.
+        let top = parent.is_none() && !node.detached;
+        match (prev, parent) {
+            (Some(p), _) => {
                 if let Some(p) = self.node_mut(p) {
                     p.next_sibling = next;
                 }
             }
-            None => {
-                if let Some(par) = parent.and_then(|p| self.node_mut(p)) {
-                    par.first_child = next;
+            (None, Some(p)) => {
+                if let Some(p) = self.node_mut(p) {
+                    p.first_child = next;
                 }
             }
+            (None, None) if top => self.first_root = next,
+            (None, None) => {}
         }
-        match next {
-            Some(n) => {
+        match (next, parent) {
+            (Some(n), _) => {
                 if let Some(n) = self.node_mut(n) {
                     n.prev_sibling = prev;
                 }
             }
-            None => {
-                if let Some(par) = parent.and_then(|p| self.node_mut(p)) {
-                    par.last_child = prev;
+            (None, Some(p)) => {
+                if let Some(p) = self.node_mut(p) {
+                    p.last_child = prev;
                 }
             }
+            (None, None) if top => self.last_root = prev,
+            (None, None) => {}
         }
-        // A removed root stays in `self.roots`; `roots()`/`root()` skip
-        // detached ids, so removal never shifts the vector (O(1), not O(roots)).
         if let Some(n) = self.node_mut(id) {
             n.parent = None;
             n.prev_sibling = None;
             n.next_sibling = None;
         }
-        if already_detached {
-            return;
-        }
-
-        let subtree: Vec<NodeId> = match self.get(id) {
-            Some(n) => core::iter::once(id)
-                .chain(n.descendants().map(|d| d.id()))
-                .collect(),
-            None => Vec::new(),
-        };
-        for d in subtree {
-            if let Some(n) = self.node_mut(d) {
-                n.detached = true;
-            }
-        }
     }
 
-    /// Set attribute `name` (ASCII-lower-cased) to `value` on an element,
-    /// replacing any existing value. Does nothing for non-element nodes.
-    ///
-    /// ```
-    /// let mut dom = domtree::parse("<a href=/x>x</a>");
-    /// let a = dom.find_by_tag("a").next().unwrap().id();
-    /// dom.set_attr(a, "href", "https://example.com/x");
-    /// dom.set_attr(a, "rel", "nofollow");
-    /// assert_eq!(dom.to_html(), r#"<a href="https://example.com/x" rel="nofollow">x</a>"#);
-    /// ```
-    pub fn set_attr(&mut self, id: NodeId, name: &str, value: &str) {
-        let name = name.to_ascii_lowercase();
-        let existing = match self.node(id).map(|n| &n.raw) {
-            Some(RawKind::Element { attrs, .. }) => {
-                attrs.iter().position(|&(k, _)| self.span_str(k) == name)
-            }
-            _ => return,
-        };
-        let value = self.intern(value);
-        let key = match existing {
-            Some(_) => Span::EMPTY,
-            None => self.intern(&name),
-        };
-        if let Some(Node {
-            raw: RawKind::Element { attrs, .. },
-            ..
-        }) = self.node_mut(id)
-        {
-            match existing.and_then(|i| attrs.get_mut(i)) {
-                Some(slot) => slot.1 = value,
-                None => attrs.push((key, value)),
-            }
+    /// The node after `cur` in document order, following links only.
+    fn next_in_document(&self, cur: NodeId) -> Option<NodeId> {
+        if let Some(child) = self.node(cur).and_then(|n| n.first_child) {
+            return Some(child);
         }
-    }
-
-    /// Remove attribute `name` (ASCII case-insensitive) from an element, if
-    /// present.
-    ///
-    /// ```
-    /// let mut dom = domtree::parse(r#"<p style="color:red" class=x>hi</p>"#);
-    /// let p = dom.find_by_tag("p").next().unwrap().id();
-    /// dom.remove_attr(p, "style");
-    /// assert_eq!(dom.to_html(), r#"<p class="x">hi</p>"#);
-    /// ```
-    pub fn remove_attr(&mut self, id: NodeId, name: &str) {
-        let strings = &self.strings;
-        if let Some(Node {
-            raw: RawKind::Element { attrs, .. },
-            ..
-        }) = self.nodes.get_mut(id.index())
-        {
-            attrs.retain(|&(k, _)| {
-                !strings
-                    .get(k.range())
-                    .is_some_and(|k| k.eq_ignore_ascii_case(name))
-            });
+        let mut n = cur;
+        loop {
+            let node = self.node(n)?;
+            if let Some(sib) = node.next_sibling {
+                return Some(sib);
+            }
+            n = node.parent?;
         }
     }
 
     // --- public read API -------------------------------------------------
 
-    /// Number of nodes in the arena.
+    /// Number of nodes in the arena, including removed and detached ones.
     pub fn len(&self) -> usize {
         self.nodes.len()
     }
@@ -270,28 +211,37 @@ impl Dom {
 
     /// The first top-level node (the document element for a typical page).
     pub fn root(&self) -> Option<NodeRef<'_>> {
-        self.roots().next()
+        self.first_root.map(|id| NodeRef { dom: self, id })
     }
 
     /// All top-level nodes, in document order.
     pub fn roots(&self) -> impl Iterator<Item = NodeRef<'_>> {
-        self.roots
-            .iter()
-            .filter(move |&&id| self.node(id).is_some_and(|n| !n.detached))
-            .map(move |&id| NodeRef { dom: self, id })
+        core::iter::successors(self.first_root, move |&id| {
+            self.node(id).and_then(|n| n.next_sibling)
+        })
+        .map(move |id| NodeRef { dom: self, id })
     }
 
     /// Every node in the document, in document (pre-order) order. Nodes
-    /// removed with [`Dom::remove`] are skipped.
+    /// removed with [`Dom::remove`] (and created nodes not yet attached) are
+    /// skipped.
+    ///
+    /// ```
+    /// let mut dom = domtree::parse("<p>a</p><p>c</p>");
+    /// let c = dom.find_by_tag("p").nth(1).unwrap().id();
+    /// dom.insert_html_before(c, "<p>b</p>");
+    /// let text: Vec<_> = dom.nodes().filter_map(|n| n.text()).collect();
+    /// assert_eq!(text, ["a", "b", "c"]);
+    /// ```
     pub fn nodes(&self) -> impl Iterator<Item = NodeRef<'_>> {
-        self.nodes
-            .iter()
-            .enumerate()
-            .filter(|(_, n)| !n.detached)
-            .map(move |(i, _)| NodeRef {
-                dom: self,
-                id: NodeId(i as u32),
-            })
+        Nodes {
+            dom: self,
+            order: if self.reordered {
+                Order::Links(self.first_root)
+            } else {
+                Order::Arena(0)
+            },
+        }
     }
 
     /// All elements whose tag name equals `name` (ASCII case-insensitive).
@@ -308,6 +258,44 @@ impl Dom {
     /// All elements whose `class` attribute contains `class`.
     pub fn find_by_class<'a>(&'a self, class: &'a str) -> impl Iterator<Item = NodeRef<'a>> + 'a {
         self.nodes().filter(move |n| n.has_class(class))
+    }
+}
+
+/// The iterator behind [`Dom::nodes`].
+struct Nodes<'a> {
+    dom: &'a Dom,
+    order: Order,
+}
+
+enum Order {
+    /// Arena order is document order: scan it, skipping detached nodes.
+    Arena(usize),
+    /// An edit moved nodes: follow the links from the first root (allocation-
+    /// free, and only reaches attached nodes).
+    Links(Option<NodeId>),
+}
+
+impl<'a> Iterator for Nodes<'a> {
+    type Item = NodeRef<'a>;
+
+    fn next(&mut self) -> Option<NodeRef<'a>> {
+        let dom = self.dom;
+        let id = match &mut self.order {
+            Order::Arena(i) => loop {
+                let node = dom.nodes.get(*i)?;
+                let id = NodeId(*i as u32);
+                *i += 1;
+                if !node.detached {
+                    break id;
+                }
+            },
+            Order::Links(next) => {
+                let id = (*next)?;
+                *next = dom.next_in_document(id);
+                id
+            }
+        };
+        Some(NodeRef { dom, id })
     }
 }
 
@@ -345,6 +333,57 @@ impl<'a> NodeRef<'a> {
     #[inline]
     pub fn id(&self) -> NodeId {
         self.id
+    }
+
+    /// The byte range this node was parsed from, in the original input
+    /// string (pair it with [`crate::line_col`] for line/column positions).
+    ///
+    /// - **Text, comments, doctypes, CDATA:** exactly their markup, raw —
+    ///   `&amp;` in the source spans 5 bytes even though the text is `&`.
+    /// - **Elements:** from the `<` of the start tag to the `>` of the end tag.
+    ///   Void and self-closing elements span just their start tag. An element
+    ///   with no end tag of its own ends where recovery closed it: at the
+    ///   start of the tag that closed it (a start tag like the next `<li>`, or
+    ///   a mismatched end tag like `</ul>`), or at the end of the input. So a
+    ///   parent's range always contains its children's.
+    /// - **`None`** for nodes created by editing ([`Dom::create_element`],
+    ///   [`Dom::set_text`] on an element, …), including those inserted with
+    ///   [`Dom::append_html`] and friends, whose source is a different string.
+    ///
+    /// Edits never move a range: a renamed element or rewritten text node
+    /// still points at where it came from.
+    ///
+    /// ```
+    /// let src = "<ul>\n  <li>Tom &amp; Jerry\n  <li>Spike</ul>";
+    /// let dom = domtree::parse(src);
+    /// let first = dom.find_by_tag("li").next().unwrap();
+    /// // Closed implicitly by the second `<li>`:
+    /// assert_eq!(&src[first.source_range().unwrap()], "<li>Tom &amp; Jerry\n  ");
+    /// let text = first.first_child().unwrap();
+    /// assert_eq!(&src[text.source_range().unwrap()], "Tom &amp; Jerry\n  ");
+    /// assert_eq!(&src[dom.root().unwrap().source_range().unwrap()], src);
+    /// ```
+    pub fn source_range(&self) -> Option<Range<usize>> {
+        self.raw().src.get()
+    }
+
+    /// Whether this node is *not* part of the document: it was removed (or
+    /// sits inside a removed subtree), or was created by editing and not yet
+    /// attached. Detached nodes are skipped by [`Dom::nodes`], selectors and
+    /// serializers of the whole document. The inverse of the DOM's
+    /// `isConnected`.
+    ///
+    /// ```
+    /// let mut dom = domtree::parse("<p>a <b>b</b></p>");
+    /// let p = dom.root().unwrap().id();
+    /// let b = dom.find_by_tag("b").next().unwrap().id();
+    /// dom.remove(b);
+    /// assert!(dom.get(b).unwrap().is_detached());
+    /// dom.append_child(p, b); // re-attached
+    /// assert!(!dom.get(b).unwrap().is_detached());
+    /// ```
+    pub fn is_detached(&self) -> bool {
+        self.raw().detached
     }
 
     /// The node's kind (element / text / comment / doctype) as a borrowed view.

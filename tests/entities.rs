@@ -71,3 +71,30 @@ fn remapping_applies_in_attributes_too() {
     let dom = parse("<a title='a&#150;b'>x</a>");
     assert_eq!(dom.root().unwrap().attr("title"), Some("a\u{2013}b"));
 }
+
+#[test]
+fn entity_lookahead_is_bounded_with_multibyte_text() {
+    // Byte 32 after each `&` falls inside a multi-byte character. The window
+    // used to fall back to the whole rest of the input, so every `&` scanned
+    // to EOF looking for a `;` (quadratic).
+    let unit = format!("&{}é", "a".repeat(31));
+    let html = format!("<p>{}</p>", unit.repeat(80_000));
+    let start = std::time::Instant::now();
+    let dom = parse(&html);
+    assert!(
+        start.elapsed().as_millis() < 1000,
+        "took {:?}",
+        start.elapsed()
+    );
+    assert_eq!(dom.root().unwrap().text_content(), unit.repeat(80_000));
+}
+
+#[test]
+fn far_semicolon_is_not_part_of_a_reference() {
+    // A `;` beyond the 32-byte lookahead never turns the run into a reference.
+    assert_eq!(
+        decode("<p>&ampéééééééééééééééééé;</p>"),
+        "&ampéééééééééééééééééé;"
+    );
+    assert_eq!(decode("<p>&amp;é</p>"), "&é");
+}

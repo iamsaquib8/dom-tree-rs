@@ -208,3 +208,37 @@ fn deeply_nested_does_not_overflow() {
     // to_json is iterative, so this must not blow the stack either.
     assert!(dom.to_json().len() > depth);
 }
+
+#[test]
+fn stray_end_tags_on_a_deep_stack_are_linear() {
+    // Each `</x>` has no open match. Scanning the whole open-element stack for
+    // every one of them used to make this quadratic (tens of seconds).
+    let n = 100_000;
+    let mut html = "<div>".repeat(n);
+    html.push_str(&"</x>".repeat(n));
+    let start = std::time::Instant::now();
+    let dom = parse(&html);
+    assert!(
+        start.elapsed().as_millis() < 1000,
+        "took {:?}",
+        start.elapsed()
+    );
+    assert_eq!(dom.find_by_tag("div").count(), n);
+
+    // Many distinct stray names, then the real closes.
+    let mut html = "<span>".repeat(n);
+    for i in 0..n {
+        html.push_str(&format!("</q{}>", i % 997));
+    }
+    html.push_str(&"</span>".repeat(n));
+    html.push_str("<p>after</p>");
+    let start = std::time::Instant::now();
+    let dom = parse(&html);
+    assert!(
+        start.elapsed().as_millis() < 1000,
+        "took {:?}",
+        start.elapsed()
+    );
+    // Every span closed properly, so the trailing <p> is top-level.
+    assert_eq!(dom.roots().count(), 2);
+}

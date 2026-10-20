@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-dom-tree-rs = { path = "..", features = ["json", "query"] }
+dom-tree-rs = { path = "..", features = ["json", "query", "markdown"] }
 
 [[bin]]
 name = "parse"
@@ -28,6 +28,13 @@ bench = false
 [[bin]]
 name = "select"
 path = "fuzz_targets/select.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "markdown"
+path = "fuzz_targets/markdown.rs"
 test = false
 doc = false
 bench = false

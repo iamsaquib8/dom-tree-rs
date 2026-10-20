@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Shipping a tiny HTML parser &mdash; The Blog</title>
+  <link rel="stylesheet" href="/main.css">
+  <style>.post { max-width: 40em } code { font-family: monospace }</style>
+  <script>window.dataLayer = window.dataLayer || [];</script>
+</head>
+<body>
+  <header class="site-header">
+    <a href="/" class="logo"><img src="/logo.svg" alt="The Blog"></a>
+    <nav>
+      <ul>
+        <li><a href="/">Home</a></li>
+        <li><a href="/archive">Archive</a></li>
+        <li><a href="/about" title="Who we are">About</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <article class="post">
+      <h1>Shipping a <em>tiny</em> HTML parser</h1>
+      <p class="meta">Posted on <time datetime="2026-10-21">21 October 2026</time> by <a href="/authors/sam">Sam</a></p>
+
+      <p>Most HTML parsers are <strong>big</strong>. That&rsquo;s fine on a server,
+         but painful in a 1&nbsp;MB edge worker. This post covers   what we
+         learned building one that fits in <code>~20 KB</code> of wasm.</p>
+
+      <h2>Goals</h2>
+      <ol>
+        <li>Never panic &ndash; on <em>any</em> input.</li>
+        <li>Zero dependencies:
+          <ul>
+            <li>no <code>regex</code></li>
+            <li>no <code>html5ever</code>
+              <ul><li>(it&rsquo;s great, just big)</li></ul>
+            </li>
+          </ul>
+        </li>
+        <li><p>Forgiving recovery.</p>
+            <p>Unclosed <code>&lt;p&gt;</code> and <code>&lt;li&gt;</code> tags are everywhere.</p></li>
+      </ol>
+
+      <h2>The core loop</h2>
+      <p>The tree builder keeps an explicit stack, so 100k nested
+         <code>&lt;div&gt;</code>s can&rsquo;t overflow it:</p>
+      <pre><code class="language-rust">fn build(tokens: &amp;[Token]) -&gt; Dom {
+    let mut open = Vec::new();
+    for tok in tokens {
+        // `match` on every token kind
+        handle(&amp;mut open, tok);
+    }
+    finish(open)
+}
+</code></pre>
+
+      <h2>Numbers</h2>
+      <table>
+        <thead>
+          <tr><th>Parser</th><th>Size (gzip)</th><th>Deps</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>dom-tree-rs</td><td>19.5 KB</td><td>0</td></tr>
+          <tr><td>html5ever</td><td>~180 KB</td><td>12</td></tr>
+          <tr><td>a | b</td><td colspan="2">pipes are escaped</td></tr>
+        </tbody>
+      </table>
+
+      <blockquote>
+        <p>Make it work, make it right, make it fast.</p>
+        <p>&mdash; Kent Beck</p>
+      </blockquote>
+
+      <figure>
+        <img src="/img/flame graph.png" alt="Flame graph of the tokenizer" title="Hot path">
+        <figcaption>Where the time goes.</figcaption>
+      </figure>
+
+      <p>Read the <a href="https://docs.rs/dom-tree-rs">API docs</a> or
+         <a href="https://github.com/iamsaquib8/dom-tree-rs/issues?q=is:open (bug)">open issues</a>.
+         Questions? <a href="mailto:hi@example.com"></a></p>
+    </article>
+  </main>
+
+  <aside class="sidebar">
+    <h3>Related</h3>
+    <ul>
+      <li><a href="/posts/arena-trees">Arena trees in Rust</a>
+      <li><a href="/posts/wasm-size">Shrinking wasm</a>
+    </ul>
+  </aside>
+
+  <footer>
+    <p>&copy; 2026 The Blog &middot; <a href="/rss.xml">RSS</a></p>
+  </footer>
+  <script async src="https://analytics.example.com/a.js"></script>
+</body>
+</html>

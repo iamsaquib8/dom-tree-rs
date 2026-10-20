@@ -90,3 +90,35 @@ pub(crate) fn implicitly_closes(opening: &str, open: &str) -> bool {
         _ => false,
     }
 }
+
+/// How the readable-output serializers (`to_text`, `to_markdown`) lay an
+/// element out: a rough stand-in for the CSS `display` of the browser's default
+/// stylesheet. Unknown and custom elements are inline.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Display {
+    /// Never rendered: metadata, scripts, templates, embedded objects.
+    Hidden,
+    /// Flows with the surrounding text.
+    Inline,
+    /// Starts on a new line.
+    Block,
+    /// Separated from its neighbours by a blank line.
+    Paragraph,
+}
+
+/// The [`Display`] of an element, by lower-cased tag name.
+pub(crate) fn display(name: &str) -> Display {
+    match name {
+        "head" | "script" | "style" | "template" | "noscript" | "iframe" | "object" | "svg" => {
+            Display::Hidden
+        }
+        "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "blockquote" | "pre" | "ul" | "ol"
+        | "menu" | "dl" | "table" | "hr" => Display::Paragraph,
+        "address" | "article" | "aside" | "body" | "caption" | "center" | "dd" | "details"
+        | "dialog" | "div" | "dt" | "fieldset" | "figcaption" | "figure" | "footer" | "form"
+        | "header" | "hgroup" | "html" | "legend" | "li" | "main" | "nav" | "optgroup"
+        | "option" | "search" | "section" | "summary" | "tbody" | "textarea" | "tfoot"
+        | "thead" | "tr" => Display::Block,
+        _ => Display::Inline,
+    }
+}

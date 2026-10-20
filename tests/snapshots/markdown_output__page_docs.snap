@@ -1,0 +1,56 @@
+---
+source: tests/markdown_output.rs
+expression: parse(html).to_markdown()
+---
+# Configuration[\#](#configuration)
+
+Widgets read their settings from `widget.toml`. Every key is optional; defaults are shown below.
+
+## Options
+
+**`timeout`**
+
+Seconds to wait before giving up. Default: `30`.
+
+**`retries`**
+
+How many times to retry. Use `0` to disable.
+
+## Example
+
+```toml
+[widget]
+timeout = 10   # seconds
+name    = "spin*ner_v2"
+```
+
+Warning
+
+Setting `retries` above **5** may trigger rate limits:
+
+- the API returns `429`
+- back-off grows exponentially
+
+> Tip: run `widget check` to validate a file.
+>
+> 1. Edit `widget.toml`
+> 2. Run the check
+
+### Escaping
+
+Literal markup characters survive: 2 \* 3 = 6, file_name.rs, a_b_c, \[brackets\], \`ticks\`, and a line that starts with a number:
+
+1\. this is not a list
+
+\# nor is this a heading
+
+\<div> is text, not HTML. AT\&T \&amp; friends.
+
+## Steps
+
+3. Install
+4. Configure
+5. Profit
+
+Last updated ~~2025~~ 2026.\
+Found a typo? [Edit this page](https://example.com/edit?file=docs/config.md&line=1).

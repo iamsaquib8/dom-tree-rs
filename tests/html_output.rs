@@ -57,3 +57,29 @@ fn subtree_serialization() {
     let b = dom.find_by_tag("b").next().unwrap();
     assert_eq!(b.to_html(), "<b>hi</b>");
 }
+
+#[test]
+fn inner_and_outer_html() {
+    let dom = parse("<div id=x>a <b class=k>b &amp; c</b><br><!-- n --></div>");
+    let div = dom.root().unwrap();
+    assert_eq!(
+        div.inner_html(),
+        "a <b class=\"k\">b &amp; c</b><br><!-- n -->"
+    );
+    assert_eq!(div.outer_html(), div.to_html());
+    assert_eq!(
+        div.outer_html(),
+        "<div id=\"x\">a <b class=\"k\">b &amp; c</b><br><!-- n --></div>"
+    );
+
+    // Void elements, text and empty elements have no inner HTML.
+    assert_eq!(dom.find_by_tag("br").next().unwrap().inner_html(), "");
+    assert_eq!(parse("<p></p>").root().unwrap().inner_html(), "");
+    let text = div.first_child().unwrap();
+    assert_eq!(text.inner_html(), "");
+    assert_eq!(text.outer_html(), "a ");
+
+    // Raw-text content stays raw.
+    let dom = parse("<script>if (a < b) {}</script>");
+    assert_eq!(dom.root().unwrap().inner_html(), "if (a < b) {}");
+}

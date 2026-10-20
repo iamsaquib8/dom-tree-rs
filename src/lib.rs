@@ -40,9 +40,27 @@
 //! `<html>`/`<head>`/`<body>` insertion, no foster parenting. Anything it has
 //! to recover from is recorded in [`Dom::errors`].
 //!
+//! ## Getting content out
+//!
+//! - [`Dom::to_text`] — readable plain text: no `<script>`/`<style>`/`<head>`,
+//!   whitespace collapsed, a line per block, a blank line between paragraphs.
+//! - [`Dom::to_markdown`] — CommonMark + GFM (headings, lists, links, images,
+//!   code blocks, tables, quotes): for LLM prompts, RAG indexes and notes.
+//! - [`Dom::to_html`], [`NodeRef::inner_html`], [`NodeRef::outer_html`] — HTML.
+//!
+//! ```
+//! let dom = domtree::parse(
+//!     "<article><h2>News</h2><p>It <em>works</em>!</p><script>track()</script></article>",
+//! );
+//! assert_eq!(dom.to_text(), "News\n\nIt works!");
+//! # #[cfg(feature = "markdown")]
+//! assert_eq!(dom.to_markdown(), "## News\n\nIt *works*!");
+//! ```
+//!
 //! ## Features
 //!
 //! - `json` *(default)* — the zero-dependency [`Dom::to_json`] serializer.
+//! - `markdown` *(default)* — the zero-dependency [`Dom::to_markdown`].
 //! - `serde` — optional `serde::Serialize` for the tree (adds the `serde` dep).
 //! - `query` — a zero-dependency CSS selector engine ([`Dom::select`], [`Selector`]).
 //! - `std` — adds `std`-only conveniences; the crate is `no_std + alloc` by default.

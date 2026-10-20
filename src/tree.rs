@@ -338,6 +338,29 @@ impl<'a> NodeRef<'a> {
             .map(|id| NodeRef { dom: self.dom, id })
     }
 
+    /// The next sibling that is an element (skips text, comments, doctypes).
+    ///
+    /// ```
+    /// let dom = domtree::parse("<p><a>1</a> text <!-- c --><b>2</b></p>");
+    /// let a = dom.find_by_tag("a").next().unwrap();
+    /// assert_eq!(a.next_element_sibling().unwrap().tag_name(), Some("b"));
+    /// assert!(a.prev_element_sibling().is_none());
+    /// ```
+    pub fn next_element_sibling(&self) -> Option<NodeRef<'a>> {
+        core::iter::successors(self.next_sibling(), NodeRef::next_sibling).find(NodeRef::is_element)
+    }
+
+    /// The previous sibling that is an element (skips text, comments, doctypes).
+    ///
+    /// ```
+    /// let dom = domtree::parse("<ul><li>a</li> <li>b</li></ul>");
+    /// let b = dom.find_by_tag("li").nth(1).unwrap();
+    /// assert_eq!(b.prev_element_sibling().unwrap().text_content(), "a");
+    /// ```
+    pub fn prev_element_sibling(&self) -> Option<NodeRef<'a>> {
+        core::iter::successors(self.prev_sibling(), NodeRef::prev_sibling).find(NodeRef::is_element)
+    }
+
     /// This node's direct children, in order.
     pub fn children(&self) -> impl Iterator<Item = NodeRef<'a>> {
         let dom = self.dom;

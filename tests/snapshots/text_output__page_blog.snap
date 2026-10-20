@@ -1,0 +1,60 @@
+---
+source: tests/text_output.rs
+expression: parse(html).to_text()
+---
+Home
+Archive
+About
+
+Shipping a tiny HTML parser
+
+Posted on 21 October 2026 by Sam
+
+Most HTML parsers are big. That’s fine on a server, but painful in a 1 MB edge worker. This post covers what we learned building one that fits in ~20 KB of wasm.
+
+Goals
+
+Never panic – on any input.
+Zero dependencies:
+no regex
+no html5ever
+(it’s great, just big)
+
+Forgiving recovery.
+
+Unclosed <p> and <li> tags are everywhere.
+
+The core loop
+
+The tree builder keeps an explicit stack, so 100k nested <div>s can’t overflow it:
+
+fn build(tokens: &[Token]) -> Dom {
+    let mut open = Vec::new();
+    for tok in tokens {
+        // `match` on every token kind
+        handle(&mut open, tok);
+    }
+    finish(open)
+}
+
+Numbers
+
+Parser	Size (gzip)	Deps
+dom-tree-rs	19.5 KB	0
+html5ever	~180 KB	12
+a | b	pipes are escaped
+
+Make it work, make it right, make it fast.
+
+— Kent Beck
+
+Where the time goes.
+
+Read the API docs or open issues. Questions?
+
+Related
+
+Arena trees in Rust
+Shrinking wasm
+
+© 2026 The Blog · RSS

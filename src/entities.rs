@@ -1,7 +1,8 @@
 //! HTML character-reference (entity) decoding.
 //!
 //! We decode the ~130 named entities that actually appear in real-world content
-//! plus full numeric references (`&#169;`, `&#xA9;`). Unknown named references
+//! plus full numeric references (`&#169;`, `&#xA9;`, with the browser's
+//! Windows-1252 remapping of `&#128;`–`&#159;`). Unknown named references
 //! are left **verbatim** (browser-ish behaviour) and reported via
 //! [`ErrorKind::UnknownEntity`](crate::ErrorKind::UnknownEntity). Shipping the
 //! full ~2200-entry WHATWG table would conflict with the crate's "tiny" goal;
@@ -87,26 +88,48 @@ fn decode_one(after: &str) -> Option<(Cow<'static, str>, usize)> {
     named(name).map(|s| (Cow::Borrowed(s), semi + 1))
 }
 
+/// What numeric references `&#x80;`–`&#x9F;` decode to (WHATWG): the C1
+/// control range is remapped through Windows-1252, because in real content it
+/// almost always is mislabelled cp1252. Five slots are unmapped and decode to
+/// themselves.
+const WINDOWS_1252: [u16; 32] = [
+    0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, // 80–87
+    0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F, // 88–8F
+    0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014, // 90–97
+    0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178, // 98–9F
+];
+
 /// Decode a numeric reference body (the part after `&#`): `123` or `x1F600`.
+///
+/// `0`, surrogates and anything above U+10FFFF (however many digits) decode to
+/// U+FFFD; `0x80..=0x9F` go through [`WINDOWS_1252`].
 fn numeric(digits: &str) -> Option<char> {
-    let hex_body = digits
-        .strip_prefix('x')
-        .or_else(|| digits.strip_prefix('X'));
-    let code = if let Some(hex) = hex_body {
-        if hex.is_empty() {
-            return None;
-        }
-        u32::from_str_radix(hex, 16).ok()?
-    } else {
-        if digits.is_empty() {
-            return None;
-        }
-        digits.parse::<u32>().ok()?
+    let (body, radix) = match digits.strip_prefix(['x', 'X']) {
+        Some(hex) => (hex, 16),
+        None => (digits, 10),
     };
-    if code == 0 {
-        return Some(REPLACEMENT);
+    if body.is_empty() {
+        return None;
     }
-    Some(char::from_u32(code).unwrap_or(REPLACEMENT))
+    // Saturate rather than overflow: every out-of-range value is U+FFFD.
+    let mut code: u32 = 0;
+    for c in body.chars() {
+        code = code
+            .saturating_mul(radix)
+            .saturating_add(c.to_digit(radix)?)
+            .min(0x11_0000);
+    }
+    if let Some(&mapped) = code
+        .checked_sub(0x80)
+        .and_then(|i| WINDOWS_1252.get(i as usize))
+    {
+        code = u32::from(mapped);
+    }
+    Some(
+        char::from_u32(code)
+            .filter(|&c| c != '\0')
+            .unwrap_or(REPLACEMENT),
+    )
 }
 
 /// Curated named-entity table. Returns the UTF-8 replacement, or `None` if the

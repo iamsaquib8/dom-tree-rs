@@ -137,6 +137,24 @@ fn ancestors_and_siblings() {
 }
 
 #[test]
+fn element_siblings_skip_other_nodes() {
+    let dom = parse("<ul>\n  <li>1</li>\n  <!-- c -->\n  <li>2</li>text<li>3</li>\n</ul>");
+    let items: Vec<_> = dom.find_by_tag("li").collect();
+    // Plain siblings include the whitespace text...
+    assert!(items[0].next_sibling().unwrap().is_text());
+    // ...element siblings skip text and comments.
+    assert_eq!(items[0].next_element_sibling().unwrap().id(), items[1].id());
+    assert_eq!(items[1].next_element_sibling().unwrap().id(), items[2].id());
+    assert!(items[2].next_element_sibling().is_none());
+    assert_eq!(items[2].prev_element_sibling().unwrap().id(), items[1].id());
+    assert_eq!(items[1].prev_element_sibling().unwrap().id(), items[0].id());
+    assert!(items[0].prev_element_sibling().is_none());
+    // Text nodes have element siblings too.
+    let text = items[1].next_sibling().unwrap();
+    assert_eq!(text.next_element_sibling().unwrap().id(), items[2].id());
+}
+
+#[test]
 fn tokenizer_stream() {
     let toks: Vec<_> = tokenize("<a href='x'>hi</a>").collect();
     assert_eq!(toks.len(), 3);

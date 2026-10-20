@@ -25,6 +25,14 @@ test = false
 doc = false
 bench = false
 
+# `to_markdown` comes from the (default) `markdown` feature.
+[[bin]]
+name = "markdown"
+path = "fuzz_targets/markdown.rs"
+test = false
+doc = false
+bench = false
+
 # Fuzz binaries want a release-ish profile with debug assertions on.
 [profile.release]
 debug = 1

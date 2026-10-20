@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head><title>Configuration | Widget Docs</title></head>
+<body>
+<div class="layout">
+  <div class="content">
+    <h1 id="configuration">Configuration<a class="anchor" href="#configuration">#</a></h1>
+    <p>Widgets read their settings from <code>widget.toml</code>. Every key is
+    optional; defaults are shown below.</p>
+
+    <h2>Options</h2>
+    <dl>
+      <dt><code>timeout</code></dt>
+      <dd>Seconds to wait before giving up. Default: <code>30</code>.</dd>
+      <dt><code>retries</code></dt>
+      <dd>How many times to retry. Use <code>0</code> to disable.</dd>
+    </dl>
+
+    <h2>Example</h2>
+    <div class="highlight"><pre class="lang-toml">
+[widget]
+timeout = 10   # seconds
+name    = "spin*ner_v2"
+</pre></div>
+
+    <div class="admonition warning">
+      <p class="admonition-title">Warning</p>
+      <p>Setting <code>retries</code> above <b>5</b> may trigger rate limits:</p>
+      <ul>
+        <li>the API returns <code>429</code></li>
+        <li>back-off grows exponentially</li>
+      </ul>
+    </div>
+
+    <blockquote>
+      <p>Tip: run <kbd>widget check</kbd> to validate a file.</p>
+      <ol>
+        <li>Edit <code>widget.toml</code></li>
+        <li>Run the check</li>
+      </ol>
+    </blockquote>
+
+    <h3>Escaping</h3>
+    <p>Literal markup characters survive: 2 * 3 = 6, file_name.rs, a_b_c,
+    [brackets], `ticks`, and a line that starts with a number:</p>
+    <p>1. this is not a list</p>
+    <p># nor is this a heading</p>
+    <p>&lt;div&gt; is text, not HTML. AT&amp;T &amp;amp; friends.</p>
+
+    <h2>Steps</h2>
+    <ol start="3">
+      <li>Install</li>
+      <li>Configure</li>
+      <li>Profit</li>
+    </ol>
+    <p>Last updated <del>2025</del> <ins>2026</ins>.<br>
+    Found a typo? <a href="https://example.com/edit?file=docs/config.md&amp;line=1">Edit this page</a>.</p>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,66 @@
+---
+source: tests/markdown_output.rs
+expression: parse(html).to_markdown()
+---
+[![The Blog](/logo.svg)](/)
+
+- [Home](/)
+- [Archive](/archive)
+- [About](/about "Who we are")
+
+# Shipping a *tiny* HTML parser
+
+Posted on 21 October 2026 by [Sam](/authors/sam)
+
+Most HTML parsers are **big**. That’s fine on a server, but painful in a 1 MB edge worker. This post covers what we learned building one that fits in `~20 KB` of wasm.
+
+## Goals
+
+1. Never panic – on *any* input.
+2. Zero dependencies:
+   - no `regex`
+   - no `html5ever`
+     - (it’s great, just big)
+3. Forgiving recovery.
+
+   Unclosed `<p>` and `<li>` tags are everywhere.
+
+## The core loop
+
+The tree builder keeps an explicit stack, so 100k nested `<div>`s can’t overflow it:
+
+```rust
+fn build(tokens: &[Token]) -> Dom {
+    let mut open = Vec::new();
+    for tok in tokens {
+        // `match` on every token kind
+        handle(&mut open, tok);
+    }
+    finish(open)
+}
+```
+
+## Numbers
+
+| Parser | Size (gzip) | Deps |
+| --- | --- | --- |
+| dom-tree-rs | 19.5 KB | 0 |
+| html5ever | \~180 KB | 12 |
+| a \| b | pipes are escaped | |
+
+> Make it work, make it right, make it fast.
+>
+> — Kent Beck
+
+![Flame graph of the tokenizer](</img/flame graph.png> "Hot path")
+
+Where the time goes.
+
+Read the [API docs](https://docs.rs/dom-tree-rs) or [open issues](<https://github.com/iamsaquib8/dom-tree-rs/issues?q=is:open (bug)>). Questions? [mailto:hi@example.com](mailto:hi@example.com)
+
+### Related
+
+- [Arena trees in Rust](/posts/arena-trees)
+- [Shrinking wasm](/posts/wasm-size)
+
+© 2026 The Blog · [RSS](/rss.xml)

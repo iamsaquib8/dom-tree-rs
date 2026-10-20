@@ -45,6 +45,38 @@ impl<'a> NodeRef<'a> {
         process(&mut out, &mut stack);
         out
     }
+
+    /// The HTML of this node's children, without the node's own tags (the DOM
+    /// `innerHTML`). Empty for text, comment and void nodes.
+    ///
+    /// ```
+    /// let dom = domtree::parse("<div id=x><b>hi</b> there</div>");
+    /// let div = dom.root().unwrap();
+    /// assert_eq!(div.inner_html(), "<b>hi</b> there");
+    /// ```
+    pub fn inner_html(&self) -> String {
+        let mut out = String::new();
+        let mut stack: Vec<Step<'a>> = Vec::new();
+        let mut child = self.last_child();
+        while let Some(c) = child {
+            stack.push(Step::Open(c));
+            child = c.prev_sibling();
+        }
+        process(&mut out, &mut stack);
+        out
+    }
+
+    /// This node and its subtree as HTML (the DOM `outerHTML`); the same as
+    /// [`NodeRef::to_html`].
+    ///
+    /// ```
+    /// let dom = domtree::parse("<div id=x><b>hi</b></div>");
+    /// let b = dom.find_by_tag("b").next().unwrap();
+    /// assert_eq!(b.outer_html(), "<b>hi</b>");
+    /// ```
+    pub fn outer_html(&self) -> String {
+        self.to_html()
+    }
 }
 
 enum Step<'a> {

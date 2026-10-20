@@ -628,10 +628,7 @@ impl<'a> Descendants<'a> {
             if let Some(sib) = self.dom.node(n).and_then(|nd| nd.next_sibling) {
                 return Some(sib);
             }
-            match self.dom.node(n).and_then(|nd| nd.parent) {
-                Some(p) => n = p,
-                None => return None,
-            }
+            n = self.dom.node(n).and_then(|nd| nd.parent)?;
         }
     }
 }

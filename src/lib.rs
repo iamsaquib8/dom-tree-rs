@@ -59,6 +59,8 @@
 //!
 //! ## Structure and data
 //!
+//! - [`Dom::main_content`] — the article / post / docs body without the
+//!   navigation, sidebars, comments and footer ("reader mode").
 //! - [`Dom::links`] / [`Dom::resources`] — every link (with its text) and
 //!   every embedded URL, resolved against the page URL and `<base href>`
 //!   ([`resolve_url`], [`resolve_srcset`]: RFC 3986, zero-dependency).
@@ -66,6 +68,23 @@
 //!   OpenGraph / Twitter-card fields, JSON-LD blocks and feeds.
 //! - [`NodeRef::table_rows`] — a `<table>` as rows of cell text with
 //!   `colspan`/`rowspan` expanded; [`to_csv`] formats them.
+//!
+//! ```
+//! let dom = domtree::parse(r#"<html lang="en"><head><title>Release notes</title></head>
+//!   <body><nav><a href="/">Home</a></nav>
+//!   <article><h1>Version 2</h1>
+//!     <p>This release adds link extraction, page metadata, tables as data and a
+//!        reader mode, all without a single new dependency.</p>
+//!     <p>See the <a href="changelog.html">full changelog</a> for details.</p>
+//!   </article></body></html>"#);
+//!
+//! assert_eq!(dom.metadata().title.as_deref(), Some("Release notes"));
+//! let article = dom.main_content().unwrap();
+//! assert_eq!(article.tag_name(), Some("article"));
+//! let links = dom.links(Some("https://example.com/news/"));
+//! assert_eq!(links[1].url, "https://example.com/news/changelog.html");
+//! assert_eq!(links[1].text, "full changelog");
+//! ```
 //!
 //! ## Features
 //!

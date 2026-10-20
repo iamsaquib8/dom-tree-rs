@@ -1,4 +1,5 @@
-//! Structured data out of a page: links and resources, metadata and tables.
+//! Structured data out of a page: links and resources, metadata, tables, and
+//! the main content ("reader mode").
 //!
 //! Everything here is built on the public tree API ([`NodeRef`] traversal)
 //! plus the shared, iterative [`walk`](crate::serialize::walk), so it inherits
@@ -12,6 +13,7 @@ use crate::tree::{Dom, NodeRef};
 
 mod links;
 mod meta;
+mod readable;
 mod table;
 
 pub use links::{Link, Resource};

@@ -10,7 +10,7 @@ homepage = "https://github.com/iamsaquib8/dom-tree-rs"
 documentation = "https://docs.rs/dom-tree-rs"
 readme = "README.md"
 license = "MIT"
-keywords = ["html", "parser", "dom", "wasm", "no-std"]
+keywords = ["html", "parser", "css-selector", "markdown", "wasm"]
 categories = ["parser-implementations", "wasm", "web-programming", "no-std"]
 exclude = ["/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/docs/launch"]
 
@@ -18,13 +18,15 @@ exclude = ["/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/docs/launch"]
 name = "domtree"
 
 [features]
-default = ["json"]
+default = ["json", "query", "markdown"]
 # Built-in, zero-dependency JSON serializer (`Dom::to_json`).
 json = []
 # Optional `serde::Serialize` impls on the tree (pulls in `serde`).
 serde = ["dep:serde"]
-# Hand-rolled CSS-subset selector engine (`Dom::select`). Off by default for size.
+# Hand-rolled CSS selector engine (`Dom::select`, `Selector`). Zero-dependency.
 query = []
+# Zero-dependency HTML -> Markdown (`Dom::to_markdown`).
+markdown = []
 # Enables std-only conveniences (e.g. `std::error::Error` for `ParseError`).
 # The crate is `no_std + alloc` by default.
 std = []

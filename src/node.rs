@@ -7,18 +7,37 @@
 //! parsing is fast despite producing an owned tree.
 
 use alloc::vec::Vec;
+use core::fmt;
+use core::num::NonZeroU32;
 use core::ops::Range;
 
 /// A handle to a node inside a [`Dom`](crate::Dom). Cheap (`Copy`) and stable
 /// for the lifetime of the tree.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct NodeId(pub(crate) u32);
+//
+// Stored as index + 1 so that `Option<NodeId>` is 4 bytes: every node holds
+// five tree links, so this keeps a node at 64 bytes.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeId(NonZeroU32);
 
 impl NodeId {
+    /// The id of arena slot `index`. (Saturates past `u32::MAX - 1` nodes,
+    /// which no arena that fits in memory reaches.)
+    #[inline]
+    pub(crate) fn from_index(index: usize) -> Self {
+        let index = u32::try_from(index).unwrap_or(u32::MAX);
+        NodeId(NonZeroU32::MIN.saturating_add(index))
+    }
+
     /// The node's position in the arena.
     #[inline]
     pub fn index(self) -> usize {
-        self.0 as usize
+        (self.0.get() - 1) as usize
+    }
+}
+
+impl fmt::Debug for NodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("NodeId").field(&self.index()).finish()
     }
 }
 
@@ -71,6 +90,45 @@ pub(crate) enum RawKind {
     Doctype(Span),
 }
 
+/// Where a node came from: a byte range into the *original source* (not the
+/// string arena), or [`SrcRange::NONE`] for nodes created by editing.
+///
+/// Two `u32`s keep the per-node overhead at 8 bytes. The builder records
+/// ranges only when the whole input fits in them (under 4 GiB); for a larger
+/// input every node is `NONE`, never a wrapped offset.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct SrcRange {
+    start: u32,
+    end: u32,
+}
+
+impl SrcRange {
+    /// No range. `start == u32::MAX` marks it: real offsets are below that.
+    pub(crate) const NONE: SrcRange = SrcRange {
+        start: u32::MAX,
+        end: u32::MAX,
+    };
+
+    /// A range the caller knows is valid (`start <= end < u32::MAX`).
+    #[inline]
+    pub(crate) fn new(start: u32, end: u32) -> Self {
+        SrcRange { start, end }
+    }
+
+    /// Move the end (an element's range grows when it is closed). A no-op on
+    /// [`SrcRange::NONE`].
+    #[inline]
+    pub(crate) fn set_end(&mut self, end: u32) {
+        if self.start != u32::MAX {
+            self.end = end;
+        }
+    }
+
+    pub(crate) fn get(self) -> Option<Range<usize>> {
+        (self.start != u32::MAX).then_some(self.start as usize..self.end.max(self.start) as usize)
+    }
+}
+
 /// The internal arena record: tree links plus the node's kind.
 #[derive(Clone)]
 pub(crate) struct Node {
@@ -79,15 +137,17 @@ pub(crate) struct Node {
     pub(crate) last_child: Option<NodeId>,
     pub(crate) next_sibling: Option<NodeId>,
     pub(crate) prev_sibling: Option<NodeId>,
-    /// Set once the node (or an ancestor) is removed with
-    /// [`Dom::remove`](crate::Dom::remove): it stays in the arena but is no
-    /// longer part of the document.
+    /// Exactly when the node is **not** reachable from the top level: it was
+    /// removed with [`Dom::remove`](crate::Dom::remove) (or is inside a
+    /// removed subtree), or was created by editing and not yet attached. A
+    /// subtree is always uniformly flagged. It stays in the arena either way.
     pub(crate) detached: bool,
+    pub(crate) src: SrcRange,
     pub(crate) raw: RawKind,
 }
 
 impl Node {
-    pub(crate) fn new(raw: RawKind) -> Self {
+    pub(crate) fn new(raw: RawKind, src: SrcRange) -> Self {
         Node {
             parent: None,
             first_child: None,
@@ -95,7 +155,28 @@ impl Node {
             next_sibling: None,
             prev_sibling: None,
             detached: false,
+            src,
             raw,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nodes_stay_small() {
+        // Parse speed is mostly memory traffic: keep a node in one cache line.
+        assert_eq!(core::mem::size_of::<Option<NodeId>>(), 4);
+        assert!(core::mem::size_of::<Node>() <= 64);
+    }
+
+    #[test]
+    fn node_id_round_trips_its_index() {
+        for i in [0, 1, 41, u32::MAX as usize - 1] {
+            assert_eq!(NodeId::from_index(i).index(), i);
+        }
+        assert_eq!(alloc::format!("{:?}", NodeId::from_index(7)), "NodeId(7)");
     }
 }

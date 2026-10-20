@@ -151,12 +151,37 @@ curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer, script' --markdow
 </details>
 
 <details>
-<summary><b>Read a table</b></summary>
+<summary><b>Keep just the article, chunked for RAG</b></summary>
 
 ```rust
-for row in dom.select("table#prices tr:has(td)") {
-    let cells: Vec<String> = row.select("td").map(|td| td.to_text()).collect();
-    println!("{}", cells.join(" | "));
+let dom = domtree::parse(html);
+let article = dom.main_content();                   // reader mode: drops nav, ads, comments…
+let chunks = match article {
+    Some(node) => node.to_markdown_chunks(1500),
+    None => dom.to_markdown_chunks(1500),
+};
+for chunk in &chunks {
+    println!("[{}]\n{}", chunk.context(), chunk.markdown); // e.g. "[Guide > Install]"
+}
+```
+</details>
+
+<details>
+<summary><b>Links, page metadata, and tables as data</b></summary>
+
+```rust
+let dom = domtree::parse(html);
+
+for link in dom.links(Some("https://example.com/blog/")) {
+    println!("{} -> {}", link.text, link.url);       // resolved, honours <base href>
+}
+
+let meta = dom.metadata();                          // title, description, OpenGraph, JSON-LD…
+println!("{:?} {:?}", meta.title, meta.canonical);
+
+if let Some(table) = dom.select_first("table#prices") {
+    let rows = table.table_rows();                  // colspan/rowspan expanded
+    print!("{}", domtree::to_csv(&rows));
 }
 ```
 </details>
@@ -201,6 +226,31 @@ for id in scripts {
     dom.remove(id);
 }
 assert_eq!(dom.to_html(), r#"<p>Hi <a href="/x">x</a></p>"#);
+
+// Insert parsed HTML, wrap, rename, set attributes and text:
+let a = dom.select_first("a").unwrap().id();
+dom.set_attr(a, "rel", "nofollow");
+dom.insert_html_after(a, " <b>new</b>");
+dom.wrap(a, "em");
+let p = dom.root().unwrap().id();
+dom.rename(p, "div");
+assert_eq!(
+    dom.to_html(),
+    r#"<div>Hi <em><a href="/x" rel="nofollow">x</a></em> <b>new</b></div>"#
+);
+```
+</details>
+
+<details>
+<summary><b>Point back into the source</b></summary>
+
+```rust
+let src = "<ul>\n  <li>one\n  <li>two</ul>";
+let dom = domtree::parse(src);
+let li = dom.select("li").nth(1).unwrap();
+let range = li.source_range().unwrap();              // byte range in `src`
+assert_eq!(&src[range.clone()], "<li>two");
+assert_eq!(domtree::line_col(src, range.start), (3, 3)); // 1-based line, column
 ```
 </details>
 
@@ -263,7 +313,7 @@ markdown = doc.select_first("article").to_markdown()   # ready for an LLM prompt
 | WASM + npm package | **✅** | ❌ | ❌ | ❌ | ❌ |
 | CLI | **✅** | ❌ | ❌ | ❌ | ❌ |
 | `no_std` | **✅** | ❌ | ❌ | ❌ | ❌ |
-| Edit + re-serialize | basic | ❌ | ❌ | ✅ | ✅ (streaming) |
+| Edit + re-serialize | **✅** | ❌ | ❌ | ✅ | ✅ (streaming) |
 | Never panics on input | ✅ | ✅ | ✅ | ✅ | ✅ |
 | WHATWG spec-compliant tree | ❌ | ❌ | ✅ | ✅ | ❌ |
 
@@ -312,7 +362,8 @@ recovers from is recorded in
 |---|:---:|---|
 | `json` | ✅ | `to_json()` — zero-dependency JSON |
 | `query` | ✅ | CSS selectors: `select`, `select_first`, `Selector`, `closest`, `matches` |
-| `markdown` | ✅ | `to_markdown()` — zero-dependency HTML → Markdown |
+| `markdown` | ✅ | `to_markdown()` and `to_markdown_chunks()` — zero-dependency HTML → Markdown |
+| `entities-full` | | all 2,125 WHATWG named character references (default: the 178 most common) |
 | `serde` | | `serde::Serialize` for the tree (same JSON shape; adds `serde`) |
 | `std` | | `std::error::Error` impls; the crate is `no_std + alloc` otherwise |
 

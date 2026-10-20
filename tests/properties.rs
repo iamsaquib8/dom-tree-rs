@@ -52,4 +52,42 @@ proptest! {
             }
         }
     }
+
+    #[test]
+    fn source_ranges_are_valid_and_nested(s in html_soup()) {
+        let dom = parse(&s);
+        for node in dom.nodes() {
+            // Every parsed node has a range, and it slices the input cleanly.
+            let range = node.source_range();
+            prop_assert!(range.is_some());
+            let range = range.unwrap_or(0..0);
+            prop_assert!(s.get(range.clone()).is_some(), "bad slice {:?}", range);
+            // Never empty: elements start with `<`, empty text makes no node.
+            prop_assert!(!range.is_empty());
+            // A parent's range contains its children's, and siblings come in
+            // source order without overlapping.
+            let mut prev_end = range.start;
+            for child in node.children() {
+                let c = child.source_range().unwrap_or(0..0);
+                prop_assert!(range.start <= c.start && c.end <= range.end,
+                    "child {:?} outside parent {:?}", c, range);
+                prop_assert!(prev_end <= c.start, "siblings overlap");
+                prev_end = c.end;
+            }
+        }
+        // Top-level nodes are in source order too.
+        let mut prev_end = 0;
+        for r in dom.roots() {
+            let range = r.source_range().unwrap_or(0..0);
+            prop_assert!(prev_end <= range.start);
+            prev_end = range.end;
+        }
+    }
+
+    #[test]
+    fn line_col_never_panics(s in ".{0,64}", byte in 0usize..80) {
+        let (line, col) = domtree::line_col(&s, byte);
+        prop_assert!(line >= 1 && col >= 1);
+        prop_assert!(line <= s.len() + 1 && col <= s.chars().count() + 1);
+    }
 }

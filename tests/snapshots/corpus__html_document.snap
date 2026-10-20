@@ -1,0 +1,19 @@
+---
+source: tests/corpus.rs
+expression: parse(html).to_html()
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tom &amp; Jerry</title>
+  <style>body { color: #333; } a::before { content: '<'; }</style>
+</head>
+<body>
+  <!-- main content -->
+  <h1 id="title">Hello — world © 2026</h1>
+  <a href="/path?x=1&amp;y=2" data-id="42">link</a>
+  <input type="text" disabled required>
+  <script>if (a < b && c > 0) { render("<div>"); }</script>
+</body>
+</html>

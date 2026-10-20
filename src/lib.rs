@@ -59,6 +59,28 @@
 //! assert_eq!(dom.to_markdown(), "## News\n\nIt *works*!");
 //! ```
 //!
+//! ## Editing and source positions
+//!
+//! A [`Dom`] doubles as a small HTML rewriter: [`Dom::remove`],
+//! [`Dom::set_text`], [`Dom::set_attr`], [`Dom::rename`], [`Dom::wrap`],
+//! [`Dom::unwrap`], parsed-fragment insertion ([`Dom::append_html`] and
+//! friends) and node moves ([`Dom::append_child`], [`Dom::insert_before`]).
+//! Parsed nodes also remember where they came from:
+//! [`NodeRef::source_range`] plus [`line_col`].
+//!
+//! ```
+//! let src = "<p>Hello <b>world</b></p>";
+//! let mut dom = domtree::parse(src);
+//! let b = dom.find_by_tag("b").next().unwrap();
+//! assert_eq!(b.source_range(), Some(9..21));
+//! assert_eq!(domtree::line_col(src, 9), (1, 10));
+//!
+//! let b = b.id();
+//! dom.rename(b, "strong");
+//! dom.insert_html_after(b, "!");
+//! assert_eq!(dom.to_html(), "<p>Hello <strong>world</strong>!</p>");
+//! ```
+//!
 //! ## Structure and data
 //!
 //! - [`Dom::main_content`] — the article / post / docs body without the
@@ -96,6 +118,8 @@
 //! - `serde` — optional `serde::Serialize` for the tree, [`Metadata`] and
 //!   [`Chunk`] (adds the `serde` dep).
 //! - `query` — a zero-dependency CSS selector engine ([`Dom::select`], [`Selector`]).
+//! - `entities-full` — decode all 2,125 WHATWG named character references
+//!   instead of the curated ~180 (a sorted static table, about 70 KB).
 //! - `std` — adds `std`-only conveniences; the crate is `no_std + alloc` by default.
 
 #![no_std]
@@ -113,10 +137,14 @@ extern crate alloc;
 extern crate std;
 
 mod builder;
+mod edit;
 mod entities;
+#[cfg(feature = "entities-full")]
+mod entities_full;
 mod error;
 mod extract;
 mod node;
+mod source;
 mod tags;
 mod token;
 mod tokenizer;
@@ -131,6 +159,7 @@ mod query;
 pub use error::{ErrorKind, ParseError};
 pub use extract::{Link, Metadata, Resource, to_csv};
 pub use node::{NodeId, NodeKind};
+pub use source::line_col;
 pub use token::{AttrValue, Token};
 pub use tokenizer::Tokenizer;
 pub use tree::{Descendants, Dom, NodeRef};

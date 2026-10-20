@@ -1,0 +1,16 @@
+---
+source: tests/corpus.rs
+expression: parse(html).to_html()
+---
+<select name="size">
+  <option value="s">Small
+  </option><option value="m" selected>Medium
+  </option><optgroup label="Large">
+    <option>L
+    </option><option>XL
+  </option></optgroup><optgroup label="Huge">
+    <option>XXL
+  </option></optgroup><hr>
+  <option>Custom
+</option></select>
+<datalist id="colors"><option value="red"></option><option value="blue"></option></datalist>

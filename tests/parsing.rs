@@ -208,3 +208,221 @@ fn deeply_nested_does_not_overflow() {
     // to_json is iterative, so this must not blow the stack either.
     assert!(dom.to_json().len() > depth);
 }
+
+#[test]
+fn stray_end_tags_on_a_deep_stack_are_linear() {
+    // Each `</x>` has no open match. Scanning the whole open-element stack for
+    // every one of them used to make this quadratic (~400 s at n = 100k, ~35 s
+    // at this n); linear, it is a few hundredths of a second.
+    let n = 30_000;
+    let mut html = "<div>".repeat(n);
+    html.push_str(&"</x>".repeat(n));
+    let start = std::time::Instant::now();
+    let dom = parse(&html);
+    assert!(
+        start.elapsed().as_millis() < 1000,
+        "took {:?}",
+        start.elapsed()
+    );
+    assert_eq!(dom.find_by_tag("div").count(), n);
+
+    // Many distinct stray names, then the real closes.
+    let mut html = "<span>".repeat(n);
+    for i in 0..n {
+        html.push_str(&format!("</q{}>", i % 997));
+    }
+    html.push_str(&"</span>".repeat(n));
+    html.push_str("<p>after</p>");
+    let start = std::time::Instant::now();
+    let dom = parse(&html);
+    assert!(
+        start.elapsed().as_millis() < 1000,
+        "took {:?}",
+        start.elapsed()
+    );
+    // Every span closed properly, so the trailing <p> is top-level.
+    assert_eq!(dom.roots().count(), 2);
+}
+
+// --- implicit closes (WHATWG optional tags) ------------------------------
+
+/// Re-serialized structure: shows where elements were closed.
+fn structure(html: &str) -> String {
+    parse(html).to_html()
+}
+
+#[test]
+fn p_is_closed_by_every_block_start_tag() {
+    for tag in [
+        "address",
+        "article",
+        "aside",
+        "blockquote",
+        "center",
+        "details",
+        "dialog",
+        "dir",
+        "div",
+        "dl",
+        "fieldset",
+        "figcaption",
+        "figure",
+        "footer",
+        "form",
+        "h1",
+        "h6",
+        "header",
+        "hgroup",
+        "listing",
+        "main",
+        "menu",
+        "nav",
+        "ol",
+        "p",
+        "plaintext",
+        "pre",
+        "search",
+        "section",
+        "summary",
+        "table",
+        "ul",
+        "xmp",
+    ] {
+        assert_eq!(
+            structure(&format!("<p>a<{tag}>b</{tag}>")),
+            format!("<p>a</p><{tag}>b</{tag}>"),
+            "<{tag}> should close <p>"
+        );
+    }
+    assert_eq!(structure("<p>a<hr>b"), "<p>a</p><hr>b");
+    // Inline content stays inside.
+    for tag in ["span", "a", "b", "img", "button", "label", "q"] {
+        assert!(structure(&format!("<p>a<{tag}>")).starts_with(&format!("<p>a<{tag}")));
+    }
+}
+
+#[test]
+fn list_items_and_definitions_close_an_open_p() {
+    assert_eq!(
+        structure("<ul><li><p>one<li><p>two</ul>"),
+        "<ul><li><p>one</p></li><li><p>two</p></li></ul>"
+    );
+    assert_eq!(
+        structure("<dl><dt><p>term<dd><p>def<dt>t2</dl>"),
+        "<dl><dt><p>term</p></dt><dd><p>def</p></dd><dt>t2</dt></dl>"
+    );
+}
+
+#[test]
+fn headings_close_an_open_heading() {
+    assert_eq!(
+        structure("<h1>Title<h2>Sub<h3>Section"),
+        "<h1>Title</h1><h2>Sub</h2><h3>Section</h3>"
+    );
+    // Only when the heading is the current node, as in browsers.
+    assert_eq!(
+        structure("<h1><span>a<h2>b"),
+        "<h1><span>a<h2>b</h2></span></h1>"
+    );
+}
+
+#[test]
+fn head_is_closed_by_body_content() {
+    assert_eq!(
+        structure("<html><head><meta charset=utf-8><title>T</title><body><p>x"),
+        "<html><head><meta charset=\"utf-8\"><title>T</title></head><body><p>x</p></body></html>"
+    );
+    assert_eq!(
+        structure("<head><link rel=x><div>y</div>"),
+        "<head><link rel=\"x\"></head><div>y</div>"
+    );
+    // Metadata, whitespace and comments stay in the head; real text does not.
+    assert_eq!(
+        structure("<head>\n<style>a{}</style><!--c--><script>s</script><noscript></noscript>Hello"),
+        "<head>\n<style>a{}</style><!--c--><script>s</script><noscript></noscript></head>Hello"
+    );
+    // So the body survives in readable output instead of hiding inside <head>.
+    assert_eq!(
+        parse("<head><title>T</title><body><p>Visible").to_text(),
+        "Visible"
+    );
+}
+
+#[test]
+fn ruby_annotations() {
+    assert_eq!(
+        structure("<ruby>漢<rp>(<rt>kan<rp>)</ruby>"),
+        "<ruby>漢<rp>(</rp><rt>kan</rt><rp>)</rp></ruby>"
+    );
+    assert_eq!(
+        structure("<ruby><rb>a<rb>b<rt>x<rt>y</ruby>"),
+        "<ruby><rb>a</rb><rb>b</rb><rt>x</rt><rt>y</rt></ruby>"
+    );
+    // <rt> nests in <rtc>; <rb> and <rtc> close an <rtc>.
+    assert_eq!(
+        structure("<ruby><rb>a<rtc><rt>x<rt>y<rtc>z<rb>c</ruby>"),
+        "<ruby><rb>a</rb><rtc><rt>x</rt><rt>y</rt></rtc><rtc>z</rtc><rb>c</rb></ruby>"
+    );
+}
+
+#[test]
+fn options_and_groups() {
+    assert_eq!(
+        structure(
+            "<select><option>a<option>b<optgroup label=g><option>c<optgroup><option>d</select>"
+        ),
+        "<select><option>a</option><option>b</option><optgroup label=\"g\"><option>c</option></optgroup><optgroup><option>d</option></optgroup></select>"
+    );
+    assert_eq!(
+        structure("<select><optgroup><option>a<hr><option>b</select>"),
+        "<select><optgroup><option>a</option></optgroup><hr><option>b</option></select>"
+    );
+}
+
+#[test]
+fn table_sections_rows_and_cells_close_each_other() {
+    assert_eq!(
+        structure("<table><thead><tr><th>h<tbody><tr><td>a<td>b<tr><td>c<tfoot><tr><td>f</table>"),
+        "<table><thead><tr><th>h</th></tr></thead><tbody><tr><td>a</td><td>b</td></tr><tr><td>c</td></tr></tbody><tfoot><tr><td>f</td></tr></tfoot></table>"
+    );
+    // A caption is closed by table structure, and closes open cells and rows.
+    assert_eq!(
+        structure("<table><caption>Cap<tr><td>a<caption>Again</table>"),
+        "<table><caption>Cap</caption><tr><td>a</td></tr><caption>Again</caption></table>"
+    );
+    assert_eq!(
+        structure("<table><tr><td>a<colgroup><col></table>"),
+        "<table><tr><td>a</td></tr><colgroup><col></colgroup></table>"
+    );
+    // Nested tables inside a cell are fine.
+    assert_eq!(
+        structure("<table><tr><td><table><tr><td>in</table><td>out</table>"),
+        "<table><tr><td><table><tr><td>in</td></tr></table></td><td>out</td></tr></table>"
+    );
+}
+
+#[test]
+fn colgroup_ends_at_non_col_content() {
+    assert_eq!(
+        structure("<table><colgroup><col><col span=2><tr><td>x</table>"),
+        "<table><colgroup><col><col span=\"2\"></colgroup><tr><td>x</td></tr></table>"
+    );
+    assert_eq!(
+        structure("<table><colgroup>\n<col>\n<thead>"),
+        "<table><colgroup>\n<col>\n</colgroup><thead></thead></table>"
+    );
+    assert_eq!(
+        structure("<table><colgroup><col>text</table>"),
+        "<table><colgroup><col></colgroup>text</table>"
+    );
+}
+
+#[test]
+fn implicit_closes_are_reported() {
+    let dom = parse("<h1>a<h2>b</h2>");
+    assert!(
+        dom.errors()
+            .iter()
+            .any(|e| e.kind == domtree::ErrorKind::ImplicitlyClosed && e.position == 5)
+    );
+}

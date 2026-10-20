@@ -1,0 +1,20 @@
+---
+source: tests/corpus.rs
+expression: parse(html).to_html()
+---
+<table>
+  <caption>Prices
+  </caption><colgroup><col span="2"><col class="price">
+  </colgroup><thead>
+    <tr><th>Item</th><th>Size</th><th>Price
+  </th></tr></thead><tbody>
+    <tr><td>Hammer</td><td>M</td><td>9.99
+    </td></tr><tr><td>Nails</td><td>100</td><td>2.49
+  </td></tr></tbody><tfoot>
+    <tr><td colspan="2">Total</td><td>12.48
+</td></tr></tfoot></table>
+<table>
+  <colgroup span="2">
+  </colgroup><tr><td>a</td><td>b
+  </td></tr><caption>Late caption
+</caption></table>

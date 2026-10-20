@@ -5,7 +5,6 @@
 
 mod args;
 mod pretty;
-mod url;
 
 use std::fs;
 use std::io::{self, Read, Write};
@@ -165,36 +164,37 @@ fn compile(selector: &str) -> Result<Selector, String> {
 /// The base URL to resolve links against: `<base href>` (with `-B`), resolved
 /// against `--base` when both are present.
 fn base_url(dom: &Dom, opts: &Options) -> Option<String> {
-    let detected = opts
-        .detect_base
-        .then(|| dom.select_first("base[href]").and_then(|b| b.attr("href")))
-        .flatten();
-    match (detected, &opts.base) {
-        (Some(d), Some(b)) => Some(url::resolve(b, d)),
-        (Some(d), None) => Some(d.to_string()),
-        (None, b) => b.clone(),
+    if opts.detect_base {
+        dom.base_url(opts.base.as_deref())
+    } else {
+        opts.base.clone()
     }
 }
 
 /// Rewrite every relative URL attribute in the document to an absolute one.
+///
+/// A repeated attribute (`<a href=a href=b>`) is read and rewritten through
+/// its first occurrence only — the one `NodeRef::attr` and `Dom::set_attr`
+/// use — so the value that counts is the one resolved.
 fn absolutize(dom: &mut Dom, base: &str) {
     let mut edits = Vec::new();
     for node in dom.nodes() {
-        for (name, value) in node.attributes() {
-            let resolved = if URL_ATTRS.contains(&name) {
-                url::resolve(base, value)
-            } else if name == "srcset" {
-                url::resolve_srcset(base, value)
-            } else {
+        for &name in URL_ATTRS.iter().chain(&["srcset"]) {
+            let Some(value) = node.attr(name) else {
                 continue;
             };
+            let resolved = if name == "srcset" {
+                domtree::resolve_srcset(base, value)
+            } else {
+                domtree::resolve_url(base, value)
+            };
             if resolved != value {
-                edits.push((node.id(), name.to_string(), resolved));
+                edits.push((node.id(), name, resolved));
             }
         }
     }
     for (id, name, value) in edits {
-        dom.set_attr(id, &name, &value);
+        dom.set_attr(id, name, &value);
     }
 }
 

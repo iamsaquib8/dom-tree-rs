@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Connection pooling - Driftwood Docs</title>
+  <meta name="description" content="Configure and tune the Driftwood connection pool.">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <link rel="icon" href="../assets/favicon.png">
+  <script defer src="../assets/search-index.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="../index.html">Driftwood</a>
+    <span class="version">v4.2</span>
+    <nav class="topnav"><a href="../guide/index.html">Guide</a> <a href="../api/index.html">API</a> <a href="https://github.com/example/driftwood">GitHub</a></nav>
+    <input type="search" placeholder="Search docs…" aria-label="Search">
+  </header>
+
+  <div class="docs-layout">
+    <nav class="docs-sidebar" aria-label="Documentation">
+      <ul>
+        <li><a href="../guide/index.html">Introduction</a></li>
+        <li><a href="../guide/install.html">Installation</a></li>
+        <li>Guides
+          <ul>
+            <li><a href="queries.html">Writing queries</a></li>
+            <li><a href="transactions.html">Transactions</a></li>
+            <li><a href="pooling.html" aria-current="page">Connection pooling</a></li>
+            <li><a href="migrations.html">Migrations</a></li>
+            <li><a href="testing.html">Testing with a real database</a></li>
+          </ul>
+        </li>
+        <li>Reference
+          <ul>
+            <li><a href="../api/pool.html">Pool</a></li>
+            <li><a href="../api/connection.html">Connection</a></li>
+            <li><a href="../api/errors.html">Errors</a></li>
+          </ul>
+        </li>
+        <li><a href="../changelog.html">Changelog</a></li>
+      </ul>
+    </nav>
+
+    <main id="content">
+      <h1>Connection pooling</h1>
+      <p>Opening a database connection is expensive: a TCP handshake, TLS, authentication and session setup can easily take longer than the query you wanted to run. Driftwood keeps a pool of open connections and hands them out on demand, so most requests skip all of that.</p>
+
+      <h2 id="configuring">Configuring the pool</h2>
+      <p>The pool is created once, when your application starts, and shared by every request handler. Its size is the most important setting: too small and requests queue for a connection, too large and the database spends its memory on idle sessions.</p>
+      <pre><code class="language-toml">[pool]
+min_idle = 2
+max_size = 16
+acquire_timeout = "5s"
+idle_timeout = "10m"
+</code></pre>
+      <p>A good starting point for <code>max_size</code> is twice the number of CPU cores on the database server, divided by the number of application instances.</p>
+
+      <h2 id="timeouts">Timeouts</h2>
+      <table>
+        <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>acquire_timeout</code></td><td>30s</td><td>How long a request waits for a free connection.</td></tr>
+          <tr><td><code>idle_timeout</code></td><td>10m</td><td>Idle connections older than this are closed.</td></tr>
+          <tr><td><code>max_lifetime</code></td><td>30m</td><td>Connections are recycled after this, even if busy.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout warning">
+        <p><strong>Warning:</strong> setting <code>acquire_timeout</code> higher than your HTTP request timeout means a slow pool turns into failed requests instead of fast errors.</p>
+      </div>
+
+      <h2 id="health-checks">Health checks</h2>
+      <p>Before handing out a connection that has been idle for more than a minute, the pool runs a cheap ping. Broken connections are dropped and replaced transparently, so a database restart costs at most one failed ping per connection rather than one failed request.</p>
+
+      <nav class="pagination" aria-label="Pagination">
+        <a class="prev" href="transactions.html">« Transactions</a>
+        <a class="next" href="migrations.html">Migrations »</a>
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      <p class="toc-title">On this page</p>
+      <ul>
+        <li><a href="#configuring">Configuring the pool</a></li>
+        <li><a href="#timeouts">Timeouts</a></li>
+        <li><a href="#health-checks">Health checks</a></li>
+      </ul>
+    </aside>
+  </div>
+
+  <footer class="docs-footer">
+    <p>Driftwood is released under the Apache-2.0 licence. <a href="https://github.com/example/driftwood/edit/main/docs/pooling.md">Edit this page on GitHub</a>.</p>
+  </footer>
+</body>
+</html>

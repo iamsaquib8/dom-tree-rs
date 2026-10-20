@@ -128,46 +128,85 @@ where it came from".
 
 - [x] **Editing, part 1** — `Dom::remove`, `set_attr`, `remove_attr` (shipped
       early in 0.3; powers the CLI's `--remove-nodes` and `--base`).
-- [ ] **Editing, part 2** — replace text, insert a parsed fragment, wrap/unwrap,
-      move nodes; then `to_html()`. Turns the crate into a small HTML rewriter.
+- [ ] **Editing, part 2** — replace text, insert a parsed fragment
+      (append/prepend/before/after), wrap/unwrap, move nodes, rename elements.
+      Turns the crate into a small HTML rewriter.
 - [ ] **Source spans** — `NodeRef::source_range()` mapping each node back to its
-      byte range in the input (linters, editors, precise error reporting).
+      byte range in the input, plus a line/column helper (linters, editors,
+      precise error reporting).
 - [ ] **Main-content extraction** — a small, documented heuristic
       (`Dom::main_content()`) that drops nav/header/footer/aside and picks the
       densest text block. The "reader mode" step most LLM pipelines need.
 - [ ] **More implicit-close rules** — `<colgroup>`/implicit `<tbody>`,
-      `<rb>`/`<rt>`/`<rp>`, and other common omitted-tag cases (still short of
-      full insertion modes).
-- [ ] **`entities-full` feature** — the complete named-entity set (default stays
-      the curated ~130).
+      `<rb>`/`<rt>`/`<rp>`, `<optgroup>`, and other common omitted-tag cases
+      (still short of full insertion modes).
+- [ ] **`entities-full` feature** — the complete WHATWG named-entity set
+      (default stays the curated ~130).
 
 ## 0.5 — "Fast and lean"
 
 - [ ] **Inline small-attribute storage** — drop the per-element attribute `Vec`
       allocation (closes more of the `tl` gap, no dependency).
-- [ ] **Optional `simd` feature** — SIMD/`memchr`-backed scanning for
-      text-heavy documents (off by default).
-- [ ] **SAX-style streaming events** over the tokenizer for documents you don't
-      want to materialize.
-- [ ] **Borrowed-tree mode** — an opt-in `Dom<'a>` that borrows from the source
-      for near-zero-allocation parsing.
+- [ ] **Optional `simd` feature** — `memchr`-backed scanning for text-heavy
+      documents (off by default; the default build stays zero-dependency).
+- [ ] **Streaming events** — a SAX-style API that applies the same recovery as
+      the tree builder, for documents you don't want to materialize.
 - [ ] **Benchmark depth** — add `html5ever`/`scraper` to the harness; track
       throughput, wasm size and compile time over time in CI.
 - [ ] **Differential fuzzing vs `html5ever`** on the subset we claim to support.
+- [ ] **Borrowed-tree mode** — *evaluate first*: an opt-in `Dom<'a>` that
+      borrows from the source. Ship only if profiling shows a real win;
+      otherwise record the numbers here and close it.
 
-## Distribution
+## 0.6 — "Structure and data"
+
+Most scraping code is the same five helpers rewritten by hand. Ship them.
+
+- [ ] **Links** — `Dom::links(base)`: every `href`/`src` resolved against a base
+      URL (RFC 3986, zero-dependency), with the link text.
+- [ ] **Page metadata** — `Dom::metadata()`: title, description, canonical URL,
+      language, OpenGraph and Twitter-card fields, and raw JSON-LD blocks.
+- [ ] **Tables as data** — `NodeRef::table_rows()` → rows of cell text, with
+      `colspan`/`rowspan` expanded; CLI `--csv`.
+- [ ] **RAG chunking** — `to_markdown_chunks(max_chars)`: split at headings,
+      keep each chunk under a size budget, and carry the heading path
+      (`# Guide > ## Install`) so every chunk stands on its own.
+
+## 0.7 — "Tools"
+
+- [ ] **`domtree lint`** — fast HTML checks with `file:line:col` output: images
+      without `alt`, empty links and buttons, duplicate ids, skipped heading
+      levels, and every recovered parse error. CI-friendly exit codes.
+- [ ] **Structured extraction from the shell** — `domtree -e title=h1
+      -e price=.price` → one JSON object; `--jsonl` for one object per match.
+- [ ] **`--main`** — main-content extraction in the CLI (`curl … | domtree
+      --main --markdown`).
+- [ ] **Encoding detection in the CLI** — BOM, `<meta charset>`, and
+      Windows-1252 fallback for non-UTF-8 pages.
+
+## Ecosystem & distribution
 
 Being easy to *get* matters as much as features.
 
 - [x] Prebuilt CLI binaries on GitHub Releases (Linux/macOS/Windows), also
       installable with `cargo binstall domtree-cli`.
-- [ ] Homebrew tap.
-- [ ] npm package kept in lock-step with the crate version.
-- [ ] Python bindings (PyO3 wheel) — *exploring*. Python is where most scraping
-      and RAG code lives; a tiny, fast, never-panicking parser with selectors and
-      Markdown would be useful there.
-- [ ] Encoding detection — best-effort charset sniffing for non-UTF-8 input
-      (CLI first). *Exploring.*
+- [ ] Homebrew formula (`brew install iamsaquib8/tap/domtree`).
+- [ ] npm package published from CI in lock-step with the crate version.
+- [ ] **Python package** (`pip install domtree`, PyO3 + maturin wheels):
+      `parse`, `select`, `to_text`, `to_markdown`. Python is where most scraping
+      and RAG code lives.
+- [ ] WASI build of the CLI (run `domtree` under `wasmtime`/`wasmer`).
+
+## Exploring
+
+Ideas we like but haven't committed to. Comments and prototypes welcome.
+
+- **MCP server mode** — `domtree mcp`, exposing "HTML → Markdown/text/select"
+  as tools for LLM agents (the agent fetches; we only parse).
+- **HTML diff** — a structural diff of two documents (`domtree diff a.html b.html`),
+  useful for snapshot tests of rendered pages.
+- **Language-server-lite** — reuse source spans and `lint` for editor
+  diagnostics.
 
 ## Have an idea?
 

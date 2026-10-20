@@ -1,6 +1,7 @@
 //! Property tests for the selector engine: it never panics on any selector or
-//! document, the `&str` and pre-parsed paths agree, and its non-backtracking
-//! matcher agrees with a naive backtracking reference implementation.
+//! document, the `&str` and pre-parsed paths agree, and its non-backtracking,
+//! memoized matcher agrees with a naive backtracking reference implementation
+//! (per node, across a whole `select` query, for `closest`, and scoped).
 #![cfg(feature = "query")]
 
 use domtree::{NodeId, NodeRef, Selector, parse};
@@ -161,6 +162,14 @@ const SIMPLE_ATOMS: &[&str] = &[
     ":has(~ *)",
     ":where(ul *)",
     ":not(:has(a))",
+    ":nth-last-child(2n of .x)",
+    ":nth-of-type(odd)",
+    ":nth-last-of-type(-n+2)",
+    ":nth-child(n of :nth-child(odd of li))",
+    "[TYPE=Text]",
+    ":has(+ .x ~ li)",
+    ":has(.x span)",
+    ":has(~ .y + *)",
 ];
 
 /// Childless siblings, for long flat sibling lists.
@@ -217,15 +226,26 @@ fn node_ids<'a>(nodes: impl Iterator<Item = NodeRef<'a>>) -> Vec<NodeId> {
 struct Part {
     tag: Option<&'static str>,
     class: Option<&'static str>,
-    nth: Option<(i32, i32)>,
+    nth: Option<NthPart>,
     comb: char,
+}
+
+/// `:nth-child` (`kind` 0), `:nth-of-type` (1) or `:nth-child(… of .a)` (2),
+/// counted from the end when `last`.
+#[derive(Clone, Copy, Debug)]
+struct NthPart {
+    a: i32,
+    b: i32,
+    last: bool,
+    kind: u8,
 }
 
 fn part(tags: &'static [&'static str], combs: &'static [char]) -> impl Strategy<Value = Part> {
     (
         proptest::option::of(select(tags)),
         proptest::option::of(select(&["a", "b"][..])),
-        proptest::option::weighted(0.2, (-3i32..=3, -3i32..=4)),
+        proptest::option::weighted(0.3, (-3i32..=3, -3i32..=4, any::<bool>(), 0u8..3))
+            .prop_map(|n| n.map(|(a, b, last, kind)| NthPart { a, b, last, kind })),
         select(combs),
     )
         .prop_map(|(tag, class, nth, comb)| Part {
@@ -251,8 +271,13 @@ fn render(parts: &[Part]) -> String {
             s.push('.');
             s.push_str(class);
         }
-        if let Some((a, b)) = p.nth {
-            s.push_str(&format!(":nth-child({a}n{b:+})"));
+        if let Some(NthPart { a, b, last, kind }) = p.nth {
+            let last = if last { "last-" } else { "" };
+            s.push_str(&match kind {
+                1 => format!(":nth-{last}of-type({a}n{b:+})"),
+                2 => format!(":nth-{last}child({a}n{b:+} of .a)"),
+                _ => format!(":nth-{last}child({a}n{b:+})"),
+            });
         }
     }
     s
@@ -262,13 +287,27 @@ fn prev_elements<'a>(el: NodeRef<'a>) -> impl Iterator<Item = NodeRef<'a>> {
     std::iter::successors(el.prev_sibling(), |n| n.prev_sibling()).filter(|n| n.is_element())
 }
 
+fn next_elements<'a>(el: NodeRef<'a>) -> impl Iterator<Item = NodeRef<'a>> {
+    std::iter::successors(el.next_sibling(), |n| n.next_sibling()).filter(|n| n.is_element())
+}
+
 fn compound_matches(p: &Part, el: NodeRef<'_>) -> bool {
     el.is_element()
         && p.tag.is_none_or(|t| el.tag_name() == Some(t))
         && p.class.is_none_or(|c| el.has_class(c))
-        && p.nth.is_none_or(|(a, b)| {
-            let pos = prev_elements(el).count() as i32 + 1;
-            (0..=100).any(|n| a * n + b == pos)
+        && p.nth.is_none_or(|n| {
+            let counts = |s: &NodeRef<'_>| match n.kind {
+                1 => s.tag_name() == el.tag_name(),
+                2 => s.has_class("a"),
+                _ => true,
+            };
+            let before = if n.last {
+                next_elements(el).filter(counts).count()
+            } else {
+                prev_elements(el).filter(counts).count()
+            };
+            let pos = before as i32 + 1;
+            (n.kind != 2 || el.has_class("a")) && (0..=100).any(|k| n.a * k + n.b == pos)
         })
 }
 
@@ -330,7 +369,17 @@ proptest! {
         match Selector::parse(&s) {
             Ok(sel) => {
                 prop_assert_eq!(&by_str, &node_ids(dom.select(&sel)));
+                // One shared memo for the query vs a fresh one per node.
                 prop_assert_eq!(&by_str, &node_ids(dom.nodes().filter(|n| sel.matches(*n))));
+                if !s.contains("scope") && !s.contains('\\') {
+                    for node in dom.nodes() {
+                        let scoped = node.descendants().filter(|d| by_str.contains(&d.id()));
+                        prop_assert_eq!(node_ids(node.select(&sel)), node_ids(scoped));
+                        let up = std::iter::once(node).chain(node.ancestors());
+                        let closest = up.filter(|n| by_str.contains(&n.id())).map(|n| n.id()).next();
+                        prop_assert_eq!(node.closest(&sel).map(|n| n.id()), closest);
+                    }
+                }
 
                 // `:is(S)` is `S`, and `:not(S)` is its complement.
                 let is = Selector::parse(&format!(":is({s})"));
@@ -370,8 +419,19 @@ fn agrees_with_naive(parts: &[Part], html: &str) -> Result<(), TestCaseError> {
     let sel = Selector::parse(&s);
     prop_assert!(sel.is_ok(), "{} failed to parse: {:?}", s, sel);
     let sel = sel.unwrap();
+    let expected = node_ids(dom.nodes().filter(|n| naive(parts, *n)));
+    // A whole query shares one memo; check it against per-node answers.
+    prop_assert_eq!(node_ids(dom.select(&sel)), expected.clone(), "{}", s);
     for node in dom.nodes() {
         prop_assert_eq!(sel.matches(node), naive(parts, node), "{} on {:?}", s, node);
+        let up = std::iter::once(node).chain(node.ancestors());
+        let closest = up
+            .filter(|n| expected.contains(&n.id()))
+            .map(|n| n.id())
+            .next();
+        prop_assert_eq!(node.closest(&sel).map(|n| n.id()), closest, "{}", s);
+        let scoped = node_ids(node.descendants().filter(|d| expected.contains(&d.id())));
+        prop_assert_eq!(node_ids(node.select(&sel)), scoped, "{}", s);
     }
     Ok(())
 }

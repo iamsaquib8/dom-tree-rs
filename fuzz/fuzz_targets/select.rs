@@ -1,6 +1,7 @@
 #![no_main]
-//! Fuzz target: any selector against any document must never panic, and the
-//! `&str` and pre-parsed `&Selector` paths must agree.
+//! Fuzz target: any selector against any document must never panic, the
+//! `&str` and pre-parsed `&Selector` paths must agree, and a whole query
+//! (one shared memo) must agree with per-node matching (a fresh memo each).
 //!
 //! Input: `<selector>\n<html>` (split on the first newline).
 //! Run with: `cargo +nightly fuzz run select`
@@ -19,6 +20,15 @@ fuzz_target!(|data: &[u8]| {
         Ok(parsed) => {
             let by_parsed: Vec<_> = dom.select(&parsed).map(|n| n.id()).collect();
             assert_eq!(by_str, by_parsed, "&str and &Selector disagree");
+            let per_node: Vec<_> = dom
+                .nodes()
+                .filter(|n| parsed.matches(*n))
+                .map(|n| n.id())
+                .collect();
+            assert_eq!(
+                by_str, per_node,
+                "memoized query and per-node matching disagree"
+            );
             for node in dom.nodes() {
                 let _ = node.closest(&parsed);
                 let _ = node.select(&parsed).count();

@@ -35,13 +35,23 @@ flowchart LR
    `Span` (byte range); this replaces thousands of small allocations with
    appends to a single buffer and is the main reason parsing is fast.
    `NodeRef<'a>` is the public, `Copy` read handle. Top-level nodes are linked as
-   siblings of each other. `Dom::remove` detaches a subtree (it stays in the
-   arena, flagged `detached`, and every iterator skips it).
-4. **Selectors** (`src/query.rs`, `query` feature) — a hand-written CSS parser
+   siblings of each other (a linked list from `first_root` to `last_root`).
+   `NodeId` is a non-zero `u32`, so `Option<NodeId>` is 4 bytes and a `Node` is
+   64 bytes. Each parsed node also records its **source range** (two `u32`s;
+   `NodeRef::source_range`, `domtree::line_col` in `src/source.rs`).
+4. **Editing** (`src/edit.rs`) — `remove`, attribute edits, `set_text`,
+   `rename`, `create_*`, `append_child` / `insert_before`, `wrap` / `unwrap`,
+   and parsed-fragment insertion. Removed and created nodes stay in the arena
+   flagged `detached` (always uniformly per subtree) and every iterator skips
+   them. While no node has been inserted mid-document, arena order *is* document
+   order and `Dom::nodes()` is a plain scan; the first insertion or move sets a
+   `reordered` flag and `nodes()` switches to an allocation-free walk of the
+   links. Moves refuse to create cycles.
+5. **Selectors** (`src/query.rs`, `query` feature) — a hand-written CSS parser
    producing a compiled `Selector`, and a right-to-left matcher. Descendant and
    `~` chains take the nearest match per segment, so matching never backtracks
    exponentially and never recurses on document depth.
-5. **Serializers** (`src/serialize/`) — `html.rs` (re-serialization), `text.rs`
+6. **Serializers** (`src/serialize/`) — `html.rs` (re-serialization), `text.rs`
    (readable text), `markdown.rs` (CommonMark + GFM), `json.rs` (zero-dependency
    JSON), `serde_impl.rs` (optional `serde`, byte-identical to `json.rs`). The
    shared `walk` in `src/serialize/mod.rs` visits a subtree using the tree's

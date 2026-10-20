@@ -57,6 +57,12 @@
 //! assert_eq!(dom.to_markdown(), "## News\n\nIt *works*!");
 //! ```
 //!
+//! ## Structure and data
+//!
+//! - [`Dom::links`] / [`Dom::resources`] — every link (with its text) and
+//!   every embedded URL, resolved against the page URL and `<base href>`
+//!   ([`resolve_url`], [`resolve_srcset`]: RFC 3986, zero-dependency).
+//!
 //! ## Features
 //!
 //! - `json` *(default)* — the zero-dependency [`Dom::to_json`] serializer.
@@ -82,11 +88,13 @@ extern crate std;
 mod builder;
 mod entities;
 mod error;
+mod extract;
 mod node;
 mod tags;
 mod token;
 mod tokenizer;
 mod tree;
+mod url;
 
 mod serialize;
 
@@ -94,10 +102,12 @@ mod serialize;
 mod query;
 
 pub use error::{ErrorKind, ParseError};
+pub use extract::{Link, Resource};
 pub use node::{NodeId, NodeKind};
 pub use token::{AttrValue, Token};
 pub use tokenizer::Tokenizer;
 pub use tree::{Descendants, Dom, NodeRef};
+pub use url::{resolve_srcset, resolve_url};
 
 #[cfg(feature = "query")]
 pub use query::{AsSelector, Selector, SelectorError};

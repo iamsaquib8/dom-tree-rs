@@ -1,15 +1,16 @@
 # Publishing & release runbook
 
-The crate, the WASM/npm package, and docs.rs. Run from a clean `main` with green
-CI.
+The library crate, the CLI crate and its prebuilt binaries, the WASM/npm package,
+and docs.rs. Run from a clean `main` with green CI. Keep all versions in lock-step
+(`Cargo.toml`, `cli/Cargo.toml`, `dom-tree-wasm/Cargo.toml`).
 
 ## 0. Pre-flight
 
 ```sh
-cargo test --all-features
-cargo clippy --all-features --all-targets -- -D warnings
+cargo test --workspace --all-features
+cargo clippy --workspace --all-features --all-targets -- -D warnings
 cargo fmt --all -- --check
-cargo +1.70.0 check --no-default-features --features json,serde,query   # MSRV
+cargo +1.85.0 check --no-default-features --features json,serde,query,markdown,std  # MSRV
 cargo doc --no-deps --all-features                                      # docs build
 cargo publish --dry-run                                                 # packaging
 ```
@@ -18,15 +19,20 @@ Bump the version in `Cargo.toml` and move the `CHANGELOG.md` "unreleased"
 section under the new version. Commit, then tag:
 
 ```sh
-git tag v0.2.0 && git push origin main --tags
+git tag v0.3.0 && git push origin main --tags
 ```
 
 ## 1. crates.io
 
 ```sh
-cargo login            # paste a token from https://crates.io/me
-cargo publish          # the main library
+cargo login                  # paste a token from https://crates.io/me
+cargo publish                # the library first…
+cargo publish -p domtree-cli # …then the CLI, which depends on it
 ```
+
+Pushing the `v*` tag runs `.github/workflows/release.yml`, which attaches
+prebuilt `domtree` binaries and `SHA256SUMS` to the GitHub release (and
+`cargo binstall domtree-cli` picks them up).
 
 docs.rs builds automatically from the published crate (config is already in
 `Cargo.toml` under `[package.metadata.docs.rs]`, building all features).

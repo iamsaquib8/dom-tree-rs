@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>dom-tree-rs playground</title>
+  <meta name="description" content="Paste messy HTML and watch a tiny Rust parser, compiled to WebAssembly, repair it, query it with CSS selectors, and turn it into text, Markdown or JSON. Runs entirely in your browser.">
+  <meta name="color-scheme" content="light dark">
+  <meta property="og:title" content="dom-tree-rs playground">
+  <meta property="og:description" content="Messy HTML in. Clean tree, text, Markdown, or JSON out. A zero-dependency Rust HTML parser with CSS selectors, running in your browser.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="modulepreload" href="pkg/dom_tree_wasm.js">
+  <link rel="preload" href="pkg/dom_tree_wasm_bg.wasm" as="fetch" type="application/wasm" crossorigin>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand">
+      <h1 class="wordmark"><span class="angle" aria-hidden="true">&lt;</span>dom-tree-rs<span class="angle" aria-hidden="true">&gt;</span></h1>
+      <p class="pitch">Messy HTML in. Clean tree, text, Markdown, or JSON out.</p>
+      <p class="sub">A zero-dependency Rust parser with CSS selectors, running right here as a <span data-wasm-size>small</span> WebAssembly module. Nothing you paste leaves this page.</p>
+    </div>
+    <nav class="links" aria-label="Project">
+      <a class="star" href="https://github.com/iamsaquib8/dom-tree-rs">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 .9l2.2 4.5 4.9.7-3.6 3.5.9 4.9L8 12.2l-4.4 2.3.9-4.9L.9 6.1l4.9-.7z"/></svg>
+        Star on GitHub
+      </a>
+      <a href="https://crates.io/crates/dom-tree-rs">crates.io</a>
+      <a href="https://www.npmjs.com/package/dom-tree-wasm">npm</a>
+      <a href="https://docs.rs/dom-tree-rs">Docs</a>
+    </nav>
+  </header>
+
+  <main class="workspace" id="workspace">
+    <section class="query" aria-label="Selector">
+      <label class="query-label" for="selector">CSS selector</label>
+      <div class="query-field">
+        <input id="selector" type="text" spellcheck="false" autocomplete="off" autocapitalize="off"
+               placeholder="Try a[href], li:nth-child(odd), p:has(> img)" aria-describedby="selector-status">
+        <span class="caret" id="selector-caret" hidden aria-hidden="true"></span>
+      </div>
+      <p class="query-status" id="selector-status" aria-live="polite"></p>
+    </section>
+
+    <section class="pane input-pane" aria-label="HTML input">
+      <div class="pane-bar">
+        <div class="presets" role="group" aria-label="Examples">
+          <span class="presets-label" id="presets-label">Examples</span>
+          <div class="preset-buttons" id="presets"></div>
+        </div>
+      </div>
+      <div class="editor" id="editor">
+        <pre class="editor-paint" id="editor-paint" aria-hidden="true"></pre>
+        <textarea id="html" spellcheck="false" autocomplete="off" autocapitalize="off"
+                  aria-label="HTML to parse"></textarea>
+      </div>
+      <div class="stats" id="stats">
+        <p class="stat"><span class="stat-value" id="stat-time">&ndash;</span> <span class="stat-label">to parse</span></p>
+        <p class="stat"><span class="stat-value" id="stat-nodes">&ndash;</span> <span class="stat-label">nodes</span></p>
+        <details class="stat repairs" id="repairs">
+          <summary><span class="stat-value" id="stat-repairs">&ndash;</span> <span class="stat-label">repairs</span></summary>
+          <div class="repairs-body">
+            <p class="repairs-note">Places where the parser fixed the markup for you. Pick one to jump to it in the editor.</p>
+            <ol class="repairs-list" id="repairs-list"></ol>
+          </div>
+        </details>
+        <p class="stat"><span class="stat-value" id="stat-size">&ndash;</span> <span class="stat-label">wasm, gzipped</span></p>
+      </div>
+    </section>
+
+    <section class="pane output-pane" aria-label="Output">
+      <div class="pane-bar output-bar">
+        <div class="tabs" role="tablist" aria-label="Output format" id="tabs">
+          <button role="tab" id="tab-matches" aria-controls="panel" data-tab="matches">Matches <span class="count" id="match-count"></span></button>
+          <button role="tab" id="tab-tree" aria-controls="panel" data-tab="tree">Tree</button>
+          <button role="tab" id="tab-text" aria-controls="panel" data-tab="text">Text</button>
+          <button role="tab" id="tab-markdown" aria-controls="panel" data-tab="markdown">Markdown</button>
+          <button role="tab" id="tab-json" aria-controls="panel" data-tab="json">JSON</button>
+          <button role="tab" id="tab-html" aria-controls="panel" data-tab="html">HTML</button>
+        </div>
+      </div>
+      <div class="panel-tools" id="panel-tools">
+        <p class="panel-caption" id="panel-caption"></p>
+        <div class="scope" id="scope" role="radiogroup" aria-label="Convert" hidden>
+          <label><input type="radio" name="scope" value="matches" checked> Matches</label>
+          <label><input type="radio" name="scope" value="document"> Whole document</label>
+        </div>
+        <div class="tree-tools" id="tree-tools" hidden>
+          <label class="check"><input type="checkbox" id="show-space"> Whitespace</label>
+          <button type="button" class="quiet" id="expand-all">Expand all</button>
+          <button type="button" class="quiet" id="collapse-all">Collapse all</button>
+        </div>
+        <button type="button" class="quiet copy" id="copy-output">Copy</button>
+      </div>
+      <div class="panel" role="tabpanel" id="panel" tabindex="0" aria-labelledby="tab-matches"></div>
+    </section>
+  </main>
+
+  <footer class="colophon">
+    <div class="install">
+      <p>Use it from your terminal:</p>
+      <div class="command">
+        <code id="cli-command">cargo install domtree-cli</code>
+        <button type="button" class="quiet" data-copy="cli-command">Copy</button>
+      </div>
+    </div>
+    <div class="install">
+      <p>Or from JavaScript:</p>
+      <div class="command">
+        <code id="npm-command">npm install dom-tree-wasm</code>
+        <button type="button" class="quiet" data-copy="npm-command">Copy</button>
+      </div>
+    </div>
+    <div class="share">
+      <button type="button" class="primary" id="copy-link">Copy link to this example</button>
+      <p class="share-note" id="share-note" aria-live="polite">The link holds your HTML, selector and tab.</p>
+    </div>
+  </footer>
+
+  <p class="boot" id="boot" role="status">Loading the parser&hellip;</p>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

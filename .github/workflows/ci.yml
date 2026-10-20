@@ -73,27 +73,53 @@ jobs:
         run: cargo build --no-default-features --features json,query,markdown --target thumbv7em-none-eabi
 
   wasm:
-    name: wasm build + size gate
+    name: wasm + npm package (build, test, size gate)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: jetli/wasm-pack-action@v0.4.0
-      - name: Build wasm (web target)
-        working-directory: dom-tree-wasm
-        run: wasm-pack build --target web --release
-      - name: Test wasm (node)
-        working-directory: dom-tree-wasm
-        run: wasm-pack test --node
-      - name: Gzipped size gate (< 30 KB)
+        with:
+          workspaces: dom-tree-wasm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - name: rustfmt + clippy (bindings)
         working-directory: dom-tree-wasm
         run: |
+          cargo fmt --check
+          # Library and tests separately: built together (--all-targets), the
+          # test-only deps switch on wasm-bindgen's `std`, which clashes with the
+          # library's own no_std panic handler.
+          cargo clippy --target wasm32-unknown-unknown --release -- -D warnings
+          cargo clippy --target wasm32-unknown-unknown --tests -- -D warnings
+      # The published feature set (json + query + markdown) is fixed in
+      # dom-tree-wasm/Cargo.toml, so this builds exactly what goes to npm.
+      - name: Build the npm package
+        working-directory: dom-tree-wasm
+        run: |
+          wasm-pack build --target web --release
+          node npm/finish.mjs
+      - name: Test the bindings (wasm-bindgen-test, Node)
+        working-directory: dom-tree-wasm
+        run: wasm-pack test --node
+      - name: Smoke-test the packed npm package in Node
+        working-directory: dom-tree-wasm
+        run: sh npm/smoke-test.sh
+      - name: Gzipped size gate (< 40 KB)
+        working-directory: dom-tree-wasm
+        run: |
+          # 0.3.0 measured ~36,600-36,800 bytes (gzip -9); the budget is that
+          # rounded up to the next 5 KB. Raise it on purpose, never by accident.
           SIZE=$(gzip -9 -c pkg/dom_tree_wasm_bg.wasm | wc -c)
-          echo "gzipped wasm: $SIZE bytes (budget 30720)"
-          test "$SIZE" -lt 30720
+          echo "gzipped wasm: $SIZE bytes (budget 40960)"
+          test "$SIZE" -lt 40960
 
   fuzz:
     name: fuzz (build + smoke)
@@ -108,3 +134,7 @@ jobs:
         run: cargo fuzz build
       - name: Smoke run (parse, 30s)
         run: cargo fuzz run parse -- -max_total_time=30
+      - name: Smoke run (select, 30s)
+        run: cargo fuzz run select -- -max_total_time=30
+      - name: Smoke run (markdown, 30s)
+        run: cargo fuzz run markdown -- -max_total_time=30

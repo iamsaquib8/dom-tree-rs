@@ -17,6 +17,8 @@ use crate::node::{Node, NodeId, NodeKind, RawKind, Span};
 pub struct Dom {
     pub(crate) nodes: Vec<Node>,
     pub(crate) strings: String,
+    /// Top-level nodes in document order. May still hold ids removed with
+    /// [`Dom::remove`]; go through [`Dom::roots`], which skips them.
     pub(crate) roots: Vec<NodeId>,
     pub(crate) errors: Vec<ParseError>,
 }
@@ -129,6 +131,9 @@ impl Dom {
     pub fn remove(&mut self, id: NodeId) {
         let Some(node) = self.node(id) else { return };
         let (parent, prev, next) = (node.parent, node.prev_sibling, node.next_sibling);
+        // Inside an already-removed subtree every descendant is flagged too, so
+        // only the links need fixing (keeps `-r div` on deep nesting linear).
+        let already_detached = node.detached;
 
         match prev {
             Some(p) => {
@@ -154,13 +159,15 @@ impl Dom {
                 }
             }
         }
-        if parent.is_none() {
-            self.roots.retain(|&r| r != id);
-        }
+        // A removed root stays in `self.roots`; `roots()`/`root()` skip
+        // detached ids, so removal never shifts the vector (O(1), not O(roots)).
         if let Some(n) = self.node_mut(id) {
             n.parent = None;
             n.prev_sibling = None;
             n.next_sibling = None;
+        }
+        if already_detached {
+            return;
         }
 
         let subtree: Vec<NodeId> = match self.get(id) {
@@ -263,12 +270,15 @@ impl Dom {
 
     /// The first top-level node (the document element for a typical page).
     pub fn root(&self) -> Option<NodeRef<'_>> {
-        self.roots.first().map(|&id| NodeRef { dom: self, id })
+        self.roots().next()
     }
 
     /// All top-level nodes, in document order.
     pub fn roots(&self) -> impl Iterator<Item = NodeRef<'_>> {
-        self.roots.iter().map(move |&id| NodeRef { dom: self, id })
+        self.roots
+            .iter()
+            .filter(move |&&id| self.node(id).is_some_and(|n| !n.detached))
+            .map(move |&id| NodeRef { dom: self, id })
     }
 
     /// Every node in the document, in document (pre-order) order. Nodes
@@ -400,11 +410,12 @@ impl<'a> NodeRef<'a> {
             .map(move |&(k, v)| (dom.span_str(k), dom.span_str(v)))
     }
 
-    /// The class names on this element.
+    /// The class names on this element. Like HTML, splits on ASCII whitespace
+    /// only, so a non-breaking space stays part of a class name.
     pub fn classes(&self) -> impl Iterator<Item = &'a str> {
         self.attr("class")
             .into_iter()
-            .flat_map(str::split_whitespace)
+            .flat_map(str::split_ascii_whitespace)
     }
 
     /// Whether this element has the given class.
@@ -537,12 +548,25 @@ impl<'a> NodeRef<'a> {
 
 impl<'a> fmt::Debug for NodeRef<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind() {
+        Dbg(*self, 0).fmt(f)
+    }
+}
+
+/// `Debug` nests one formatter frame per tree level, so deeper levels are
+/// elided to keep `{:?}` on pathological input from overflowing the stack.
+const DEBUG_MAX_DEPTH: usize = 64;
+
+struct Dbg<'a>(NodeRef<'a>, usize);
+impl<'a> fmt::Debug for Dbg<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (node, depth) = (self.0, self.1);
+        match node.kind() {
+            NodeKind::Element { .. } if depth >= DEBUG_MAX_DEPTH => f.write_str("…"),
             NodeKind::Element { tag } => f
                 .debug_struct("Element")
                 .field("tag", &tag)
-                .field("attrs", &Attrs(*self))
-                .field("children", &Kids(*self))
+                .field("attrs", &Attrs(node))
+                .field("children", &Kids(node, depth + 1))
                 .finish(),
             NodeKind::Text(t) => f.debug_tuple("Text").field(&t).finish(),
             NodeKind::Comment(c) => f.debug_tuple("Comment").field(&c).finish(),
@@ -562,10 +586,13 @@ impl<'a> fmt::Debug for Attrs<'a> {
     }
 }
 
-struct Kids<'a>(NodeRef<'a>);
+struct Kids<'a>(NodeRef<'a>, usize);
 impl<'a> fmt::Debug for Kids<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.0.children()).finish()
+        let depth = self.1;
+        f.debug_list()
+            .entries(self.0.children().map(|c| Dbg(c, depth)))
+            .finish()
     }
 }
 
@@ -602,10 +629,7 @@ impl<'a> Descendants<'a> {
             if let Some(sib) = self.dom.node(n).and_then(|nd| nd.next_sibling) {
                 return Some(sib);
             }
-            match self.dom.node(n).and_then(|nd| nd.parent) {
-                Some(p) => n = p,
-                None => return None,
-            }
+            n = self.dom.node(n).and_then(|nd| nd.parent)?;
         }
     }
 }

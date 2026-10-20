@@ -6,7 +6,7 @@
 </picture>
 
 A tiny, zero-dependency, never-panicking HTML parser with CSS selectors —
-for Rust, your shell, and JavaScript (via a ~20 KB WebAssembly module).
+for Rust, your shell, and JavaScript (via a ~38 KB gzipped WebAssembly module).
 
 [![crates.io](https://img.shields.io/crates/v/dom-tree-rs.svg?logo=rust)](https://crates.io/crates/dom-tree-rs)
 [![npm](https://img.shields.io/npm/v/dom-tree-wasm.svg?logo=npm)](https://www.npmjs.com/package/dom-tree-wasm)
@@ -85,7 +85,8 @@ npm install dom-tree-wasm
 ```
 
 ```js
-import init, { select } from "dom-tree-wasm";
+import init, { select }
+  from "dom-tree-wasm";
 await init();
 select(html, "a[href]");
 ```
@@ -106,10 +107,10 @@ select(html, "a[href]");
   favourite, `:contains("text")`.
 - **Content out, not just a tree.** Readable text (`to_text`), CommonMark/GFM
   Markdown (`to_markdown`) for LLM prompts and RAG pipelines, JSON, and HTML.
-- **Runs everywhere.** `no_std + alloc`, `#![forbid(unsafe_code)]`, a ~20 KB
+- **Runs everywhere.** `no_std + alloc`, `#![forbid(unsafe_code)]`, a ~38 KB
   gzipped wasm module for browsers, Cloudflare Workers, Deno, Bun and Node, and a
   single static binary for your shell.
-- **Fast enough.** ~250 MiB/s — within 5–15 % of [`tl`] while building an owned
+- **Fast enough.** ~250 MiB/s — within 5–15 % of [`tl`][tl] while building an owned
   tree (see [Performance](#performance)).
 
 <sub>¹ Clean debug `cargo build` of an empty crate depending only on the parser (default
@@ -215,17 +216,22 @@ echo '<ul><li>a<li>b</ul>' | domtree -p                                       # 
 
 ## JavaScript & WebAssembly
 
-The same parser in a ~20 KB (gzipped) wasm module with zero JS dependencies —
-works in the browser, Cloudflare Workers, Deno, Bun, and Node.
+The same parser — selectors, text, Markdown and all — in a ~38 KB (gzipped) wasm
+module with zero JS dependencies and full TypeScript types. Works in the browser,
+Cloudflare Workers, Deno, Bun, and Node (no setup needed in Node).
 [Package docs →](./dom-tree-wasm) · [**Playground →**](https://iamsaquib8.github.io/dom-tree-rs/)
 
 ```js
-import init, { parse, select, toMarkdown } from "dom-tree-wasm";
-await init();
+import init, { parse, select, toMarkdown, Document } from "dom-tree-wasm";
+await init(); // browsers and Workers; harmless in Node
 
-const doc = JSON.parse(parse("<ul><li>a<li>b</ul>"));  // typed tree (see dom-node.d.ts)
-const links = select(html, "a[href]");                 // [{ tag, attrs, text, html }, …]
-const md = toMarkdown(html);
+const tree = parse("<ul><li>a<li>b</ul>");   // typed tree: { type: "document", children: [...] }
+const links = select(html, "a[href]");       // [{ tag, attrs, text, html, nodeIndex }, ...]
+const md = toMarkdown(html, "article");      // just the article, as Markdown
+
+const page = new Document(html);             // parse once, query many times
+const headings = page.select("h2").map((h) => h.text);
+page.free();
 ```
 
 ## How it compares
@@ -236,7 +242,7 @@ const md = toMarkdown(html);
 | CSS selectors | **✅** | limited | ✅ | ❌ | ✅ |
 | Text / Markdown output | **✅** | ❌ | ❌ | ❌ | ❌ |
 | JSON output | **✅** | ❌ | ❌ | ❌ | ❌ |
-| WASM + npm package | **✅** | ✅ | ❌ | ❌ | ❌ |
+| WASM + npm package | **✅** | ❌ | ❌ | ❌ | ❌ |
 | CLI | **✅** | ❌ | ❌ | ❌ | ❌ |
 | `no_std` | **✅** | ❌ | ❌ | ❌ | ❌ |
 | Edit + re-serialize | basic | ❌ | ❌ | ✅ | ✅ (streaming) |
@@ -244,7 +250,7 @@ const md = toMarkdown(html);
 | WHATWG spec-compliant tree | ❌ | ❌ | ✅ | ✅ | ❌ |
 
 **When to pick something else:** if you need byte-exact browser parsing, use
-[`html5ever`]/[`scraper`]. If raw throughput is all that matters, use [`tl`]. If
+[`html5ever`][html5ever]/[`scraper`][scraper]. If raw throughput is all that matters, use [`tl`][tl]. If
 you're sanitizing untrusted HTML, use [`ammonia`](https://crates.io/crates/ammonia)
 — never a forgiving, non-spec parser.
 

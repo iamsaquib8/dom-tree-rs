@@ -41,19 +41,53 @@ pub fn resolve(base: &str, reference: &str) -> String {
     t.join()
 }
 
-/// Resolve every URL in a `srcset` value (`"a.png 1x, b.png 2x"`).
+/// Resolve every URL in a `srcset` value (`"a.png 1x, b.png 2x"`), following
+/// the HTML candidate-parsing rules: a URL is a run of non-whitespace (commas
+/// inside it are kept, trailing ones stripped), descriptors run to the next
+/// top-level comma, and empty candidates are dropped.
 pub fn resolve_srcset(base: &str, srcset: &str) -> String {
-    srcset
-        .split(',')
-        .map(|candidate| {
-            let candidate = candidate.trim();
-            match candidate.split_once(char::is_whitespace) {
-                Some((url, descriptor)) => format!("{} {}", resolve(base, url), descriptor.trim()),
-                None => resolve(base, candidate),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
+    let mut out: Vec<String> = Vec::new();
+    let mut rest = srcset;
+    loop {
+        rest = rest.trim_start_matches(|c: char| c.is_ascii_whitespace() || c == ',');
+        if rest.is_empty() {
+            break;
+        }
+        let url_end = rest
+            .find(|c: char| c.is_ascii_whitespace())
+            .unwrap_or(rest.len());
+        let (raw_url, after) = rest.split_at(url_end);
+        let url = raw_url.trim_end_matches(',');
+        // A URL that ended in a comma ends its candidate: no descriptors.
+        let (descriptors, next) = if url.len() < raw_url.len() {
+            ("", after)
+        } else {
+            split_descriptors(after)
+        };
+        let resolved = resolve(base, url);
+        let descriptors = descriptors.split_whitespace().collect::<Vec<_>>().join(" ");
+        out.push(if descriptors.is_empty() {
+            resolved
+        } else {
+            format!("{resolved} {descriptors}")
+        });
+        rest = next;
+    }
+    out.join(", ")
+}
+
+/// Split descriptors off at the next comma outside parentheses.
+fn split_descriptors(s: &str) -> (&str, &str) {
+    let mut depth = 0usize;
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => return (&s[..i], &s[i + 1..]),
+            _ => {}
+        }
+    }
+    (s, "")
 }
 
 struct Parts<'a> {
@@ -219,6 +253,40 @@ mod tests {
         assert_eq!(
             resolve_srcset("https://x.dev/p/", "a.png 1x, /b.png 2x"),
             "https://x.dev/p/a.png 1x, https://x.dev/b.png 2x"
+        );
+    }
+
+    #[test]
+    fn srcset_keeps_commas_inside_urls() {
+        assert_eq!(
+            resolve_srcset(
+                "https://x.dev/",
+                "https://c.io/up/c_fill,w_300/a.jpg 300w, https://c.io/up/c_fill,w_600/a.jpg 600w"
+            ),
+            "https://c.io/up/c_fill,w_300/a.jpg 300w, https://c.io/up/c_fill,w_600/a.jpg 600w"
+        );
+    }
+
+    #[test]
+    fn srcset_edge_cases() {
+        let base = "https://x.dev/p/";
+        assert_eq!(
+            resolve_srcset(base, "a.png 1x,"),
+            "https://x.dev/p/a.png 1x"
+        );
+        assert_eq!(
+            resolve_srcset(base, " ,, a.png, b.png 2x"),
+            "https://x.dev/p/a.png, https://x.dev/p/b.png 2x"
+        );
+        // Per the HTML spec a URL is a run of non-whitespace, so this is one URL.
+        assert_eq!(
+            resolve_srcset(base, "a.png,b.png 2x"),
+            "https://x.dev/p/a.png,b.png 2x"
+        );
+        assert_eq!(resolve_srcset(base, ""), "");
+        assert_eq!(
+            resolve_srcset(base, "a.png  100w ,b.png"),
+            "https://x.dev/p/a.png 100w, https://x.dev/p/b.png"
         );
     }
 }

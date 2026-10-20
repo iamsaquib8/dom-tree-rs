@@ -90,6 +90,41 @@ fn inline_code() {
     assert_eq!(md("<code>*not* [md]</code>"), "`*not* [md]`");
     assert_eq!(md("<p>x<code> </code>y</p>"), "xy");
     assert_eq!(md("<kbd>Ctrl</kbd>+<kbd>C</kbd>"), "`Ctrl`+`C`");
+    assert_eq!(md("<p><code>a</code> b</p>"), "`a` b");
+}
+
+#[test]
+fn adjacent_identical_spans_merge() {
+    // `**a****b**` / `*a**b*` would misparse (rule of 3).
+    assert_eq!(md("<b>a</b><b>b</b>"), "**ab**");
+    assert_eq!(md("<em>a</em><em>b</em>"), "*ab*");
+    assert_eq!(md("<strong>a</strong><b>b</b>c"), "**ab**c");
+    assert_eq!(md("<del>a</del><s>b</s>"), "~~ab~~");
+    assert_eq!(md("<b><i>a</i></b><b><i>b</i></b>"), "***ab***");
+    assert_eq!(md("<b><i>a</i></b><b>b</b>"), "***a*b**");
+    assert_eq!(md("<p><b>a</b><br><b>b</b></p>"), "**a**\\\n**b**");
+    // Whitespace already keeps them apart.
+    assert_eq!(md("<b>a</b> <b>b</b>"), "**a** **b**");
+    // Links never merge.
+    assert_eq!(md("<a href=x>a</a><a href=x>b</a>"), "[a](x)[b](x)");
+}
+
+#[test]
+fn adjacent_code_spans_merge() {
+    // Two spans side by side would read as one span with literal backticks.
+    assert_eq!(md("<code>a</code><code>b</code>"), "`ab`");
+    assert_eq!(md("<code>a`</code><code>b</code>"), "``a`b``");
+    assert_eq!(md("<b><code>a</code></b><b><code>b</code></b>"), "**`ab`**");
+    assert_eq!(md("<code>a</code> <code>b</code>"), "`a` `b`");
+    assert_eq!(md("<p><code>a</code><br><code>b</code></p>"), "`a`\\\n`b`");
+    assert_eq!(md("<code>a</code><b><code>b</code></b>"), "`a`**`b`**");
+}
+
+#[test]
+fn known_limitation_emphasis_flanking() {
+    // CommonMark won't close `**` between punctuation and a letter, so this
+    // renders without bold; the text itself is exact. Documented in the module.
+    assert_eq!(md("<b>Note:</b>Text"), "**Note:**Text");
 }
 
 #[test]
@@ -196,6 +231,63 @@ fn ordered_lists() {
     assert_eq!(md("<ol start='0'><li>z</li></ol>"), "0. z");
     assert_eq!(md("<ol start='junk'><li>a</li></ol>"), "1. a");
     assert_eq!(md("<ol><li></li><li>a</li></ol>"), "1. a");
+    // CommonMark has no negative numbers (`-3.` would be a bullet): clamp to 0.
+    assert_eq!(md("<ol start='-3'><li>a</li></ol>"), "0. a");
+    assert_eq!(
+        md("<ol start='99999999999'><li>a</li></ol>"),
+        "999999999. a"
+    );
+}
+
+#[test]
+fn list_item_values_and_reversed_lists() {
+    // Numbers are what a browser shows (renderers only honour the first).
+    assert_eq!(md("<ol><li>a<li value=7>b<li>c</ol>"), "1. a\n7. b\n8. c");
+    assert_eq!(md("<ol><li value=4>a<li>b</ol>"), "4. a\n5. b");
+    assert_eq!(md("<ol reversed><li>a<li>b<li>c</ol>"), "3. a\n2. b\n1. c");
+    assert_eq!(md("<ol reversed start=10><li>a<li>b</ol>"), "10. a\n9. b");
+    assert_eq!(md("<ol reversed start=1><li>a<li>b</ol>"), "1. a\n0. b");
+    // `reversed` means nothing on a bullet list.
+    assert_eq!(md("<ul reversed><li>a<li>b</ul>"), "- a\n- b");
+}
+
+#[test]
+fn adjacent_lists_stay_separate() {
+    // Same marker after a blank line would continue the first list.
+    assert_eq!(md("<ul><li>a</li></ul><ul><li>b</li></ul>"), "- a\n\n* b");
+    assert_eq!(
+        md("<ul><li>a</li></ul><ul><li>b</li></ul><ul><li>c</li></ul>"),
+        "- a\n\n* b\n\n- c"
+    );
+    assert_eq!(
+        md("<ol><li>a</li></ol><ol start=5><li>b</li></ol>"),
+        "1. a\n\n5) b"
+    );
+    assert_eq!(
+        md("<ul><li>x<ul><li>a</li></ul><ul><li>b</li></ul></li></ul>"),
+        "- x\n  - a\n\n  * b"
+    );
+    // Wrappers that leave no trace in Markdown don't separate them either.
+    assert_eq!(
+        md("<div><ul><li>a</li></ul></div><!-- c --><div><ul><li>b</li></ul></div>"),
+        "- a\n\n* b"
+    );
+    assert_eq!(
+        md("<ul><li>a<ul><li>x</li></ul></li></ul><ul><li>b</li></ul>"),
+        "- a\n  - x\n\n* b"
+    );
+    // Anything in between, or a different kind, already separates them.
+    assert_eq!(
+        md("<ul><li>a</li></ul><p>p</p><ul><li>b</li></ul>"),
+        "- a\n\np\n\n- b"
+    );
+    assert_eq!(md("<ul><li>a</li></ul><ol><li>b</li></ol>"), "- a\n\n1. b");
+    assert_eq!(md("<ul><li>*</li></ul><ul><li>b</li></ul>"), "- \\*\n\n* b");
+    // Lists in different items are apart already: no switch needed.
+    assert_eq!(
+        md("<ul><li><ul><li>a</li></ul></li><li><ul><li>b</li></ul></li></ul>"),
+        "- - a\n- - b"
+    );
 }
 
 #[test]
@@ -281,10 +373,21 @@ fn tables() {
         md("<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>"),
         "| a | b |\n| --- | --- |\n| c | d |"
     );
-    // A `<thead>` row is the header even if it is not first.
+    // Rows are never reordered: a later `<thead>`/`<th>` row stays where it is
+    // and the first row is the header.
     assert_eq!(
         md("<table><tbody><tr><td>1</td></tr></tbody><thead><tr><td>H</td></tr></thead></table>"),
-        "| H |\n| --- |\n| 1 |"
+        "| 1 |\n| --- |\n| H |"
+    );
+    assert_eq!(
+        md("<table><tr><td>a</td></tr><tr><th>H</th></tr></table>"),
+        "| a |\n| --- |\n| H |"
+    );
+    assert_eq!(
+        md(
+            "<table><thead><tr><th>H</th></tr></thead><tr><td>a</td></tr><tr><th>H2</th></tr></table>"
+        ),
+        "| H |\n| --- |\n| a |\n| H2 |"
     );
 }
 
@@ -321,9 +424,14 @@ fn ragged_tables_are_padded() {
 
 #[test]
 fn table_extras() {
-    // Captions and stray text inside the table come before it.
+    // Captions and stray text inside the table come before it — where a
+    // browser draws them, even when the source puts them after the rows.
     assert_eq!(
         md("<table><caption>Cap</caption><tr><td>a</td></tr></table>"),
+        "Cap\n\n| a |\n| --- |"
+    );
+    assert_eq!(
+        md("<table><tr><td>a</td></tr><caption>Cap</caption></table>"),
         "Cap\n\n| a |\n| --- |"
     );
     assert_eq!(md("<table></table><p>x</p>"), "x");
@@ -352,6 +460,12 @@ fn definition_lists() {
 fn hidden_elements_are_skipped() {
     assert_eq!(
         md("<head><title>T</title></head><p>a<script>x</script><style>s</style>b</p>"),
+        "ab"
+    );
+    // `<title>` is metadata even without a `<head>` around it.
+    assert_eq!(md("<!doctype html><title>T</title><p>x</p>"), "x");
+    assert_eq!(
+        md("<p>a<datalist><option>o</option></datalist><noembed>n</noembed>b</p>"),
         "ab"
     );
     assert_eq!(

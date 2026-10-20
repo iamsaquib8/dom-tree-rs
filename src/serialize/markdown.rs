@@ -8,6 +8,17 @@
 //! a list marker or its continuation indent). Containers nested deeper than
 //! [`MAX_NEST`] are flattened rather than indented further, which bounds the
 //! per-line work and the output size; their content is still emitted.
+//!
+//! Closing markers and code spans are held back until the next write, so
+//! adjacent identical spans merge (`<b>a</b><b>b</b>` → `**ab**`, not the
+//! misparsed `**a****b**`). Adjacent lists of the same kind alternate markers
+//! (`-`/`*`, `.`/`)`) so they stay separate lists.
+//!
+//! Known limitation: CommonMark's flanking rules mean emphasis does not render
+//! when a marker sits between punctuation inside and a letter outside, e.g.
+//! `<b>Note:</b>Text` → `**Note:**Text`. The text is still exact; only the
+//! styling is lost. There is no pure-Markdown spelling of it that keeps the
+//! text unchanged.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -25,6 +36,10 @@ const MAX_NEST: usize = 32;
 /// Tables wider than this are not padded to a rectangle (GFM fills in the
 /// missing cells), so a ragged table cannot blow up the output quadratically.
 const MAX_PAD: usize = 64;
+
+/// CommonMark list numbers have at most nine digits and are never negative
+/// (`-3.` would read as a bullet), so numbers are clamped to `0..=MAX_NUMBER`.
+const MAX_NUMBER: i64 = 999_999_999;
 
 impl Dom {
     /// Convert the document to Markdown (CommonMark + GFM tables and
@@ -94,6 +109,17 @@ struct Wrap<'a> {
     spaced: bool,
 }
 
+impl Wrap<'_> {
+    /// Whether the opening marker still has to be written before content. A
+    /// link already written in an earlier block is not repeated.
+    fn pending(&self) -> bool {
+        match self.mark {
+            Mark::Link(_) => !self.used,
+            _ => !self.open,
+        }
+    }
+}
+
 /// A container that prefixes each line written inside it.
 enum Prefix {
     /// `> `; `true` once a line has been written through it.
@@ -105,6 +131,11 @@ enum Prefix {
 
 struct List {
     ordered: bool,
+    /// `<ol reversed>`: numbers count down.
+    reversed: bool,
+    /// Uses the alternate marker (`*` or `)`), to stay apart from the list
+    /// right before it.
+    alt: bool,
     next: u32,
     /// Whether an item has been written (later items then follow tightly).
     written: bool,
@@ -122,9 +153,8 @@ struct Code<'a> {
 /// A GFM table being collected; it is written when the `<table>` closes.
 #[derive(Default)]
 struct Table {
-    rows: Vec<(bool, Vec<String>)>,
+    rows: Vec<Vec<String>>,
     cells: Vec<String>,
-    head: bool,
 }
 
 /// What an open element changed, undone when it closes.
@@ -157,12 +187,21 @@ struct Markdown<'a> {
     sep: u8,
     prefixes: Vec<Prefix>,
     lists: Vec<List>,
+    /// The last list to close: (container depth, output length then, ordered,
+    /// alternate marker). A list of the same kind opening right there must
+    /// switch markers, or Markdown would merge the two.
+    last_list: Option<(usize, usize, bool, bool)>,
     frames: Vec<Frame>,
     /// The current paragraph's inline Markdown (hard breaks are `\` + `\n`).
     line: String,
     space: bool,
     breaks: u8,
     wraps: Vec<Wrap<'a>>,
+    /// Closing markers of spans that just ended, held back so an adjacent span
+    /// of the same kind can continue instead.
+    closing: Vec<Mark<'a>>,
+    /// An inline code span held back so adjacent `<code>`s join into one.
+    code_run: String,
     heading: u8,
     /// Depth of contexts that only take inline content (headings, table cells).
     inline_only: u32,
@@ -201,7 +240,9 @@ impl<'a> Markdown<'a> {
         let top = self.inline_only == 0;
         match tag {
             "br" if !top => self.space = true,
-            "br" if !self.line.is_empty() => self.breaks = (self.breaks + 1).min(2),
+            "br" if !self.line.is_empty() || !self.code_run.is_empty() => {
+                self.breaks = (self.breaks + 1).min(2);
+            }
             "hr" if top => {
                 self.block(&mut f);
                 self.begin_block();
@@ -241,13 +282,26 @@ impl<'a> Markdown<'a> {
                 self.sep(if nested { 1 } else { 2 });
                 f.block = true;
                 if self.prefixes.len() < MAX_NEST {
-                    // CommonMark allows at most nine digits.
-                    let start = node
-                        .attr("start")
-                        .and_then(|s| s.trim().parse::<i64>().ok());
+                    let ordered = tag == "ol";
+                    let reversed = ordered && node.has_attr("reversed");
+                    let start = number(node.attr("start")).unwrap_or_else(|| {
+                        if reversed {
+                            let items =
+                                node.child_elements().filter(|c| c.tag_name() == Some("li"));
+                            items.count() as i64
+                        } else {
+                            1
+                        }
+                    });
+                    // Right after a list of the same kind (nothing between)?
+                    let depth = self.prefixes.len();
+                    let alt = matches!(self.last_list, Some((d, at, o, false))
+                        if d == depth && at == self.out.len() && o == ordered);
                     self.lists.push(List {
-                        ordered: tag == "ol",
-                        next: start.map_or(1, |n| n.clamp(0, 999_999_999) as u32),
+                        ordered,
+                        reversed,
+                        alt,
+                        next: start.clamp(0, MAX_NUMBER) as u32,
                         written: false,
                     });
                     f.list = true;
@@ -257,6 +311,13 @@ impl<'a> Markdown<'a> {
                 self.flush();
                 let list = self.frames.last().filter(|p| p.list);
                 let list = list.and_then(|_| self.lists.len().checked_sub(1));
+                // `<li value>` renumbers from this item on.
+                if let (Some(l), Some(v)) = (
+                    list.and_then(|i| self.lists.get_mut(i)),
+                    number(node.attr("value")),
+                ) {
+                    l.next = v.clamp(0, MAX_NUMBER) as u32;
+                }
                 // Items of one list are tight: a single newline between them.
                 if list
                     .and_then(|i| self.lists.get(i))
@@ -269,6 +330,7 @@ impl<'a> Markdown<'a> {
                 f.block = true;
                 if self.prefixes.len() < MAX_NEST {
                     self.prefixes.push(Prefix::Item { list, width: 0 });
+                    self.last_list = None; // a list in a new item is apart anyway
                     f.prefix = true;
                 } else {
                     self.sep(2);
@@ -288,17 +350,15 @@ impl<'a> Markdown<'a> {
             }
             "tr" | "td" | "th" if top && self.table.is_some() => {
                 self.flush(); // stray text inside a table goes before it
-                if let Some(t) = &mut self.table {
-                    if tag == "tr" {
+                if tag == "tr" {
+                    if let Some(t) = &mut self.table {
                         t.end_row();
-                        t.head = node.parent().and_then(|p| p.tag_name()) == Some("thead");
-                        f.role = Role::Row;
-                    } else {
-                        t.head |= tag == "th";
-                        self.inline_only += 1;
-                        f.role = Role::Cell;
-                        f.inline = true;
                     }
+                    f.role = Role::Row;
+                } else {
+                    self.inline_only += 1;
+                    f.role = Role::Cell;
+                    f.inline = true;
                 }
             }
             "td" | "th" => {
@@ -360,7 +420,9 @@ impl<'a> Markdown<'a> {
             self.prefixes.pop();
         }
         if f.list {
-            self.lists.pop();
+            if let Some(l) = self.lists.pop() {
+                self.last_list = Some((self.prefixes.len(), self.out.len(), l.ordered, l.alt));
+            }
         }
         if f.block {
             self.sep(2);
@@ -403,9 +465,11 @@ impl<'a> Markdown<'a> {
         }
     }
 
-    /// Settle pending whitespace, hard breaks and opening markers before
-    /// inline content.
+    /// Settle what is held back — a code span and closing markers — then
+    /// pending whitespace, hard breaks and opening markers, before inline
+    /// content.
     fn inline(&mut self) {
+        self.settle();
         if !self.line.is_empty() {
             if self.breaks > 0 {
                 for _ in 0..self.breaks {
@@ -417,11 +481,7 @@ impl<'a> Markdown<'a> {
         }
         self.breaks = 0;
         self.space = false;
-        for w in self.wraps.iter_mut().filter(|w| !w.open) {
-            // A link already written in an earlier block is not repeated.
-            if w.used && matches!(w.mark, Mark::Link(_)) {
-                continue;
-            }
+        for w in self.wraps.iter_mut().filter(|w| w.pending()) {
             w.open = true;
             w.used = true;
             self.line.push_str(match w.mark {
@@ -430,6 +490,17 @@ impl<'a> Markdown<'a> {
                 Mark::Strike => "~~",
                 Mark::Link(_) => "[",
             });
+        }
+    }
+
+    /// Write the held-back code span and closing markers.
+    fn settle(&mut self) {
+        if !self.code_run.is_empty() {
+            push_code_span(&mut self.line, &self.code_run);
+            self.code_run.clear();
+        }
+        for mark in self.closing.drain(..) {
+            push_close(&mut self.line, mark);
         }
     }
 
@@ -443,10 +514,22 @@ impl<'a> Markdown<'a> {
         {
             return false;
         }
+        // The same span just ended (`<b>a</b><b>b</b>`): carry on with it.
+        let resume = !matches!(mark, Mark::Link(_))
+            && !self.space
+            && self.breaks == 0
+            && self
+                .closing
+                .last()
+                .is_some_and(|m| mem::discriminant(m) == kind)
+            && !self.wraps.iter().any(Wrap::pending);
+        if resume {
+            self.closing.pop();
+        }
         self.wraps.push(Wrap {
             mark,
-            open: false,
-            used: false,
+            open: resume,
+            used: resume,
             spaced: self.space,
         });
         true
@@ -468,7 +551,7 @@ impl<'a> Markdown<'a> {
         }
         if let Some(w) = self.wraps.pop() {
             if w.open {
-                push_close(&mut self.line, w.mark);
+                self.closing.push(w.mark);
             }
         }
     }
@@ -522,19 +605,19 @@ impl<'a> Markdown<'a> {
         if text.is_empty() {
             return;
         }
-        self.inline();
-        // The fence must be longer than any backtick run inside.
-        let fence = longest_run(&text, '`') + 1;
-        let pad = text.starts_with('`') || text.ends_with('`');
-        push_n(&mut self.line, '`', fence);
-        if pad {
-            self.line.push(' ');
+        // Right after another span (`<code>a</code><code>b</code>`): join them,
+        // since two spans side by side would parse as one with a literal fence.
+        let adjacent = !self.code_run.is_empty()
+            && self.closing.is_empty()
+            && !self.space
+            && self.breaks == 0
+            && !self.wraps.iter().any(Wrap::pending);
+        if adjacent {
+            self.code_run.push_str(&text);
+        } else {
+            self.inline();
+            self.code_run = text;
         }
-        self.line.push_str(&text);
-        if pad {
-            self.line.push(' ');
-        }
-        push_n(&mut self.line, '`', fence);
     }
 
     // --- blocks -----------------------------------------------------------
@@ -564,6 +647,7 @@ impl<'a> Markdown<'a> {
     /// Close the markers open in the current line (they reopen lazily if the
     /// element continues into the next block) and drop pending whitespace.
     fn finish_line(&mut self) {
+        self.settle();
         for w in self.wraps.iter_mut().rev().filter(|w| w.open) {
             w.open = false;
             push_close(&mut self.line, w.mark);
@@ -616,12 +700,16 @@ impl<'a> Markdown<'a> {
                     let at = out.len();
                     match list.and_then(|i| lists.get_mut(i)) {
                         Some(l) if l.ordered => {
-                            let _ = write!(out, "{}. ", l.next);
-                            l.next = l.next.saturating_add(1).min(999_999_999);
+                            let _ = write!(out, "{}{} ", l.next, if l.alt { ')' } else { '.' });
+                            l.next = if l.reversed {
+                                l.next.saturating_sub(1)
+                            } else {
+                                l.next.saturating_add(1).min(MAX_NUMBER as u32)
+                            };
                             l.written = true;
                         }
                         Some(l) => {
-                            out.push_str("- ");
+                            out.push_str(if l.alt { "* " } else { "- " });
                             l.written = true;
                         }
                         None => out.push_str("- "),
@@ -685,28 +773,24 @@ impl<'a> Markdown<'a> {
 
     fn emit_table(&mut self, mut table: Table) {
         table.end_row();
-        let cols = table.rows.iter().map(|(_, r)| r.len()).max().unwrap_or(0);
-        if cols == 0 {
+        let cols = table.rows.iter().map(Vec::len).max().unwrap_or(0);
+        let Some((head, body)) = table.rows.split_first().filter(|_| cols > 0) else {
             return;
-        }
-        // GFM needs a header: the first `<th>`/`<thead>` row, else the first row.
-        let head = table.rows.iter().position(|(h, _)| *h).unwrap_or(0);
+        };
+        // GFM needs a header row: the first row is it, whatever its cells are,
+        // so rows are never reordered.
         let pad = if cols <= MAX_PAD { cols } else { 0 };
         self.sep(2);
         self.begin_block();
-        if let Some((_, cells)) = table.rows.get(head) {
-            push_row(&mut self.out, cells, cols);
-        }
+        push_row(&mut self.out, head, cols);
         self.next_line(false);
         self.out.push('|');
         for _ in 0..cols {
             self.out.push_str(" --- |");
         }
-        for (i, (_, cells)) in table.rows.iter().enumerate() {
-            if i != head {
-                self.next_line(false);
-                push_row(&mut self.out, cells, pad);
-            }
+        for cells in body {
+            self.next_line(false);
+            push_row(&mut self.out, cells, pad);
         }
     }
 
@@ -746,10 +830,29 @@ impl Code<'_> {
 impl Table {
     fn end_row(&mut self) {
         if !self.cells.is_empty() {
-            self.rows.push((self.head, mem::take(&mut self.cells)));
+            self.rows.push(mem::take(&mut self.cells));
         }
-        self.head = false;
     }
+}
+
+/// An integer attribute value (`start`, `value`).
+fn number(value: Option<&str>) -> Option<i64> {
+    value.and_then(|v| v.trim().parse().ok())
+}
+
+/// An inline code span; its fence is longer than any backtick run inside.
+fn push_code_span(out: &mut String, text: &str) {
+    let fence = longest_run(text, '`') + 1;
+    let pad = text.starts_with('`') || text.ends_with('`');
+    push_n(out, '`', fence);
+    if pad {
+        out.push(' ');
+    }
+    out.push_str(text);
+    if pad {
+        out.push(' ');
+    }
+    push_n(out, '`', fence);
 }
 
 /// The language of a code block, from `class="language-x"` (or `lang-x`) on

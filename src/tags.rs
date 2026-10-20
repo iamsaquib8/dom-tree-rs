@@ -109,9 +109,8 @@ pub(crate) enum Display {
 /// The [`Display`] of an element, by lower-cased tag name.
 pub(crate) fn display(name: &str) -> Display {
     match name {
-        "head" | "script" | "style" | "template" | "noscript" | "iframe" | "object" | "svg" => {
-            Display::Hidden
-        }
+        "head" | "title" | "script" | "style" | "template" | "noscript" | "noembed" | "iframe"
+        | "object" | "svg" | "datalist" => Display::Hidden,
         "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "blockquote" | "pre" | "ul" | "ol"
         | "menu" | "dl" | "table" | "hr" => Display::Paragraph,
         "address" | "article" | "aside" | "body" | "caption" | "center" | "dd" | "details"

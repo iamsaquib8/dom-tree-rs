@@ -36,6 +36,18 @@ shell, and in JavaScript.
   `--json`, `--count`, `--first`; zero dependencies. Prebuilt binaries are
   attached to GitHub releases.
 
+- **`dom-tree-wasm` 0.3.0** (npm): `parse` now returns a typed object
+  (`parseJson` keeps the string); new `select`, `selectFirst`, `toText`,
+  `toMarkdown`, `toHtml`, `errors`, and a parse-once `Document` class. Invalid
+  selectors throw a `SelectorError` with a position. Full TypeScript types,
+  works in Node with no setup, ~38 KB gzipped. **Breaking:** `parseErrorCount`
+  and `query` are removed, and `dom-node.d.ts` is replaced by the generated
+  types.
+- **Live playground** on GitHub Pages: paste HTML, try selectors, and see the
+  tree, text, Markdown, JSON and repaired HTML, all running locally in wasm.
+- `CODE_OF_CONDUCT.md`, `SECURITY.md`, `docs/ARCHITECTURE.md`, issue and PR
+  templates.
+
 ### Changed
 - Top-level nodes are now linked as siblings (`next_sibling`/`prev_sibling`),
   so sibling combinators and `:first-child` work on multi-root fragments.

@@ -127,3 +127,37 @@ fn select_skips_removed_nodes_and_sees_sibling_roots() {
     assert_eq!(left, ["a", "c"]);
     assert_eq!(dom.select("li + li").count(), 1);
 }
+
+#[test]
+fn removing_nested_chains_is_linear() {
+    // Ancestors first, like `domtree -r div`: each later remove() hits an
+    // already-detached node and must not re-walk its subtree.
+    let html = "<div>".repeat(20_000);
+    let mut dom = parse(&html);
+    let ids: Vec<_> = dom.find_by_tag("div").map(|n| n.id()).collect();
+    let start = std::time::Instant::now();
+    for id in ids {
+        dom.remove(id);
+    }
+    assert!(start.elapsed().as_secs() < 2, "took {:?}", start.elapsed());
+    assert_eq!(dom.nodes().count(), 0);
+    assert_eq!(dom.roots().count(), 0);
+
+    // Many top-level removals don't shift the roots vector each time.
+    let mut dom = parse(&"<p>x</p>".repeat(50_000));
+    let ids: Vec<_> = dom.find_by_tag("p").map(|n| n.id()).collect();
+    let start = std::time::Instant::now();
+    for id in ids.iter().step_by(2) {
+        dom.remove(*id);
+    }
+    assert!(start.elapsed().as_secs() < 2, "took {:?}", start.elapsed());
+    assert_eq!(dom.roots().count(), 25_000);
+    assert_eq!(dom.root().map(|r| r.id()), Some(ids[1]));
+}
+
+#[test]
+fn debug_output_survives_deep_nesting() {
+    let dom = parse(&"<b>".repeat(100_000));
+    let s = format!("{dom:?}");
+    assert!(s.contains('…'));
+}

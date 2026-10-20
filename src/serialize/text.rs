@@ -68,6 +68,9 @@ struct Text {
     fresh: bool,
     /// Depth of lists; a nested list has no blank lines around it.
     lists: u32,
+    /// At the start of a table cell, whose separator (tab or row break) is
+    /// already owed: a block opening inside it adds no line break.
+    cell: bool,
 }
 
 impl Text {
@@ -115,15 +118,32 @@ impl Text {
                 let end = self.out.trim_end().len();
                 self.out.truncate(end);
             }
-            "td" | "th" if enter && is_cell(node.prev_element_sibling()) => self.tabs += 1,
+            "td" | "th" if enter => {
+                if is_cell(node.prev_element_sibling()) {
+                    self.breaks = 0;
+                    self.tabs += 1;
+                }
+                self.cell = true;
+            }
+            "td" | "th" => {
+                // Breaks owed after the cell's own text (a closing `<p>`, a
+                // trailing `<br>`) end with the cell: the next cell or row
+                // decides what follows. An empty cell keeps its row's break.
+                if !self.cell {
+                    self.breaks = 0;
+                }
+                self.cell = false;
+            }
             _ => {}
         }
         true
     }
 
     fn newlines(&mut self, n: u8) {
-        self.breaks = self.breaks.max(n);
-        self.tabs = 0;
+        if !self.cell {
+            self.breaks = self.breaks.max(n);
+            self.tabs = 0;
+        }
     }
 
     fn collapse(&mut self, text: &str) {
@@ -155,8 +175,17 @@ impl Text {
         if self.out.is_empty() {
             // Nothing to separate from: leading separators are dropped.
         } else if self.breaks > 0 {
-            let have = self.out.bytes().rev().take_while(|&b| b == b'\n').count();
-            for _ in have..usize::from(self.breaks) {
+            // Newlines already there (from `<pre>` text) count; look no further
+            // back than needed, or long blank runs would make this quadratic.
+            let want = usize::from(self.breaks);
+            let have = self
+                .out
+                .bytes()
+                .rev()
+                .take(want)
+                .take_while(|&b| b == b'\n')
+                .count();
+            for _ in have..want {
                 self.out.push('\n');
             }
             for _ in 0..self.tabs {
@@ -172,6 +201,7 @@ impl Text {
         self.breaks = 0;
         self.tabs = 0;
         self.space = false;
+        self.cell = false;
     }
 
     fn finish(mut self) -> String {

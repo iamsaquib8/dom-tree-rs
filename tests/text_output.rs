@@ -15,6 +15,12 @@ fn hidden_elements_are_skipped() {
         text("<head><title>T</title><style>p{}</style></head><p>Body</p>"),
         "Body"
     );
+    // `<title>` is metadata even without a `<head>` around it.
+    assert_eq!(text("<!doctype html><title>T</title><p>x</p>"), "x");
+    assert_eq!(
+        text("<p>a<datalist><option>o</option></datalist><noembed>n</noembed>b</p>"),
+        "ab"
+    );
     assert_eq!(
         text(
             "<p>a<script>x()</script><noscript>no js</noscript><template><p>t</p></template>b</p>"
@@ -115,6 +121,31 @@ fn table_cells_are_tab_separated() {
     assert_eq!(
         text("<table><tr><td>a<td>b<tr><td>c<td>d</table>"),
         "a\tb\nc\td"
+    );
+}
+
+#[test]
+fn blocks_inside_cells_keep_the_row_together() {
+    assert_eq!(
+        text("<table><tr><td>a</td><td><div>b</div></td></tr></table>"),
+        "a\tb"
+    );
+    assert_eq!(
+        text(
+            "<table><tr><td><p>a</p></td><td><p>b</p></td></tr>\
+             <tr><td><div>c</div></td><td>d<br></td><td>e</td></tr></table>"
+        ),
+        "a\tb\nc\td\te"
+    );
+    // Breaks within a cell still break.
+    assert_eq!(
+        text("<table><tr><td><p>a</p><p>b</p></td><td>c</td></tr></table>"),
+        "a\n\nb\tc"
+    );
+    // A row break is not swallowed by an empty cell.
+    assert_eq!(
+        text("<table><tr><td>a</td><td></td></tr><tr><td>b</td></tr></table>"),
+        "a\nb"
     );
 }
 

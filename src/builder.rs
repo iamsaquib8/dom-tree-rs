@@ -42,10 +42,7 @@ pub(crate) fn parse_document(src: &str) -> Dom {
 
                 // Implicit close: pop open elements that this start tag closes.
                 // They end where this tag starts.
-                while let Some(top) = open.top() {
-                    if !tags::implicitly_closes(&lname, open_name(&dom, top)) {
-                        break;
-                    }
+                while open.top().is_some() && tags::implicitly_closes(&lname, open.top_name(&dom)) {
                     open.pop(&mut dom, pos);
                     dom.errors
                         .push(ParseError::new(pos, ErrorKind::ImplicitlyClosed));
@@ -78,7 +75,7 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 dom.append(parent, id);
 
                 if !self_closing && !tags::is_void(&lname) {
-                    open.push(&dom, id, &lname);
+                    open.push(&dom, id, name_span);
                 }
             }
 
@@ -110,18 +107,19 @@ pub(crate) fn parse_document(src: &str) -> Dom {
                 if t.is_empty() {
                     continue;
                 }
-                // Real text means an omitted `</head>` or `</colgroup>`.
-                if open
-                    .top()
-                    .is_some_and(|top| tags::text_closes(open_name(&dom, top)))
-                    && t.bytes().any(|b| !b.is_ascii_whitespace())
-                {
+                let (raw, closes) = {
+                    let top = open.top_name(&dom);
+                    (tags::is_raw_text(top), tags::text_closes(top))
+                };
+                // Real text means an omitted `</head>` or `</colgroup>` (neither
+                // is raw text, nor is what they sit in).
+                if closes && t.bytes().any(|b| !b.is_ascii_whitespace()) {
                     open.pop(&mut dom, pos);
                     dom.errors
                         .push(ParseError::new(pos, ErrorKind::ImplicitlyClosed));
                 }
                 let parent = open.top();
-                let span = if parent.is_some_and(|p| tags::is_raw_text(open_name(&dom, p))) {
+                let span = if raw {
                     dom.intern(t)
                 } else {
                     let (decoded, unknown) = entities::decode(t);
@@ -161,11 +159,11 @@ pub(crate) fn parse_document(src: &str) -> Dom {
         }
     }
 
-    if !open.ids.is_empty() {
+    if !open.stack.is_empty() {
         dom.errors
             .push(ParseError::new(src.len(), ErrorKind::ImplicitlyClosed));
         // Everything still open runs to the end of the input.
-        for &id in &open.ids {
+        for &(id, _) in &open.stack {
             if let Some(n) = dom.node_mut(id) {
                 n.src.set_end(src.len());
             }
@@ -193,29 +191,39 @@ const DEEP: usize = 64;
 /// real document — skip the bookkeeping, since their scans are short anyway.
 #[derive(Default)]
 struct OpenElements {
-    ids: Vec<NodeId>,
+    /// Open elements with their interned (lower-cased) tag names, innermost
+    /// last. Keeping the name here saves an arena lookup per check.
+    stack: Vec<(NodeId, Span)>,
     counts: Option<BTreeMap<Box<str>, u32>>,
 }
 
 impl OpenElements {
     #[inline]
     fn top(&self) -> Option<NodeId> {
-        self.ids.last().copied()
+        self.stack.last().map(|&(id, _)| id)
+    }
+
+    /// The current node's tag name (`""` when nothing is open).
+    #[inline]
+    fn top_name<'d>(&self, dom: &'d Dom) -> &'d str {
+        self.stack
+            .last()
+            .map_or("", |&(_, name)| dom.span_str(name))
     }
 
     #[inline]
     fn len(&self) -> usize {
-        self.ids.len()
+        self.stack.len()
     }
 
-    fn push(&mut self, dom: &Dom, id: NodeId, name: &str) {
-        self.ids.push(id);
+    fn push(&mut self, dom: &Dom, id: NodeId, name: Span) {
+        self.stack.push((id, name));
         match &mut self.counts {
-            Some(counts) => count_up(counts, name),
-            None if self.ids.len() > DEEP => {
+            Some(counts) => count_up(counts, dom.span_str(name)),
+            None if self.stack.len() > DEEP => {
                 let mut counts = BTreeMap::new();
-                for &open in &self.ids {
-                    count_up(&mut counts, open_name(dom, open));
+                for &(_, open) in &self.stack {
+                    count_up(&mut counts, dom.span_str(open));
                 }
                 self.counts = Some(counts);
             }
@@ -224,19 +232,24 @@ impl OpenElements {
     }
 
     /// Pop the current node, recording that its source range ends at `at`.
+    #[inline]
     fn pop(&mut self, dom: &mut Dom, at: usize) {
-        let Some(id) = self.ids.pop() else { return };
+        let Some((id, name)) = self.stack.pop() else {
+            return;
+        };
         if let Some(n) = dom.node_mut(id) {
             n.src.set_end(at);
         }
-        if self.ids.len() < DEEP / 2 {
-            self.counts = None;
-        } else if let Some(counts) = &mut self.counts {
-            let name = open_name(dom, id);
-            if let Some(c) = counts.get_mut(name) {
-                *c = c.saturating_sub(1);
-                if *c == 0 {
-                    counts.remove(name);
+        if let Some(counts) = &mut self.counts {
+            if self.stack.len() < DEEP / 2 {
+                self.counts = None;
+            } else {
+                let name = dom.span_str(name);
+                if let Some(c) = counts.get_mut(name) {
+                    *c = c.saturating_sub(1);
+                    if *c == 0 {
+                        counts.remove(name);
+                    }
                 }
             }
         }
@@ -247,7 +260,9 @@ impl OpenElements {
         if self.counts.as_ref().is_some_and(|c| !c.contains_key(name)) {
             return None;
         }
-        self.ids.iter().rposition(|&id| open_name(dom, id) == name)
+        self.stack
+            .iter()
+            .rposition(|&(_, open)| dom.span_str(open) == name)
     }
 }
 
@@ -257,14 +272,6 @@ fn count_up(counts: &mut BTreeMap<Box<str>, u32>, name: &str) {
         None => {
             counts.insert(name.into(), 1);
         }
-    }
-}
-
-/// The lower-cased tag name of an open element, looked up in the arena.
-fn open_name(dom: &Dom, id: NodeId) -> &str {
-    match dom.node(id).map(|n| &n.raw) {
-        Some(RawKind::Element { name, .. }) => dom.span_str(*name),
-        _ => "",
     }
 }
 

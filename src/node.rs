@@ -7,18 +7,37 @@
 //! parsing is fast despite producing an owned tree.
 
 use alloc::vec::Vec;
+use core::fmt;
+use core::num::NonZeroU32;
 use core::ops::Range;
 
 /// A handle to a node inside a [`Dom`](crate::Dom). Cheap (`Copy`) and stable
 /// for the lifetime of the tree.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct NodeId(pub(crate) u32);
+//
+// Stored as index + 1 so that `Option<NodeId>` is 4 bytes: every node holds
+// five tree links, so this keeps a node at 64 bytes.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeId(NonZeroU32);
 
 impl NodeId {
+    /// The id of arena slot `index`. (Saturates past `u32::MAX - 1` nodes,
+    /// which no arena that fits in memory reaches.)
+    #[inline]
+    pub(crate) fn from_index(index: usize) -> Self {
+        let index = u32::try_from(index).unwrap_or(u32::MAX);
+        NodeId(NonZeroU32::MIN.saturating_add(index))
+    }
+
     /// The node's position in the arena.
     #[inline]
     pub fn index(self) -> usize {
-        self.0 as usize
+        (self.0.get() - 1) as usize
+    }
+}
+
+impl fmt::Debug for NodeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("NodeId").field(&self.index()).finish()
     }
 }
 
@@ -96,9 +115,11 @@ impl SrcRange {
     }
 
     /// Move the end (an element's range grows when it is closed).
+    #[inline]
     pub(crate) fn set_end(&mut self, end: usize) {
-        if *self != SrcRange::NONE {
-            *self = SrcRange::new(self.start as usize, end);
+        match u32::try_from(end) {
+            Ok(end) if self.start < u32::MAX && self.start <= end => self.end = end,
+            _ => *self = SrcRange::NONE,
         }
     }
 
@@ -136,5 +157,25 @@ impl Node {
             src,
             raw,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nodes_stay_small() {
+        // Parse speed is mostly memory traffic: keep a node in one cache line.
+        assert_eq!(core::mem::size_of::<Option<NodeId>>(), 4);
+        assert!(core::mem::size_of::<Node>() <= 64);
+    }
+
+    #[test]
+    fn node_id_round_trips_its_index() {
+        for i in [0, 1, 41, u32::MAX as usize - 1] {
+            assert_eq!(NodeId::from_index(i).index(), i);
+        }
+        assert_eq!(alloc::format!("{:?}", NodeId::from_index(7)), "NodeId(7)");
     }
 }

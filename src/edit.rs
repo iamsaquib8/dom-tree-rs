@@ -154,8 +154,8 @@ impl Dom {
     /// the copies of its top-level nodes. `frag` was only ever appended to, so
     /// its arena holds exactly its document and ids shift by a constant.
     fn graft(&mut self, frag: &Dom) -> Vec<NodeId> {
-        let base = self.nodes.len() as u32;
-        let shift = |id: Option<NodeId>| id.map(|NodeId(i)| NodeId(base.saturating_add(i)));
+        let base = self.nodes.len();
+        let shift = |id: Option<NodeId>| id.map(|i| NodeId::from_index(base + i.index()));
         self.nodes.reserve(frag.nodes.len());
         for node in &frag.nodes {
             let mut copy = |s: Span| self.intern(frag.span_str(s));

@@ -61,7 +61,7 @@ impl Dom {
     }
 
     pub(crate) fn alloc(&mut self, raw: RawKind, src: SrcRange) -> NodeId {
-        let id = NodeId(self.nodes.len() as u32);
+        let id = NodeId::from_index(self.nodes.len());
         self.nodes.push(Node::new(raw, src));
         id
     }
@@ -283,7 +283,7 @@ impl<'a> Iterator for Nodes<'a> {
         let id = match &mut self.order {
             Order::Arena(i) => loop {
                 let node = dom.nodes.get(*i)?;
-                let id = NodeId(*i as u32);
+                let id = NodeId::from_index(*i);
                 *i += 1;
                 if !node.detached {
                     break id;

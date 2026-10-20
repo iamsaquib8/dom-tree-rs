@@ -607,3 +607,107 @@ fn very_deep_documents_do_not_overflow_the_stack() {
     assert!(!root.matches(":has(p)"));
     assert_eq!(root.select(":scope span").count(), 1);
 }
+
+/// Time `f` (excluding document parsing). Each block takes ~0.1–0.3 s in a
+/// debug build; the quadratic matching it guards against takes 30 s to
+/// minutes. The bound leaves ~10x headroom so a busy CI machine can't trip it.
+fn fast<T>(what: &str, f: impl FnOnce() -> T) -> T {
+    let start = Instant::now();
+    let out = f();
+    let elapsed = start.elapsed();
+    assert!(elapsed < Duration::from_secs(3), "{what} took {elapsed:?}");
+    out
+}
+
+#[test]
+fn wide_sibling_lists_stay_linear() {
+    let n = 50_000;
+    let list = parse(&format!("<ul>{}</ul>", "<li>x</li> ".repeat(n)));
+    fast("nth-* over 50k siblings", || {
+        assert_eq!(list.select("li:nth-child(odd)").count(), n / 2);
+        assert_eq!(list.select("li:nth-child(2n+1)").count(), n / 2);
+        assert_eq!(list.select("li:nth-child(n+3)").count(), n - 2);
+        assert_eq!(list.select("li:nth-child(-n+3)").count(), 3);
+        assert_eq!(list.select("li:nth-last-child(odd)").count(), n / 2);
+        assert_eq!(list.select("li:nth-of-type(3n)").count(), n / 3);
+        assert_eq!(list.select("li:nth-last-of-type(2n)").count(), n / 2);
+        // Items 2..=n count, so item k is at position k - 1.
+        let of_s = "li:nth-child(even of :not(:first-child))";
+        assert_eq!(list.select(of_s).count(), n / 2 - 1);
+        assert_eq!(list.select("li:last-child").count(), 1);
+    });
+    let flat = parse(&format!("<div><h2>t</h2>{}</div>", "<p>x</p>".repeat(n)));
+    fast("~ over 50k siblings", || {
+        assert_eq!(flat.select("h2 ~ p").count(), n);
+        assert_eq!(flat.select("h2 + p ~ p").count(), n - 1);
+        assert_eq!(flat.select("h3 ~ p").count(), 0);
+    });
+}
+
+#[test]
+fn nested_nth_of_selectors_are_memoized() {
+    let dom = parse(&format!("<ul>{}</ul>", "<li>x</li>".repeat(1_000)));
+    let nested = "li:nth-child(n of :nth-child(n of :nth-child(n of :nth-child(n of li))))";
+    fast("4 nested `of` over 1k siblings", || {
+        assert_eq!(dom.select(nested).count(), 1_000);
+        let odd = "li:nth-child(odd of :nth-child(odd of :nth-child(odd of li)))";
+        assert_eq!(dom.select(odd).count(), 125);
+    });
+}
+
+#[test]
+fn deep_descendant_searches_are_memoized() {
+    let n = 100_000;
+    let spans = |open: &str, close: &str| {
+        parse(&format!(
+            "{open}{}{}{close}",
+            "<span>".repeat(n),
+            "</span>".repeat(n)
+        ))
+    };
+    let bare = spans("", "");
+    let wrapped = spans("<div>", "</div>");
+    fast("descendant searches over 100k nested spans", || {
+        assert_eq!(bare.select("div span").count(), 0); // no ancestor ever matches
+        assert_eq!(wrapped.select("div span").count(), n); // the same one always does
+        assert_eq!(wrapped.select("div > span span").count(), n - 1);
+        assert_eq!(wrapped.select(":root span").count(), n);
+        assert_eq!(bare.select("span:not(:root) span").count(), n - 2);
+    });
+}
+
+#[test]
+fn has_arguments_depend_on_their_subject() {
+    // Each `:has()` subject is matched on its own, even though both subjects
+    // share siblings (or ancestors) with each other.
+    let dom = parse("<div><h2 id=h1></h2><i class=x></i><h2 id=h2></h2><q></q><p></p></div>");
+    assert_eq!(sel(&dom, "h2:has(+ .x ~ p)"), ["h1"]);
+    let dom = parse("<div id=d1><div class=x><div id=d2><p></p></div></div></div>");
+    assert_eq!(sel(&dom, "div:has(.x p)"), ["d1"]);
+}
+
+#[test]
+fn enumerated_attribute_values_ignore_case() {
+    let dom = parse(
+        r#"<form id=f method=POST><input id=t TYPE=Text><a id=a rel="NoFollow" hreflang=EN-gb data-k=Foo></a></form>"#,
+    );
+    // HTML's enumerated attributes compare ASCII case-insensitively...
+    assert_eq!(sel(&dom, "[type=text]"), ["t"]);
+    assert_eq!(sel(&dom, "form[method=post]"), ["f"]);
+    assert_eq!(sel(&dom, "[rel~=nofollow]"), ["a"]);
+    assert_eq!(sel(&dom, "[hreflang|=en]"), ["a"]);
+    // ...unless `s` says otherwise; other attributes stay case-sensitive.
+    assert_eq!(sel(&dom, "[type=text s]"), NONE);
+    assert_eq!(sel(&dom, "[type=Text s]"), ["t"]);
+    assert_eq!(sel(&dom, "[data-k=foo]"), NONE);
+    assert_eq!(sel(&dom, "[data-k=foo i]"), ["a"]);
+}
+
+#[test]
+fn class_lists_split_on_ascii_whitespace_only() {
+    let dom = parse("<p id=nbsp class=\"a\u{a0}b\"></p><p id=ws class=\"c\td\ne\u{c}f\rg\"></p>");
+    assert_eq!(sel(&dom, ".a"), NONE); // U+00A0 is part of the class name
+    assert_eq!(sel(&dom, ".a\\a0 b"), ["nbsp"]);
+    assert_eq!(sel(&dom, ".c.d.e.f.g"), ["ws"]);
+    assert_eq!(sel(&dom, "[class~=f]"), ["ws"]);
+}

@@ -37,7 +37,11 @@
 //!
 //! - Tag names, attribute names and pseudo-class names are ASCII
 //!   case-insensitive; attribute values, ids and classes are case-sensitive
-//!   (unless the attribute selector has the ` i` flag).
+//!   (unless the attribute selector has the ` i` flag). As in browsers, the
+//!   values of HTML's enumerated attributes (the HTML spec's list: `type`,
+//!   `method`, `dir`, `rel`, `lang`, `target`, …) compare case-insensitively
+//!   unless the selector says ` s`, so `[type=text]` matches `type=TEXT`.
+//! - Class lists split on ASCII whitespace only, as in HTML.
 //! - Structural pseudo-classes and sibling combinators count **elements only**;
 //!   text and comment nodes are skipped.
 //! - Top-level nodes have no parent but are siblings of each other (as if
@@ -48,11 +52,14 @@
 //!   [`Selector::matches`] it is the same as `:root`.
 //!
 //! Matching never recurses on document depth and never backtracks
-//! exponentially: a descendant chain like `div div div span` costs time
-//! linear in the candidate's depth, so 100k-deep documents are fine.
-//! `:has()` and `:contains()` scan each candidate's subtree (iteratively), and
-//! each level of argument nesting multiplies the work, so prefer flat
-//! selectors on very large documents.
+//! exponentially. Within one query ([`Dom::select`], [`NodeRef::select`],
+//! [`NodeRef::closest`]) it memoizes `:nth-*` positions (including
+//! `of S`, nested or not) and the nearest-match searches behind descendant and
+//! `~` combinators, so selectors like `li:nth-child(odd)`, `h2 ~ p` or
+//! `div span` stay roughly linear on 50k-wide lists and 100k-deep nesting.
+//! Exceptions: `:has()` and `:contains()` scan each candidate's subtree, and
+//! a lone [`Selector::matches`] call starts with an empty memo (prefer
+//! `select` for bulk work).
 //!
 //! ## Deliberately missing
 //!
@@ -63,9 +70,9 @@
 //! rather than being silently ignored. Arguments nest at most 32 levels deep.
 
 use alloc::borrow::Cow;
-use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::cell::RefCell;
 use core::fmt;
 use core::str::FromStr;
 
@@ -91,8 +98,11 @@ const MAX_DEPTH: u32 = 32;
 /// `:enabled`, CSS escapes (`.md\:flex`), and the non-standard jQuery-style
 /// `:contains("text")` (case-sensitive substring of the text content).
 /// Tag, attribute and pseudo-class names are ASCII case-insensitive; ids,
-/// classes and attribute values are case-sensitive. Anything else (`:hover`,
-/// `::before`, namespaces, …) is a parse error, never silently ignored.
+/// classes and attribute values are case-sensitive, except the values of
+/// HTML's enumerated attributes (`type`, `method`, `dir`, `rel`, …), which
+/// compare case-insensitively as in browsers unless the selector says ` s`.
+/// Anything else (`:hover`, `::before`, namespaces, …) is a parse error, never
+/// silently ignored.
 ///
 /// Sibling combinators and positional pseudo-classes count elements only.
 /// Top-level nodes count as siblings of each other, so `li + li` works on a
@@ -138,6 +148,7 @@ impl Selector {
             pos: 0,
             depth: 0,
             in_has: false,
+            slots: 0,
         };
         let list = p.list(false)?;
         match p.peek() {
@@ -161,10 +172,16 @@ impl Selector {
     /// assert!(!Selector::parse("h2:empty").unwrap().matches(h2));
     /// ```
     pub fn matches(&self, node: NodeRef<'_>) -> bool {
-        self.matches_in(node, Ctx::default())
+        self.matches_in(node, None, &Memo::default())
     }
 
-    fn matches_in(&self, node: NodeRef<'_>, cx: Ctx) -> bool {
+    /// Match with `:scope` set to `scope`, sharing `memo` across one query.
+    fn matches_in<'a>(&self, node: NodeRef<'a>, scope: Option<NodeId>, memo: &Memo<'a>) -> bool {
+        let cx = Ctx {
+            scope,
+            anchor: None,
+            memo,
+        };
         any_matches(&self.list, node, cx)
     }
 }
@@ -293,8 +310,9 @@ impl Dom {
         selector: &S,
     ) -> impl Iterator<Item = NodeRef<'a>> {
         let sel = selector.as_selector();
+        let memo = Memo::default();
         self.nodes()
-            .filter(move |n| sel.as_ref().is_some_and(|s| s.matches(*n)))
+            .filter(move |n| sel.as_ref().is_some_and(|s| s.matches_in(*n, None, &memo)))
     }
 
     /// The first element (in document order) matching a CSS selector.
@@ -332,9 +350,9 @@ impl<'a> NodeRef<'a> {
         selector: &'s S,
     ) -> impl Iterator<Item = NodeRef<'a>> + use<'a, 's, S> {
         let sel = selector.as_selector();
-        let cx = Ctx::scoped(self.id());
+        let (scope, memo) = (Some(self.id()), Memo::default());
         self.descendants()
-            .filter(move |n| sel.as_ref().is_some_and(|s| s.matches_in(*n, cx)))
+            .filter(move |n| sel.as_ref().is_some_and(|s| s.matches_in(*n, scope, &memo)))
     }
 
     /// The first descendant (in document order) matching `selector`; see
@@ -361,7 +379,7 @@ impl<'a> NodeRef<'a> {
     pub fn matches<S: AsSelector + ?Sized>(&self, selector: &S) -> bool {
         selector
             .as_selector()
-            .is_some_and(|s| s.matches_in(*self, Ctx::scoped(self.id())))
+            .is_some_and(|s| s.matches_in(*self, Some(self.id()), &Memo::default()))
     }
 
     /// The nearest element matching `selector`, starting with this node itself
@@ -376,10 +394,10 @@ impl<'a> NodeRef<'a> {
     /// ```
     pub fn closest<S: AsSelector + ?Sized>(&self, selector: &S) -> Option<NodeRef<'a>> {
         let sel = selector.as_selector()?;
-        let cx = Ctx::scoped(self.id());
+        let (scope, memo) = (Some(self.id()), Memo::default());
         core::iter::once(*self)
             .chain(self.ancestors())
-            .find(|n| sel.matches_in(*n, cx))
+            .find(|n| sel.matches_in(*n, scope, &memo))
     }
 }
 
@@ -392,6 +410,11 @@ impl<'a> NodeRef<'a> {
 struct Complex {
     compounds: Vec<Compound>,
     combs: Vec<Comb>,
+    /// First [`Memo`] slot of this selector's searches (one per combinator).
+    slot: u32,
+    /// A `:has()` argument: matches depend on the `:has()` subject, so its
+    /// searches aren't memoized.
+    relative: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -458,6 +481,8 @@ struct Nth {
     of_type: bool,
     /// `:nth-child(An+B of S)`; empty when absent.
     of: Vec<Complex>,
+    /// [`Memo`] slot for positions (and `of S` misses).
+    slot: u32,
 }
 
 impl Simple {
@@ -480,6 +505,8 @@ struct Parser<'s> {
     pos: usize,
     depth: u32,
     in_has: bool,
+    /// [`Memo`] slots handed out so far.
+    slots: u32,
 }
 
 impl<'s> Parser<'s> {
@@ -514,6 +541,14 @@ impl<'s> Parser<'s> {
         self.pos > start
     }
 
+    /// Reserve `n` consecutive [`Memo`] slots; returns the first.
+    fn reserve(&mut self, n: usize) -> u32 {
+        let first = self.slots;
+        let n = u32::try_from(n).unwrap_or(u32::MAX);
+        self.slots = first.saturating_add(n);
+        first
+    }
+
     fn error<T>(&self, at: usize, message: impl Into<String>) -> Result<T, SelectorError> {
         Err(SelectorError {
             position: at,
@@ -523,7 +558,10 @@ impl<'s> Parser<'s> {
 
     fn unexpected<T>(&self) -> Result<T, SelectorError> {
         match self.peek() {
-            Some(c) => self.error(self.pos, format!("unexpected '{c}'")),
+            Some(c) => self.error(
+                self.pos,
+                ["unexpected '", c.encode_utf8(&mut [0; 4]), "'"].concat(),
+            ),
             None => self.error(self.pos, "unexpected end of selector"),
         }
     }
@@ -590,7 +628,12 @@ impl<'s> Parser<'s> {
         }
         compounds.reverse();
         combs.reverse();
-        Ok(Complex { compounds, combs })
+        Ok(Complex {
+            slot: self.reserve(combs.len()),
+            compounds,
+            combs,
+            relative,
+        })
     }
 
     fn compound(&mut self) -> Result<Compound, SelectorError> {
@@ -733,7 +776,9 @@ impl<'s> Parser<'s> {
             _ => self.unquoted()?,
         };
         self.ws();
-        let mut ci = false;
+        // As in browsers, HTML's enumerated attributes compare
+        // case-insensitively unless the selector says ` s`.
+        let mut ci = CASE_INSENSITIVE_ATTRS.contains(&name.as_str());
         if let Some(flag @ ('i' | 'I' | 's' | 'S')) = self.peek() {
             self.pos += 1;
             ci = flag.eq_ignore_ascii_case(&'i');
@@ -778,6 +823,7 @@ impl<'s> Parser<'s> {
         }
         let name = self.name()?.to_ascii_lowercase();
         if !self.eat('(') {
+            let slot = self.reserve(1);
             let nth = |last, of_type| {
                 Simple::Nth(Nth {
                     a: 0,
@@ -785,6 +831,7 @@ impl<'s> Parser<'s> {
                     last,
                     of_type,
                     of: Vec::new(),
+                    slot,
                 })
             };
             return Ok(match name.as_str() {
@@ -800,7 +847,7 @@ impl<'s> Parser<'s> {
                 "checked" => Simple::Checked,
                 "disabled" => Simple::Disabled,
                 "enabled" => Simple::Enabled,
-                _ => return self.error(at, format!("unsupported pseudo-class ':{name}'")),
+                _ => return self.error(at, ["unsupported pseudo-class ':", &name, "'"].concat()),
             });
         }
         self.ws();
@@ -818,7 +865,7 @@ impl<'s> Parser<'s> {
             "nth-child" | "nth-last-child" | "nth-of-type" | "nth-last-of-type" => {
                 self.nth(&name)?
             }
-            _ => return self.error(at, format!("unsupported pseudo-class ':{name}()'")),
+            _ => return self.error(at, ["unsupported pseudo-class ':", &name, "()'"].concat()),
         };
         self.ws();
         if !self.eat(')') {
@@ -865,6 +912,7 @@ impl<'s> Parser<'s> {
             last: name.starts_with("nth-last"),
             of_type,
             of,
+            slot: self.reserve(1),
         }))
     }
 
@@ -928,6 +976,18 @@ impl<'s> Parser<'s> {
     }
 }
 
+/// Attributes whose values HTML matches ASCII case-insensitively in selectors
+/// (the HTML spec's list, "case-sensitivity of selectors").
+#[rustfmt::skip]
+const CASE_INSENSITIVE_ATTRS: &[&str] = &[
+    "accept", "accept-charset", "align", "alink", "axis", "bgcolor", "charset", "checked", "clear",
+    "codetype", "color", "compact", "declare", "defer", "dir", "direction", "disabled", "enctype",
+    "face", "frame", "hreflang", "http-equiv", "lang", "language", "link", "media", "method",
+    "multiple", "nohref", "noresize", "noshade", "nowrap", "readonly", "rel", "rev", "rules",
+    "scope", "scrolling", "selected", "shape", "target", "text", "type", "valign", "valuetype",
+    "vlink",
+];
+
 fn is_name_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '-' || c == '_' || !c.is_ascii()
 }
@@ -935,24 +995,123 @@ fn is_name_char(c: char) -> bool {
 // --- matching ------------------------------------------------------------
 
 /// Per-query context.
-#[derive(Clone, Copy, Default)]
-struct Ctx {
+#[derive(Clone, Copy)]
+struct Ctx<'m, 'a> {
     /// What `:scope` matches (`None`: the document, i.e. top-level elements).
     scope: Option<NodeId>,
     /// The subject of the `:has()` currently being evaluated.
     anchor: Option<NodeId>,
+    memo: &'m Memo<'a>,
 }
 
-impl Ctx {
-    fn scoped(scope: NodeId) -> Ctx {
-        Ctx {
-            scope: Some(scope),
-            anchor: None,
+/// Per-query memo, so one query stays roughly linear on wide and deep
+/// documents instead of re-walking the same siblings or ancestors for every
+/// candidate. Each `:nth-*` and each combinator owns a slot (numbered at parse
+/// time) whose table, indexed by node, fills in on demand. Entries depend only
+/// on the selector, the document and `:scope`, all fixed for one query.
+#[derive(Default)]
+struct Memo<'a> {
+    tables: RefCell<Vec<Vec<u32>>>,
+    /// Results of memoized searches; table entries point here (index + 1).
+    hits: RefCell<Vec<(NodeRef<'a>, usize)>>,
+}
+
+/// Table entry: not computed yet.
+const UNKNOWN: u32 = 0;
+/// Table entry: a search found nothing / an element fails `:nth-*(… of S)`.
+const NONE: u32 = u32::MAX;
+
+impl<'a> Memo<'a> {
+    fn get(&self, slot: u32, node: NodeRef<'_>) -> u32 {
+        let Ok(tables) = self.tables.try_borrow() else {
+            return UNKNOWN;
+        };
+        tables
+            .get(slot as usize)
+            .and_then(|t| t.get(node.id().index()))
+            .copied()
+            .unwrap_or(UNKNOWN)
+    }
+
+    fn set(&self, slot: u32, node: NodeRef<'_>, value: u32) {
+        let Ok(mut tables) = self.tables.try_borrow_mut() else {
+            return;
+        };
+        let slot = slot as usize;
+        if tables.len() <= slot {
+            tables.resize_with(slot + 1, Vec::new);
+        }
+        if let Some(table) = tables.get_mut(slot) {
+            let i = node.id().index();
+            if table.len() <= i {
+                table.resize(i + 1, UNKNOWN);
+            }
+            if let Some(entry) = table.get_mut(i) {
+                *entry = value;
+            }
+        }
+    }
+
+    /// The first node from `start` on (following `next`) where `test`
+    /// succeeds. With a `slot`, every node walked is recorded with the result,
+    /// so a later search that reaches one of them stops right there.
+    fn search(
+        &self,
+        slot: Option<u32>,
+        start: Option<NodeRef<'a>>,
+        next: impl Fn(NodeRef<'a>) -> Option<NodeRef<'a>>,
+        test: impl Fn(NodeRef<'a>) -> Option<(NodeRef<'a>, usize)>,
+    ) -> Option<(NodeRef<'a>, usize)> {
+        let mut walked = Vec::new();
+        let mut cur = start;
+        let found = loop {
+            let Some(n) = cur else { break None };
+            if let Some(slot) = slot {
+                if let Some(known) = self.known(slot, n) {
+                    break known;
+                }
+                walked.push(n);
+            }
+            if let Some(hit) = test(n) {
+                break Some(hit);
+            }
+            cur = next(n);
+        };
+        if let Some(slot) = slot {
+            let value = match found {
+                None => Some(NONE),
+                Some(hit) => self.push_hit(hit),
+            };
+            if let Some(value) = value {
+                for n in walked {
+                    self.set(slot, n, value);
+                }
+            }
+        }
+        found
+    }
+
+    /// Store a search result; returns its table entry.
+    fn push_hit(&self, hit: (NodeRef<'a>, usize)) -> Option<u32> {
+        let mut hits = self.hits.try_borrow_mut().ok()?;
+        hits.push(hit);
+        u32::try_from(hits.len()).ok().filter(|&v| v != NONE)
+    }
+
+    /// A recorded search result for `node`, if there is one.
+    fn known(&self, slot: u32, node: NodeRef<'_>) -> Option<Option<(NodeRef<'a>, usize)>> {
+        match self.get(slot, node) {
+            UNKNOWN => None,
+            NONE => Some(None),
+            hit => {
+                let hits = self.hits.try_borrow().ok()?;
+                Some(Some(*hits.get(hit as usize - 1)?))
+            }
         }
     }
 }
 
-fn any_matches(list: &[Complex], el: NodeRef<'_>, cx: Ctx) -> bool {
+fn any_matches<'a>(list: &[Complex], el: NodeRef<'a>, cx: Ctx<'_, 'a>) -> bool {
     list.iter().any(|c| c.matches(el, cx))
 }
 
@@ -962,62 +1121,76 @@ fn any_matches(list: &[Complex], el: NodeRef<'_>, cx: Ctx) -> bool {
 // chunk (run) it suffices to take the *nearest* ancestor (preceding sibling)
 // where it matches: a farther one only leaves fewer candidates for the rest
 // (a chunk always ends the same number of `>` levels above where it started).
-// So a match costs at most ancestors × siblings × selector length instead of
-// exponential time, and it loops instead of recursing on the document.
+// Those nearest-match searches are memoized per starting node, so across a
+// whole query each node is walked past about once per combinator. Everything
+// loops; nothing recurses on the document.
 impl Complex {
-    fn matches(&self, el: NodeRef<'_>, cx: Ctx) -> bool {
+    fn matches<'a>(&self, el: NodeRef<'a>, cx: Ctx<'_, 'a>) -> bool {
         let Some((mut el, mut i)) = self.chunk(0, el, cx) else {
             return false;
         };
         // Any remaining combinator is a descendant one.
         while self.combs.get(i).is_some() {
-            let mut up = el.parent();
-            (el, i) = loop {
-                let Some(a) = up else { return false };
-                if let Some(hit) = self.chunk(i + 1, a, cx) {
-                    break hit;
-                }
-                up = a.parent();
-            };
+            let up = |a: NodeRef<'a>| a.parent();
+            let found = cx
+                .memo
+                .search(self.slot(i), el.parent(), up, |a| self.chunk(i + 1, a, cx));
+            let Some(hit) = found else { return false };
+            (el, i) = hit;
         }
         true
     }
 
     /// Match compounds `i..` linked by `>`, `+` and `~`, anchored at `el`.
     /// Returns the element the last of them matched, and its index.
-    fn chunk<'a>(&self, i: usize, el: NodeRef<'a>, cx: Ctx) -> Option<(NodeRef<'a>, usize)> {
+    fn chunk<'a>(
+        &self,
+        i: usize,
+        el: NodeRef<'a>,
+        cx: Ctx<'_, 'a>,
+    ) -> Option<(NodeRef<'a>, usize)> {
         let (mut el, mut i) = self.run(i, el, cx)?;
         while self.combs.get(i) == Some(&Comb::Later) {
-            let mut prev = prev_element(el);
-            (el, i) = loop {
-                let p = prev?;
-                if let Some(hit) = self.run(i + 1, p, cx) {
-                    break hit;
-                }
-                prev = prev_element(p);
-            };
+            let prev = |p: NodeRef<'a>| p.prev_element_sibling();
+            (el, i) = cx
+                .memo
+                .search(self.slot(i), prev(el), prev, |p| self.run(i + 1, p, cx))?;
         }
         Some((el, i))
     }
 
     /// Match compounds `i..` linked by `>` and `+`, anchored at `el`.
-    fn run<'a>(&self, mut i: usize, mut el: NodeRef<'a>, cx: Ctx) -> Option<(NodeRef<'a>, usize)> {
+    fn run<'a>(
+        &self,
+        mut i: usize,
+        mut el: NodeRef<'a>,
+        cx: Ctx<'_, 'a>,
+    ) -> Option<(NodeRef<'a>, usize)> {
         loop {
             if !self.compounds.get(i)?.matches(el, cx) {
                 return None;
             }
             el = match self.combs.get(i) {
                 Some(Comb::Child) => el.parent()?,
-                Some(Comb::Next) => prev_element(el)?,
+                Some(Comb::Next) => el.prev_element_sibling()?,
                 _ => return Some((el, i)),
             };
             i += 1;
         }
     }
+
+    /// The memo slot for the search across combinator `i`; `None` (don't
+    /// memoize) for `:has()` arguments, whose matches depend on the subject.
+    fn slot(&self, i: usize) -> Option<u32> {
+        if self.relative {
+            return None;
+        }
+        u32::try_from(i).ok().and_then(|i| self.slot.checked_add(i))
+    }
 }
 
 impl Compound {
-    fn matches(&self, el: NodeRef<'_>, cx: Ctx) -> bool {
+    fn matches<'a>(&self, el: NodeRef<'a>, cx: Ctx<'_, 'a>) -> bool {
         let Some(tag) = el.tag_name() else {
             return false;
         };
@@ -1029,7 +1202,7 @@ impl Compound {
 }
 
 impl Simple {
-    fn matches(&self, el: NodeRef<'_>, cx: Ctx) -> bool {
+    fn matches<'a>(&self, el: NodeRef<'a>, cx: Ctx<'_, 'a>) -> bool {
         match self {
             Simple::Id(id) => el.attr("id") == Some(id.as_str()),
             Simple::Class(class) => el.has_class(class),
@@ -1043,8 +1216,10 @@ impl Simple {
                 .is_some_and(|have| attr_matches(*op, have, value, *ci)),
             Simple::Nth(nth) => nth.matches(el, cx),
             Simple::Only(of_type) => {
-                let same = |s: NodeRef<'_>| !of_type || s.tag_name() == el.tag_name();
-                position(el, false, 1, same) == 1 && position(el, true, 1, same) == 1
+                let same =
+                    |s: NodeRef<'_>| s.is_element() && (!of_type || s.tag_name() == el.tag_name());
+                !core::iter::successors(el.prev_sibling(), NodeRef::prev_sibling).any(same)
+                    && !core::iter::successors(el.next_sibling(), NodeRef::next_sibling).any(same)
             }
             Simple::Empty => el
                 .children()
@@ -1071,54 +1246,89 @@ impl Simple {
 }
 
 impl Nth {
-    fn matches(&self, el: NodeRef<'_>, cx: Ctx) -> bool {
-        if !self.of.is_empty() && !any_matches(&self.of, el, cx) {
+    fn matches<'a>(&self, el: NodeRef<'a>, cx: Ctx<'_, 'a>) -> bool {
+        let Some(pos) = self.position(el, cx) else {
             return false;
-        }
-        let counts = |s: NodeRef<'_>| {
-            (!self.of_type || s.tag_name() == el.tag_name())
-                && (self.of.is_empty() || any_matches(&self.of, s, cx))
         };
-        let (a, b) = (i64::from(self.a), i64::from(self.b));
-        // With a <= 0 no position past b can match, so stop counting there.
-        let cap = if a <= 0 { b } else { i64::MAX };
-        let d = position(el, self.last, cap, counts) - b;
+        let (a, d) = (i64::from(self.a), i64::from(pos) - i64::from(self.b));
         if a == 0 {
             d == 0
         } else {
             d % a == 0 && d / a >= 0
         }
     }
-}
 
-/// 1-based position of `el` among its element siblings that pass `counts`,
-/// from the end if `last`. Stops counting once the position exceeds `cap`.
-fn position<'a>(
-    el: NodeRef<'a>,
-    last: bool,
-    cap: i64,
-    counts: impl Fn(NodeRef<'a>) -> bool,
-) -> i64 {
-    let mut pos = 1;
-    let mut sib = if last {
-        el.next_sibling()
-    } else {
-        el.prev_sibling()
-    };
-    while let Some(s) = sib {
-        if pos > cap {
-            break;
+    /// Whether sibling `s` counts towards `el`'s position: same type for
+    /// `*-of-type`, matching `S` for `of S` (misses are memoized).
+    fn counts<'a>(&self, s: NodeRef<'a>, el: NodeRef<'a>, cx: Ctx<'_, 'a>) -> bool {
+        if self.of_type {
+            return s.tag_name() == el.tag_name();
         }
-        if s.is_element() && counts(s) {
-            pos += 1;
+        if self.of.is_empty() {
+            return true;
         }
-        sib = if last {
-            s.next_sibling()
-        } else {
-            s.prev_sibling()
-        };
+        match cx.memo.get(self.slot, s) {
+            UNKNOWN => {
+                let hit = any_matches(&self.of, s, cx);
+                if !hit {
+                    cx.memo.set(self.slot, s, NONE);
+                }
+                hit
+            }
+            known => known != NONE,
+        }
     }
-    pos
+
+    /// `el`'s 1-based position among the siblings that count (from the end if
+    /// `last`), or `None` if `el` doesn't count itself or is already past what
+    /// `An+B` can reach. Walks back only to the nearest sibling with a known
+    /// position and records every position on the way, so over a whole query
+    /// each sibling list is walked about once.
+    fn position<'a>(&self, el: NodeRef<'a>, cx: Ctx<'_, 'a>) -> Option<u32> {
+        match cx.memo.get(self.slot, el) {
+            UNKNOWN => {}
+            NONE => return None,
+            pos => return Some(pos),
+        }
+        if !self.counts(el, el, cx) {
+            return None;
+        }
+        let step = |n: NodeRef<'a>| {
+            if self.last {
+                n.next_sibling()
+            } else {
+                n.prev_sibling()
+            }
+        };
+        let mut walked = Vec::new();
+        let mut base = 0;
+        let mut sib = step(el);
+        while let Some(s) = sib {
+            if s.is_element() && self.counts(s, el, cx) {
+                match cx.memo.get(self.slot, s) {
+                    UNKNOWN => walked.push(s),
+                    pos => {
+                        base = pos;
+                        break;
+                    }
+                }
+                // With a <= 0 no position past b can match: stop counting.
+                if self.a <= 0 && walked.len() as i64 >= i64::from(self.b) {
+                    return None;
+                }
+            }
+            sib = step(s);
+        }
+        let pos = u32::try_from(walked.len())
+            .ok()?
+            .checked_add(base)?
+            .checked_add(1)?;
+        cx.memo.set(self.slot, el, pos);
+        for (s, p) in walked.into_iter().zip((1..pos).rev()) {
+            cx.memo.set(self.slot, s, p);
+        }
+        Some(pos)
+    }
 }
 
 fn attr_matches(op: AttrOp, have: &str, want: &str, ci: bool) -> bool {
@@ -1153,7 +1363,7 @@ fn attr_matches(op: AttrOp, have: &str, want: &str, ci: bool) -> bool {
 
 /// `:has(rel, …)`: some element relative to `el` matches one of `rels`, each
 /// anchored at `el`. The candidates are scanned iteratively.
-fn has(rels: &[Complex], el: NodeRef<'_>, cx: Ctx) -> bool {
+fn has<'a>(rels: &[Complex], el: NodeRef<'a>, cx: Ctx<'_, 'a>) -> bool {
     let cx = Ctx {
         anchor: Some(el.id()),
         ..cx
@@ -1171,8 +1381,7 @@ fn has(rels: &[Complex], el: NodeRef<'_>, cx: Ctx) -> bool {
             } else {
                 usize::MAX
             };
-            core::iter::successors(el.next_sibling(), NodeRef::next_sibling)
-                .filter(NodeRef::is_element)
+            core::iter::successors(el.next_element_sibling(), NodeRef::next_element_sibling)
                 .take(reach)
                 .any(|s| {
                     rel.matches(s, cx) || (deep && s.descendants().any(|d| rel.matches(d, cx)))
@@ -1180,10 +1389,6 @@ fn has(rels: &[Complex], el: NodeRef<'_>, cx: Ctx) -> bool {
         }
         _ => el.descendants().any(|d| rel.matches(d, cx)),
     })
-}
-
-fn prev_element(el: NodeRef<'_>) -> Option<NodeRef<'_>> {
-    core::iter::successors(el.prev_sibling(), NodeRef::prev_sibling).find(NodeRef::is_element)
 }
 
 fn is_form_control(el: NodeRef<'_>) -> bool {

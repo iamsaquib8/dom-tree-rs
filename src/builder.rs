@@ -11,8 +11,6 @@
 //! off the open-element stack.
 
 use alloc::borrow::Cow;
-use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::entities;
@@ -205,7 +203,7 @@ struct OpenElements {
     /// Open elements with their interned (lower-cased) tag names, innermost
     /// last. Keeping the name here saves an arena lookup per check.
     stack: Vec<(NodeId, Span)>,
-    counts: Option<BTreeMap<Box<str>, u32>>,
+    counts: Option<NameCounts>,
 }
 
 impl OpenElements {
@@ -253,11 +251,11 @@ impl OpenElements {
     #[cold]
     fn count_push(&mut self, dom: &Dom, name: Span) {
         match &mut self.counts {
-            Some(counts) => count_up(counts, dom.span_str(name)),
+            Some(counts) => counts.up(dom, name),
             None => {
-                let mut counts = BTreeMap::new();
+                let mut counts = NameCounts::default();
                 for &(_, open) in &self.stack {
-                    count_up(&mut counts, dom.span_str(open));
+                    counts.up(dom, open);
                 }
                 self.counts = Some(counts);
             }
@@ -270,19 +268,13 @@ impl OpenElements {
         if self.stack.len() < DEEP / 2 {
             self.counts = None;
         } else if let Some(counts) = &mut self.counts {
-            let name = dom.span_str(name);
-            if let Some(c) = counts.get_mut(name) {
-                *c = c.saturating_sub(1);
-                if *c == 0 {
-                    counts.remove(name);
-                }
-            }
+            counts.down(dom, dom.span_str(name));
         }
     }
 
     /// The stack index of the innermost open element named `name`.
     fn find(&self, dom: &Dom, name: &str) -> Option<usize> {
-        if self.counts.as_ref().is_some_and(|c| !c.contains_key(name)) {
+        if self.counts.as_ref().is_some_and(|c| !c.contains(dom, name)) {
             return None;
         }
         self.stack
@@ -291,13 +283,78 @@ impl OpenElements {
     }
 }
 
-fn count_up(counts: &mut BTreeMap<Box<str>, u32>, name: &str) {
-    match counts.get_mut(name) {
-        Some(c) => *c = c.saturating_add(1),
-        None => {
-            counts.insert(name.into(), 1);
+/// Open-element counts per tag name: a minimal open-addressing hash table
+/// (FNV-1a, linear probing, at most half full). Hand-rolled rather than a
+/// `BTreeMap` because the generic tree code alone cost ~3 KB of wasm. Names
+/// are never removed — a count just drops to zero — so no tombstones needed.
+#[derive(Default)]
+struct NameCounts {
+    /// `(hash, name, count)`; `None` is an empty slot. Length is 0 or a power
+    /// of two.
+    slots: Vec<Option<(u32, Span, u32)>>,
+    used: usize,
+}
+
+impl NameCounts {
+    /// The slot holding `name`, or the empty slot where it would go.
+    fn slot(&self, dom: &Dom, hash: u32, name: &str) -> usize {
+        let mask = self.slots.len().wrapping_sub(1);
+        let mut i = hash as usize & mask;
+        // Terminates: the table is never more than half full.
+        while let Some(Some((h, span, _))) = self.slots.get(i) {
+            if *h == hash && dom.span_str(*span) == name {
+                break;
+            }
+            i = (i + 1) & mask;
+        }
+        i
+    }
+
+    fn up(&mut self, dom: &Dom, name: Span) {
+        if (self.used + 1) * 2 > self.slots.len() {
+            self.grow(dom);
+        }
+        let s = dom.span_str(name);
+        let hash = fnv1a(s);
+        let i = self.slot(dom, hash, s);
+        match self.slots.get_mut(i) {
+            Some(Some((_, _, count))) => *count = count.saturating_add(1),
+            Some(empty) => {
+                *empty = Some((hash, name, 1));
+                self.used += 1;
+            }
+            None => {}
         }
     }
+
+    fn down(&mut self, dom: &Dom, name: &str) {
+        let i = self.slot(dom, fnv1a(name), name);
+        if let Some(Some((_, _, count))) = self.slots.get_mut(i) {
+            *count = count.saturating_sub(1);
+        }
+    }
+
+    fn contains(&self, dom: &Dom, name: &str) -> bool {
+        let i = self.slot(dom, fnv1a(name), name);
+        matches!(self.slots.get(i), Some(Some((_, _, count))) if *count > 0)
+    }
+
+    fn grow(&mut self, dom: &Dom) {
+        let cap = (self.slots.len() * 2).max(16);
+        let old = core::mem::replace(&mut self.slots, alloc::vec![None; cap]);
+        for (hash, span, count) in old.into_iter().flatten() {
+            let i = self.slot(dom, hash, dom.span_str(span));
+            if let Some(slot) = self.slots.get_mut(i) {
+                *slot = Some((hash, span, count));
+            }
+        }
+    }
+}
+
+fn fnv1a(s: &str) -> u32 {
+    s.bytes().fold(0x811c_9dc5, |h, b| {
+        (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+    })
 }
 
 /// Lower-case `name`, but borrow it unchanged when it's already lower-case

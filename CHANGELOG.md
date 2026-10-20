@@ -40,7 +40,7 @@ shell, and in JavaScript.
   (`parseJson` keeps the string); new `select`, `selectFirst`, `toText`,
   `toMarkdown`, `toHtml`, `errors`, and a parse-once `Document` class. Invalid
   selectors throw a `SelectorError` with a position. Full TypeScript types,
-  works in Node with no setup, ~37 KB gzipped. **Breaking:** `parseErrorCount`
+  works in Node with no setup, ~38 KB gzipped. **Breaking:** `parseErrorCount`
   and `query` are removed, and `dom-node.d.ts` is replaced by the generated
   types.
 - **Live playground** on GitHub Pages: paste HTML, try selectors, and see the

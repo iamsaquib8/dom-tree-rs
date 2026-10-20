@@ -18,7 +18,13 @@ automatically — edit the drafts in your own voice before using them.
    workflow attaches prebuilt `domtree` binaries (Linux, macOS, Windows) and
    `SHA256SUMS` to the GitHub release.
 4. Publish the npm package (see `docs/PUBLISHING.md`).
-5. Enable GitHub Pages: **Settings → Pages → Source: GitHub Actions**. The
+5. Python: add a PyPI *pending trusted publisher* (project `dom-tree-rs`, owner
+   `iamsaquib8`, repo `dom-tree-rs`, workflow `python.yml`, environment `pypi`);
+   the tag push then publishes wheels.
+6. Homebrew: create the public repo `iamsaquib8/homebrew-tap`, and copy the
+   formula from the release run's `homebrew-formula` artifact to
+   `Formula/domtree.rb` (see `packaging/homebrew/README.md`).
+7. Enable GitHub Pages: **Settings → Pages → Source: GitHub Actions**. The
    `Pages` workflow deploys the playground on the next push to `main` (or run
    it by hand from the Actions tab).
 

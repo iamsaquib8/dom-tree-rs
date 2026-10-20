@@ -19,7 +19,7 @@ below are very welcome.
    in a prompt or an embedding index, on a server or at the edge, without a
    headless browser or a Python dependency.
 4. **JavaScript on the edge** — Cloudflare Workers, Deno, Bun, the browser:
-   places where a ~20 KB wasm module beats a 200 KB parser and there is no DOM.
+   places where a ~38 KB wasm module beats a 200 KB parser and there is no DOM.
 
 Every item below should make at least one of these people's day better. If it
 doesn't, it probably doesn't belong.
@@ -42,7 +42,7 @@ Numbers we hold ourselves to (CI-enforced where marked):
 | budget | limit |
 |---|---|
 | runtime dependencies, default build | **0** (CI: `cargo tree`) |
-| gzipped wasm, all bindings | **< 30 KB** (CI size gate) |
+| gzipped wasm, all bindings (selectors, text, Markdown) | **< 40 KB** (CI size gate; ~38 KB today) |
 | panics on any input — `parse`, `select`, `to_text`, `to_markdown` | **none** (proptest + `cargo-fuzz`) |
 | stack usage on deeply nested input | **bounded** (no recursion proportional to input depth) |
 | MSRV | Rust 1.85 (CI) |
@@ -116,10 +116,10 @@ environment.
 - [x] **`domtree` CLI** (`cargo install domtree-cli`) — htmlq-compatible flags
       (`-a`, `-t`, `-r`, `-p`, `-w`, `-B`) plus `--markdown`, `--json`,
       `--count`. Zero dependencies.
-- [ ] **WASM / npm 0.3** — expose selectors, text, Markdown and HTML output;
-      typed `.d.ts`; publish to npm.
-- [ ] **Live playground** on GitHub Pages — paste HTML, try selectors, see the
-      tree, JSON, text and Markdown, all in a ~20 KB wasm module.
+- [x] **WASM / npm 0.3** — selectors, text, Markdown and HTML output, a
+      parse-once `Document`, typed `.d.ts`, zero-setup Node support.
+- [x] **Live playground** on GitHub Pages — paste HTML, try selectors, see the
+      tree, JSON, text and Markdown, all in a ~38 KB wasm module.
 
 ## 0.4 — "Edit and point"
 
@@ -190,12 +190,13 @@ Being easy to *get* matters as much as features.
 
 - [x] Prebuilt CLI binaries on GitHub Releases (Linux/macOS/Windows), also
       installable with `cargo binstall domtree-cli`.
-- [ ] Homebrew formula (`brew install iamsaquib8/tap/domtree`).
+- [x] Homebrew formula (`brew install iamsaquib8/tap/domtree`) — filled in by the
+      release workflow (`packaging/homebrew/`).
 - [ ] npm package published from CI in lock-step with the crate version.
-- [ ] **Python package** (`pip install domtree`, PyO3 + maturin wheels):
-      `parse`, `select`, `to_text`, `to_markdown`. Python is where most scraping
-      and RAG code lives.
-- [ ] WASI build of the CLI (run `domtree` under `wasmtime`/`wasmer`).
+- [x] **Python package** (`pip install dom-tree-rs`, `import domtree`; PyO3 +
+      maturin abi3 wheels, typed stubs, GIL released on large inputs). Python is
+      where most scraping and RAG code lives.
+- [x] WASI build of the CLI (`domtree.wasm` on releases; runs under `wasmtime`).
 
 ## Exploring
 

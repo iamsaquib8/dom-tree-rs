@@ -1,28 +1,41 @@
 [package]
 name = "dom-tree-wasm"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
-description = "WebAssembly bindings for dom-tree-rs: parse messy HTML into a JSON tree in the browser, edge, or any JS runtime."
+description = "Tiny, forgiving HTML parser for JavaScript (WebAssembly): CSS selectors, readable text, Markdown and JSON from messy HTML. Zero JS dependencies."
 repository = "https://github.com/iamsaquib8/dom-tree-rs"
+homepage = "https://iamsaquib8.github.io/dom-tree-rs/"
+documentation = "https://github.com/iamsaquib8/dom-tree-rs/tree/main/dom-tree-wasm#readme"
+readme = "README.md"
 license = "MIT"
+# wasm-pack copies these into the npm package.json (npm allows any number).
+keywords = ["html", "parser", "css-selector", "markdown", "wasm", "scraper", "html-to-markdown", "html-to-text", "dom", "cloudflare-workers"]
+categories = ["wasm", "parser-implementations", "web-programming"]
+
+# tests/web.rs is compiled into the library itself (see the bottom of
+# src/lib.rs), not as a separate integration-test crate.
+autotests = false
 
 [lib]
-crate-type = ["cdylib", "rlib"]
-
-[features]
-default = []
-# Expose `query(html, selector)` (pulls in the selector engine).
-query = ["dom-tree-rs/query"]
+# cdylib only. Adding "rlib" (which integration tests would need) makes the
+# optimised module ~9 KB gzipped bigger (measured: 36,618 -> 45,370 bytes).
+crate-type = ["cdylib"]
 
 [dependencies]
-wasm-bindgen = "0.2"
-# Only the default `json` feature of the core crate — no serde, zero deps.
-dom-tree-rs = { path = "..", default-features = false, features = ["json"] }
+# `no_std`: drops std's panic/formatting machinery from the module.
+wasm-bindgen = { version = "0.2.100", default-features = false }
+# The allocator std itself uses on wasm32-unknown-unknown.
+dlmalloc = { version = "0.2", features = ["global"] }
+# The core parser with exactly the features the JS API exposes — no serde,
+# zero transitive dependencies.
+dom-tree-rs = { path = "..", default-features = false, features = ["json", "query", "markdown"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
+# Only to inspect returned JS values in the tests; not linked into the module.
+js-sys = "0.3"
 
 # Optimise hard for code size — this is the whole pitch.
 [profile.release]

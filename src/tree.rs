@@ -449,11 +449,12 @@ impl<'a> NodeRef<'a> {
             .map(move |&(k, v)| (dom.span_str(k), dom.span_str(v)))
     }
 
-    /// The class names on this element.
+    /// The class names on this element. Like HTML, splits on ASCII whitespace
+    /// only, so a non-breaking space stays part of a class name.
     pub fn classes(&self) -> impl Iterator<Item = &'a str> {
         self.attr("class")
             .into_iter()
-            .flat_map(str::split_whitespace)
+            .flat_map(str::split_ascii_whitespace)
     }
 
     /// Whether this element has the given class.
@@ -667,10 +668,7 @@ impl<'a> Descendants<'a> {
             if let Some(sib) = self.dom.node(n).and_then(|nd| nd.next_sibling) {
                 return Some(sib);
             }
-            match self.dom.node(n).and_then(|nd| nd.parent) {
-                Some(p) => n = p,
-                None => return None,
-            }
+            n = self.dom.node(n).and_then(|nd| nd.parent)?;
         }
     }
 }

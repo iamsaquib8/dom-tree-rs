@@ -1,0 +1,35 @@
+[package]
+name = "dom-tree-py"
+# The Python package version. Keep it in step with the core crate: the PyPI
+# publish job refuses a `v*` tag that doesn't match it.
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
+description = "Python bindings for dom-tree-rs: parse messy HTML, query it with CSS selectors, and get readable text or Markdown."
+repository = "https://github.com/iamsaquib8/dom-tree-rs"
+license = "MIT"
+# Published to PyPI (as `dom-tree-rs`) by maturin, never to crates.io.
+publish = false
+
+[lib]
+# Builds the `domtree._domtree` extension (see pyproject.toml / `#[pymodule]`),
+# re-exported by domtree/__init__.py. The Rust lib name differs from `domtree`
+# so it doesn't clash with the core crate's lib name.
+name = "domtree_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+# abi3: one wheel per platform works on every CPython >= 3.9.
+pyo3 = { version = "0.30", features = ["abi3-py39"] }
+dom-tree-rs = { path = "..", version = "0.3", default-features = false, features = ["json", "query", "markdown", "std"] }
+
+# Its own workspace root: excluded from the core crate's workspace (see the root
+# Cargo.toml) so PyO3 never enters the core's dependency graph or lockfile.
+[workspace]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

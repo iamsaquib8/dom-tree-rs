@@ -1,0 +1,78 @@
+name: WASI
+
+# Builds the `domtree` CLI for WebAssembly/WASI (wasm32-wasip1) and smoke-tests
+# it under wasmtime. Also called by release.yml, which attaches the resulting
+# `domtree.wasm` to the GitHub release. Run it with any WASI runtime:
+#
+#   echo '<p>hi</p>' | wasmtime domtree.wasm -t p
+#   wasmtime --dir . domtree.wasm -f page.html --markdown article
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "cli/**"
+      - "Cargo.toml"
+      - ".github/workflows/wasi.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "cli/**"
+      - "Cargo.toml"
+      - ".github/workflows/wasi.yml"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  wasi:
+    name: build + smoke-test (wasm32-wasip1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: |
+          cargo build -p domtree-cli --target wasm32-wasip1 --release
+          cp target/wasm32-wasip1/release/domtree.wasm domtree.wasm
+          ls -l domtree.wasm
+      - uses: bytecodealliance/actions/wasmtime/setup@v1
+      - name: Smoke-test under wasmtime
+        run: |
+          set -euo pipefail
+          check() { # check <expected> <actual>
+            if [ "$1" != "$2" ]; then
+              printf 'expected: %q\n     got: %q\n' "$1" "$2"
+              exit 1
+            fi
+          }
+          wasmtime --version
+          VERSION=$(cargo pkgid -p domtree-cli | sed 's/.*[@#]//')
+          check "domtree $VERSION" "$(wasmtime domtree.wasm --version)"
+          check "hi" "$(echo '<p>hi' | wasmtime domtree.wasm -t p)"
+          check "2" "$(echo '<ul><li>a<li>b</ul>' | wasmtime domtree.wasm -c li)"
+          check "$(printf '# Title\n\nSome **bold** text.')" \
+            "$(echo '<h1>Title</h1><p>Some <b>bold</b> text.' | wasmtime domtree.wasm --markdown)"
+          check "https://example.com/a/b" \
+            "$(echo '<a href="b">x</a>' | wasmtime domtree.wasm -b https://example.com/a/ -a href a)"
+          # Files are reachable through a preopened directory.
+          check "Shipping a tiny HTML parser" \
+            "$(wasmtime --dir tests/pages::/pages domtree.wasm -f /pages/blog.html -t h1 < /dev/null)"
+          # Errors still exit non-zero with a message.
+          if echo '<p>' | wasmtime domtree.wasm 'p)' 2> err.txt; then
+            echo "an invalid selector should fail"; exit 1
+          fi
+          grep -q "invalid selector" err.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: domtree-wasm
+          path: domtree.wasm

@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Python package** `dom-tree-rs` on PyPI (import `domtree`): `parse`,
+  `Document.select`/`select_first`/`to_text`/`to_markdown`/`to_html`/`to_json`,
+  `Element` with attributes, text, HTML and traversal; typed stubs; abi3 wheels
+  for Linux, macOS and Windows; the GIL is released while parsing large inputs.
+- **Homebrew formula** for the `domtree` CLI (`packaging/homebrew/`), filled in
+  with release checksums by the release workflow.
+- **WASI build** of the CLI (`domtree.wasm`, attached to releases, smoke-tested
+  under wasmtime). Note: under WASI a closed stdout pipe is reported as an I/O
+  error rather than ignored.
+- Prebuilt CLI binaries for Linux arm64.
+
 ## [0.3.0] — Unreleased
 
 "One-line scraping": find things and get their content out, in Rust, in the
@@ -35,6 +49,18 @@ shell, and in JavaScript.
   (`-a`, `-t`, `-p`, `-w`, `-r`, `-b`, `-B`, `-f`, `-o`) plus `--markdown`,
   `--json`, `--count`, `--first`; zero dependencies. Prebuilt binaries are
   attached to GitHub releases.
+
+- **`dom-tree-wasm` 0.3.0** (npm): `parse` now returns a typed object
+  (`parseJson` keeps the string); new `select`, `selectFirst`, `toText`,
+  `toMarkdown`, `toHtml`, `errors`, and a parse-once `Document` class. Invalid
+  selectors throw a `SelectorError` with a position. Full TypeScript types,
+  works in Node with no setup, ~38 KB gzipped. **Breaking:** `parseErrorCount`
+  and `query` are removed, and `dom-node.d.ts` is replaced by the generated
+  types.
+- **Live playground** on GitHub Pages: paste HTML, try selectors, and see the
+  tree, text, Markdown, JSON and repaired HTML, all running locally in wasm.
+- `CODE_OF_CONDUCT.md`, `SECURITY.md`, `docs/ARCHITECTURE.md`, issue and PR
+  templates.
 
 ### Changed
 - Top-level nodes are now linked as siblings (`next_sibling`/`prev_sibling`),

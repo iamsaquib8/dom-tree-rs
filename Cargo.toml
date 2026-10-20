@@ -12,7 +12,7 @@ readme = "README.md"
 license = "MIT"
 keywords = ["html", "parser", "css-selector", "markdown", "wasm"]
 categories = ["parser-implementations", "wasm", "web-programming", "no-std"]
-exclude = ["/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/cli", "/playground", "/docs/launch"]
+exclude = ["/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/cli", "/python", "/packaging", "/playground", "/docs/launch"]
 
 [lib]
 name = "domtree"
@@ -62,7 +62,8 @@ lto = true
 resolver = "2"
 # The `domtree` command-line tool. Shares this crate's lockfile and target dir.
 members = ["cli"]
-# The WASM bindings, the comparison benchmarks, and the fuzz harness are
-# independent crates with their own (heavier) dependency graphs and release
-# profiles, so they are kept out of this crate's pristine, minimal-dep graph.
-exclude = ["dom-tree-wasm", "benchmarks", "fuzz"]
+# The WASM bindings, the Python bindings, the comparison benchmarks, and the
+# fuzz harness are independent crates with their own (heavier) dependency
+# graphs and release profiles, so they are kept out of this crate's pristine,
+# minimal-dep graph.
+exclude = ["dom-tree-wasm", "python", "benchmarks", "fuzz"]

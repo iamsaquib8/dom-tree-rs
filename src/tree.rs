@@ -67,9 +67,9 @@ impl Dom {
         if self.attrs.capacity() / 2 > self.attrs.len() + 64 {
             self.attrs.shrink_to_fit();
         }
-        if self.strings.capacity() / 2 > self.strings.len() + 1024 {
-            self.strings.shrink_to_fit();
-        }
+        // The string arena is reserved at the input's length, which nearly
+        // every document fills to well over half (text is copied into it), so
+        // it is left alone — saving the code for a third shrink in wasm.
     }
 
     /// Append a string to the arena and return its [`Span`].

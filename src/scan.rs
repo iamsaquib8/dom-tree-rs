@@ -59,12 +59,13 @@ fn portable(needle: u8, haystack: &[u8]) -> Option<usize> {
         let x = w ^ splat;
         x.wrapping_sub(LO) & !x & HI
     };
-    let word = |b: &[u8]| b.try_into().map_or(splat ^ HI, u64::from_le_bytes);
+    // (Always `Some` on a 16-byte chunk; the fallback matches nothing.)
+    let word = |b: Option<&[u8; 8]>| b.map_or(splat ^ HI, |b| u64::from_le_bytes(*b));
     let mut chunks = haystack.chunks_exact(16);
     let mut offset = 0;
     for chunk in &mut chunks {
-        let (a, b) = chunk.split_at(8);
-        let (fa, fb) = (flags(word(a)), flags(word(b)));
+        let (a, b) = (word(chunk.first_chunk()), word(chunk.last_chunk()));
+        let (fa, fb) = (flags(a), flags(b));
         if fa | fb != 0 {
             let bit = if fa != 0 {
                 fa.trailing_zeros()

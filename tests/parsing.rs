@@ -164,6 +164,37 @@ fn tokenizer_stream() {
 }
 
 #[test]
+fn tokenizer_gives_each_start_tag_its_own_attributes() {
+    // The tokenizer reuses one attribute buffer internally; the public
+    // iterator must still hand every tag exactly its own attributes.
+    use domtree::AttrValue;
+    let attrs: Vec<_> = tokenize("<a x=1 Y='2'><b><!-- c --><i z>t</i><img src=\"s\" alt>")
+        .filter_map(|t| match t {
+            Token::StartTag { name, attrs, .. } => Some((name, attrs)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        attrs,
+        [
+            (
+                "a",
+                vec![
+                    ("x", AttrValue::Unquoted("1")),
+                    ("Y", AttrValue::Quoted("2"))
+                ]
+            ),
+            ("b", vec![]),
+            ("i", vec![("z", AttrValue::Empty)]),
+            (
+                "img",
+                vec![("src", AttrValue::Quoted("s")), ("alt", AttrValue::Empty)]
+            ),
+        ]
+    );
+}
+
+#[test]
 fn never_panics_on_garbage() {
     let inputs = [
         "",

@@ -120,6 +120,10 @@
 //! - `query` — a zero-dependency CSS selector engine ([`Dom::select`], [`Selector`]).
 //! - `entities-full` — decode all 2,125 WHATWG named character references
 //!   instead of the curated ~180 (a sorted static table, about 70 KB).
+//! - `simd` — scan text and attribute values with
+//!   [`memchr`](https://crates.io/crates/memchr) (SIMD, `no_std`) instead of
+//!   the built-in word-at-a-time search. Adds that one dependency; tokens and
+//!   trees are identical either way. Worth it only for very text-heavy input.
 //! - `std` — adds `std`-only conveniences; the crate is `no_std + alloc` by default.
 
 #![no_std]

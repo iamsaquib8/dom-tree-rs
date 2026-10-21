@@ -41,8 +41,19 @@ All notable changes to this project are documented here. The format is based on
 - **Homebrew formula** for the `domtree` CLI (`packaging/homebrew/`), filled in
   with release checksums by the release workflow.
 - **WASI build** of the CLI (`domtree.wasm`, attached to releases, smoke-tested
-  under wasmtime). Note: under WASI a closed stdout pipe is reported as an I/O
-  error rather than ignored.
+  under wasmtime), including quiet exit on a closed stdout pipe.
+- **CLI structured extraction:** `domtree -e NAME=SELECTOR[@attr][[]]` builds a
+  JSON object of named fields, or one object per match of a scope selector
+  (JSON array, or `--jsonl`).
+- **CLI output modes:** `--jsonl` (JSON Lines), `--csv` (tables as RFC 4180
+  CSV), `--main` (reader-mode narrowing before selecting), `--links`
+  (url/text, TSV or JSON), `--meta` (page metadata as JSON).
+- **`domtree lint`:** images without `alt`, empty links and buttons, duplicate
+  ids, skipped heading levels, and every recovered parse error, as
+  `file:line:col: level: message [rule]` or `--format json`; exit 0/1/2 for CI.
+  Omitted optional end tags are notes, missing required ones warnings.
+- **CLI encoding detection:** BOM, `<meta charset>`, UTF-8, then Windows-1252;
+  `--encoding` override.
 - Prebuilt CLI binaries for Linux arm64.
 
 ### Changed
@@ -54,6 +65,9 @@ All notable changes to this project are documented here. The format is based on
   and row groups.
 - Nodes are 64 bytes (were 80); `NodeId` is non-zero, so `Option<NodeId>` is
   4 bytes.
+
+- CLI: undeclared non-UTF-8 input now decodes as Windows-1252 (as browsers
+  do) instead of lossy UTF-8, e.g. `caf\xe9` → `café`.
 
 ### Fixed
 - Quadratic parsing of many unmatched end tags over a deep open-element stack,

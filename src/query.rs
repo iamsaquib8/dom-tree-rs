@@ -57,6 +57,11 @@
 //! `of S`, nested or not) and the nearest-match searches behind descendant and
 //! `~` combinators, so selectors like `li:nth-child(odd)`, `h2 ~ p` or
 //! `div span` stay roughly linear on 50k-wide lists and 100k-deep nesting.
+//! The memo grows with what a query walks, so a query on one node or a small
+//! subtree costs the same late in a big document as early on (a loop of
+//! `row.select(..)` over every row stays linear), and its memory is bounded
+//! by the size of the document plus the length of the selector, never their
+//! product.
 //! Exceptions: `:has()` and `:contains()` scan each candidate's subtree, and
 //! a lone [`Selector::matches`] call starts with an empty memo (prefer
 //! `select` for bulk work).
@@ -72,7 +77,7 @@
 use alloc::borrow::Cow;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use core::fmt;
 use core::str::FromStr;
 
@@ -148,7 +153,7 @@ impl Selector {
             pos: 0,
             depth: 0,
             in_has: false,
-            slots: 0,
+            slots: SHARED_SLOTS,
         };
         let list = p.list(false)?;
         match p.peek() {
@@ -310,7 +315,10 @@ impl Dom {
         selector: &S,
     ) -> impl Iterator<Item = NodeRef<'a>> {
         let sel = selector.as_selector();
-        let memo = Memo::default();
+        let memo = Memo {
+            dense: self.len(),
+            ..Memo::default()
+        };
         self.nodes()
             .filter(move |n| sel.as_ref().is_some_and(|s| s.matches_in(*n, None, &memo)))
     }
@@ -481,8 +489,19 @@ struct Nth {
     of_type: bool,
     /// `:nth-child(An+B of S)`; empty when absent.
     of: Vec<Complex>,
-    /// [`Memo`] slot for positions (and `of S` misses).
+    /// [`Memo`] slot for positions (and `of S` misses); without `of S`, one
+    /// of the [`SHARED_SLOTS`].
     slot: u32,
+}
+
+/// [`Memo`] slots shared by every `:nth-*` without `of S` of the same kind
+/// (from the end or not, `*-of-type` or not): an element's position doesn't
+/// depend on `An+B`, so a thousand `:nth-child()`s need one table, not a
+/// thousand.
+const SHARED_SLOTS: u32 = 4;
+
+fn shared_slot(last: bool, of_type: bool) -> u32 {
+    u32::from(last) | u32::from(of_type) << 1
 }
 
 impl Simple {
@@ -823,7 +842,6 @@ impl<'s> Parser<'s> {
         }
         let name = self.name()?.to_ascii_lowercase();
         if !self.eat('(') {
-            let slot = self.reserve(1);
             let nth = |last, of_type| {
                 Simple::Nth(Nth {
                     a: 0,
@@ -831,7 +849,7 @@ impl<'s> Parser<'s> {
                     last,
                     of_type,
                     of: Vec::new(),
-                    slot,
+                    slot: shared_slot(last, of_type),
                 })
             };
             return Ok(match name.as_str() {
@@ -906,13 +924,18 @@ impl<'s> Parser<'s> {
             }
             of = self.nested(false)?;
         }
+        let last = name.starts_with("nth-last");
         Ok(Simple::Nth(Nth {
             a,
             b,
-            last: name.starts_with("nth-last"),
+            last,
             of_type,
+            slot: if of.is_empty() {
+                shared_slot(last, of_type)
+            } else {
+                self.reserve(1)
+            },
             of,
-            slot: self.reserve(1),
         }))
     }
 
@@ -1007,49 +1030,176 @@ struct Ctx<'m, 'a> {
 /// Per-query memo, so one query stays roughly linear on wide and deep
 /// documents instead of re-walking the same siblings or ancestors for every
 /// candidate. Each `:nth-*` and each combinator owns a slot (numbered at parse
-/// time) whose table, indexed by node, fills in on demand. Entries depend only
-/// on the selector, the document and `:scope`, all fixed for one query.
+/// time) with an entry per node, filled in on demand. Entries depend only on
+/// the selector, the document and `:scope`, all fixed for one query, so one
+/// that is missing is recomputed, never wrong.
+///
+/// Entries live in [`Sparse`] hash maps, which grow with what they hold (so a
+/// query on one node or a small subtree of a big document costs what it
+/// walks, not the document's size) and drop their oldest entries past a size
+/// proportional to the document (so memory stays bounded, whatever the
+/// selector). [`Dom::select`], which visits every node, keeps `:nth-*`
+/// positions in tables indexed by node instead, for the first [`DENSE`] slots.
 #[derive(Default)]
 struct Memo<'a> {
-    tables: RefCell<Vec<Vec<u32>>>,
-    /// Results of memoized searches; table entries point here (index + 1).
-    hits: RefCell<Vec<(NodeRef<'a>, usize)>>,
+    /// The document's node count for [`Dom::select`] (dense tables), else 0.
+    dense: usize,
+    /// Slot `s`'s entry for node `i` is at `s * dense + i`.
+    tables: RefCell<Vec<u32>>,
+    map: RefCell<Sparse<'a>>,
+    /// Map lookups so far; nothing goes in the map before [`WARMUP`].
+    lookups: Cell<u32>,
 }
 
-/// Table entry: not computed yet.
+/// Entry: not computed yet (or an empty [`Map`] bucket).
 const UNKNOWN: u32 = 0;
-/// Table entry: a search found nothing / an element fails `:nth-*(… of S)`.
+/// Entry: a search found nothing / an element fails `:nth-*(… of S)`.
 const NONE: u32 = u32::MAX;
+/// Dense tables per query, at most (4 bytes per node each).
+const DENSE: u32 = 16;
+/// Entries per node in the newer [`Sparse`] map before it is retired.
+const SPARSE: usize = 2;
+/// Map lookups before anything is stored: most queries on one node or a small
+/// subtree are done by then, without allocating, and the rest lose little.
+const WARMUP: u32 = 32;
+
+/// A [`Map`] entry, with what a search found (the entry is then the index of
+/// the compound it matched, plus 1).
+type Entry<'a> = (u32, Option<NodeRef<'a>>);
+
+/// Open-addressing hash map from `(slot, node index)` to an [`Entry`], with
+/// linear probing; never more than half full.
+#[derive(Default)]
+struct Map<'a> {
+    buckets: Vec<((u32, u32), Entry<'a>)>,
+    len: usize,
+}
+
+impl<'a> Map<'a> {
+    /// The bucket holding `key`, or the empty one where it would go.
+    fn probe(&self, key: (u32, u32)) -> usize {
+        let mask = self.buckets.len().wrapping_sub(1);
+        let hash = (u64::from(key.0) << 32 | u64::from(key.1)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        let mut b = (hash >> 32) as usize & mask;
+        for _ in 0..self.buckets.len() {
+            match self.buckets.get(b) {
+                Some(&(k, (v, _))) if v != UNKNOWN && k != key => b = (b + 1) & mask,
+                _ => break,
+            }
+        }
+        b
+    }
+
+    fn get(&self, key: (u32, u32)) -> Entry<'a> {
+        match self.buckets.get(self.probe(key)) {
+            Some(&(k, entry)) if k == key => entry,
+            _ => (UNKNOWN, None),
+        }
+    }
+
+    /// Store `entry` (never `UNKNOWN`).
+    fn set(&mut self, key: (u32, u32), entry: Entry<'a>) {
+        if 2 * (self.len + 1) > self.buckets.len() {
+            let size = (2 * self.buckets.len()).max(16);
+            let empty = ((0, 0), (UNKNOWN, None));
+            let old = core::mem::replace(&mut self.buckets, alloc::vec![empty; size]);
+            self.len = 0;
+            for (k, e) in old {
+                if e.0 != UNKNOWN {
+                    self.set(k, e);
+                }
+            }
+        }
+        let b = self.probe(key);
+        if let Some(bucket) = self.buckets.get_mut(b) {
+            self.len += usize::from(bucket.1.0 == UNKNOWN);
+            *bucket = (key, entry);
+        }
+    }
+}
+
+/// Memo entries in two [`Map`]s, newest first. Once the first holds
+/// [`SPARSE`] entries per node (up to the highest node index stored) plus a
+/// few per slot, it replaces the second: memory stays bounded, and the newest
+/// entries, which a query going through the document in order reuses, are
+/// always kept.
+#[derive(Default)]
+struct Sparse<'a> {
+    maps: [Map<'a>; 2],
+    /// One past the highest node index stored.
+    nodes: usize,
+    /// One past the highest slot stored.
+    slots: usize,
+}
+
+impl<'a> Sparse<'a> {
+    fn get(&self, key: (u32, u32)) -> Entry<'a> {
+        let [new, old] = &self.maps;
+        match new.get(key) {
+            (UNKNOWN, _) => old.get(key),
+            entry => entry,
+        }
+    }
+
+    fn set(&mut self, key: (u32, u32), entry: Entry<'a>) {
+        self.nodes = self.nodes.max(key.1 as usize + 1);
+        self.slots = self.slots.max(key.0 as usize + 1);
+        if self.maps[0].len >= SPARSE * self.nodes + 4 * self.slots {
+            self.maps[1] = core::mem::take(&mut self.maps[0]);
+        }
+        self.maps[0].set(key, entry);
+    }
+}
 
 impl<'a> Memo<'a> {
+    /// Whether `slot` has a dense table.
+    fn dense(&self, slot: u32) -> bool {
+        self.dense > 0 && slot < DENSE
+    }
+
+    /// A `:nth-*` entry.
     fn get(&self, slot: u32, node: NodeRef<'_>) -> u32 {
-        let Ok(tables) = self.tables.try_borrow() else {
-            return UNKNOWN;
-        };
+        if !self.dense(slot) {
+            return self.find(slot, node).0;
+        }
+        let at = slot as usize * self.dense + node.id().index();
+        let tables = self.tables.try_borrow();
         tables
-            .get(slot as usize)
-            .and_then(|t| t.get(node.id().index()))
-            .copied()
+            .ok()
+            .and_then(|t| t.get(at).copied())
             .unwrap_or(UNKNOWN)
     }
 
-    fn set(&self, slot: u32, node: NodeRef<'_>, value: u32) {
+    /// Store a `:nth-*` entry (never `UNKNOWN`); returns whether it was stored.
+    fn set(&self, slot: u32, node: NodeRef<'_>, value: u32) -> bool {
+        if !self.dense(slot) {
+            return self.store(slot, node, (value, None));
+        }
+        let at = slot as usize * self.dense + node.id().index();
         let Ok(mut tables) = self.tables.try_borrow_mut() else {
-            return;
+            return false;
         };
-        let slot = slot as usize;
-        if tables.len() <= slot {
-            tables.resize_with(slot + 1, Vec::new);
+        if tables.len() <= at {
+            tables.resize((slot as usize + 1) * self.dense, UNKNOWN);
         }
-        if let Some(table) = tables.get_mut(slot) {
-            let i = node.id().index();
-            if table.len() <= i {
-                table.resize(i + 1, UNKNOWN);
-            }
-            if let Some(entry) = table.get_mut(i) {
-                *entry = value;
-            }
-        }
+        tables.get_mut(at).map(|e| *e = value).is_some()
+    }
+
+    /// A [`Sparse`] entry.
+    fn find(&self, slot: u32, node: NodeRef<'_>) -> Entry<'a> {
+        self.lookups.set(self.lookups.get().saturating_add(1));
+        let map = self.map.try_borrow();
+        map.map_or((UNKNOWN, None), |m| m.get((slot, node.id().index() as u32)))
+    }
+
+    /// Store a [`Sparse`] entry (never `UNKNOWN`); returns whether it was.
+    fn store(&self, slot: u32, node: NodeRef<'_>, entry: Entry<'a>) -> bool {
+        self.lookups.get() >= WARMUP
+            && self
+                .map
+                .try_borrow_mut()
+                .map(|mut m| m.set((slot, node.id().index() as u32), entry))
+                .is_ok()
     }
 
     /// The first node from `start` on (following `next`) where `test`
@@ -1062,52 +1212,36 @@ impl<'a> Memo<'a> {
         next: impl Fn(NodeRef<'a>) -> Option<NodeRef<'a>>,
         test: impl Fn(NodeRef<'a>) -> Option<(NodeRef<'a>, usize)>,
     ) -> Option<(NodeRef<'a>, usize)> {
-        let mut walked = Vec::new();
+        let mut walked = 0;
         let mut cur = start;
         let found = loop {
             let Some(n) = cur else { break None };
             if let Some(slot) = slot {
-                if let Some(known) = self.known(slot, n) {
-                    break known;
+                match self.find(slot, n) {
+                    (NONE, _) => break None,
+                    (UNKNOWN, _) | (_, None) => walked += 1,
+                    (i, Some(el)) => break Some((el, i as usize - 1)),
                 }
-                walked.push(n);
             }
             if let Some(hit) = test(n) {
                 break Some(hit);
             }
             cur = next(n);
         };
+        let entry = match found {
+            None => (NONE, None),
+            Some((el, i)) => match u32::try_from(i + 1) {
+                Ok(v) if v != NONE => (v, Some(el)),
+                _ => return found,
+            },
+        };
+        // Walk again rather than keep a list (no allocation).
         if let Some(slot) = slot {
-            let value = match found {
-                None => Some(NONE),
-                Some(hit) => self.push_hit(hit),
-            };
-            if let Some(value) = value {
-                for n in walked {
-                    self.set(slot, n, value);
-                }
+            for n in core::iter::successors(start, |n| next(*n)).take(walked) {
+                self.store(slot, n, entry);
             }
         }
         found
-    }
-
-    /// Store a search result; returns its table entry.
-    fn push_hit(&self, hit: (NodeRef<'a>, usize)) -> Option<u32> {
-        let mut hits = self.hits.try_borrow_mut().ok()?;
-        hits.push(hit);
-        u32::try_from(hits.len()).ok().filter(|&v| v != NONE)
-    }
-
-    /// A recorded search result for `node`, if there is one.
-    fn known(&self, slot: u32, node: NodeRef<'_>) -> Option<Option<(NodeRef<'a>, usize)>> {
-        match self.get(slot, node) {
-            UNKNOWN => None,
-            NONE => Some(None),
-            hit => {
-                let hits = self.hits.try_borrow().ok()?;
-                Some(Some(*hits.get(hit as usize - 1)?))
-            }
-        }
     }
 }
 
@@ -1300,32 +1434,36 @@ impl Nth {
                 n.prev_sibling()
             }
         };
-        let mut walked = Vec::new();
-        let mut base = 0;
+        let (mut walked, mut base) = (0u32, 0);
         let mut sib = step(el);
         while let Some(s) = sib {
             if s.is_element() && self.counts(s, el, cx) {
                 match cx.memo.get(self.slot, s) {
-                    UNKNOWN => walked.push(s),
+                    UNKNOWN => walked += 1,
                     pos => {
                         base = pos;
                         break;
                     }
                 }
                 // With a <= 0 no position past b can match: stop counting.
-                if self.a <= 0 && walked.len() as i64 >= i64::from(self.b) {
+                if self.a <= 0 && i64::from(walked) >= i64::from(self.b) {
                     return None;
                 }
             }
             sib = step(s);
         }
-        let pos = u32::try_from(walked.len())
-            .ok()?
-            .checked_add(base)?
-            .checked_add(1)?;
-        cx.memo.set(self.slot, el, pos);
-        for (s, p) in walked.into_iter().zip((1..pos).rev()) {
-            cx.memo.set(self.slot, s, p);
+        let pos = walked.checked_add(base)?.checked_add(1)?;
+        // Walk again to record the positions (no list to allocate).
+        if cx.memo.set(self.slot, el, pos) {
+            let (mut p, mut sib) = (pos, step(el));
+            while p > base + 1 {
+                let Some(s) = sib else { break };
+                if s.is_element() && self.counts(s, el, cx) {
+                    p -= 1;
+                    cx.memo.set(self.slot, s, p);
+                }
+                sib = step(s);
+            }
         }
         Some(pos)
     }

@@ -6,7 +6,7 @@
 </picture>
 
 A tiny, zero-dependency, never-panicking HTML parser with CSS selectors —
-for Rust, your shell, and JavaScript (via a ~40 KB gzipped WebAssembly module).
+for Rust, your shell, and JavaScript (via a ~41 KB gzipped WebAssembly module).
 
 [![crates.io](https://img.shields.io/crates/v/dom-tree-rs.svg?logo=rust)](https://crates.io/crates/dom-tree-rs)
 [![npm](https://img.shields.io/npm/v/dom-tree-wasm.svg?logo=npm)](https://www.npmjs.com/package/dom-tree-wasm)
@@ -111,7 +111,7 @@ Also: 🐍 **Python** — `pip install dom-tree-rs` ([docs](./python)) · 🍺 *
   favourite, `:contains("text")`.
 - **Content out, not just a tree.** Readable text (`to_text`), CommonMark/GFM
   Markdown (`to_markdown`) for LLM prompts and RAG pipelines, JSON, and HTML.
-- **Runs everywhere.** `no_std + alloc`, `#![forbid(unsafe_code)]`, a ~40 KB
+- **Runs everywhere.** `no_std + alloc`, `#![forbid(unsafe_code)]`, a ~41 KB
   gzipped wasm module for browsers, Cloudflare Workers, Deno, Bun and Node, and a
   single static binary for your shell.
 - **Fast.** ~500 MB/s on markup — about 8× `scraper`, level with or ahead of
@@ -286,7 +286,7 @@ domtree lint public/**/*.html
 
 ## JavaScript & WebAssembly
 
-The same parser — selectors, text, Markdown and all — in a ~40 KB (gzipped) wasm
+The same parser — selectors, text, Markdown and all — in a ~41 KB (gzipped) wasm
 module with zero JS dependencies and full TypeScript types. Works in the browser,
 Cloudflare Workers, Deno, Bun, and Node (no setup needed in Node).
 [Package docs →](./dom-tree-wasm) · [**Playground →**](https://iamsaquib8.github.io/dom-tree-rs/)

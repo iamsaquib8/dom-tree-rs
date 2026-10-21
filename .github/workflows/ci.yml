@@ -112,14 +112,16 @@ jobs:
       - name: Smoke-test the packed npm package in Node
         working-directory: dom-tree-wasm
         run: sh npm/smoke-test.sh
-      - name: Gzipped size gate (< 40 KB)
+      - name: Gzipped size gate (< 45 KiB)
         working-directory: dom-tree-wasm
         run: |
-          # 0.3.0 measured ~36,600-36,800 bytes (gzip -9); the budget is that
-          # rounded up to the next 5 KB. Raise it on purpose, never by accident.
+          # Measured ~40,800-41,000 bytes (gzip -9) after the review hardening
+          # (raw-text escaping, name validation, bounded selector memo); the
+          # budget is that rounded up to the next 5 KiB. Raise it on purpose,
+          # never by accident.
           SIZE=$(gzip -9 -c pkg/dom_tree_wasm_bg.wasm | wc -c)
-          echo "gzipped wasm: $SIZE bytes (budget 40960)"
-          test "$SIZE" -lt 40960
+          echo "gzipped wasm: $SIZE bytes (budget 46080)"
+          test "$SIZE" -lt 46080
 
   fuzz:
     name: fuzz (build + smoke)

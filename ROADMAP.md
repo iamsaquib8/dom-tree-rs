@@ -19,7 +19,7 @@ below are very welcome.
    in a prompt or an embedding index, on a server or at the edge, without a
    headless browser or a Python dependency.
 4. **JavaScript on the edge** — Cloudflare Workers, Deno, Bun, the browser:
-   places where a ~40 KB wasm module beats a 200 KB parser and there is no DOM.
+   places where a ~41 KB wasm module beats a 200 KB parser and there is no DOM.
 
 Every item below should make at least one of these people's day better. If it
 doesn't, it probably doesn't belong.
@@ -42,7 +42,7 @@ Numbers we hold ourselves to (CI-enforced where marked):
 | budget | limit |
 |---|---|
 | runtime dependencies, default build | **0** (CI: `cargo tree`) |
-| gzipped wasm, all bindings (selectors, text, Markdown) | **< 40 KB** (CI size gate: 40,960 bytes; 40,450 today) |
+| gzipped wasm, all bindings (selectors, text, Markdown) | **< 45 KiB** (CI size gate: 46,080 bytes; ~40,800 today) |
 | panics on any input — `parse`, `select`, `to_text`, `to_markdown` | **none** (proptest + `cargo-fuzz`) |
 | stack usage on deeply nested input | **bounded** (no recursion proportional to input depth) |
 | MSRV | Rust 1.85 (CI) |
@@ -119,7 +119,7 @@ environment.
 - [x] **WASM / npm 0.3** — selectors, text, Markdown and HTML output, a
       parse-once `Document`, typed `.d.ts`, zero-setup Node support.
 - [x] **Live playground** on GitHub Pages — paste HTML, try selectors, see the
-      tree, JSON, text and Markdown, all in a ~40 KB wasm module.
+      tree, JSON, text and Markdown, all in a ~41 KB wasm module.
 
 ## 0.4 — "Edit and point" (done)
 

@@ -84,7 +84,7 @@ jobs:
           wasm-pack build --target web --release
           SIZE=$(gzip -9 -c pkg/dom_tree_wasm_bg.wasm | wc -c)
           RAW=$(wc -c < pkg/dom_tree_wasm_bg.wasm)
-          echo "wasm: $SIZE bytes gzipped, $RAW raw (budget 40960 gzipped)" | tee ../sizes.txt
+          echo "wasm: $SIZE bytes gzipped, $RAW raw (budget 46080 gzipped)" | tee ../sizes.txt
           { echo "## Wasm"; cat ../sizes.txt; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Compile time (clean release build of the library)

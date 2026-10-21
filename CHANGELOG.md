@@ -84,7 +84,42 @@ All notable changes to this project are documented here. The format is based on
 - CLI: undeclared non-UTF-8 input now decodes as Windows-1252 (as browsers
   do) instead of lossy UTF-8, e.g. `caf\xe9` → `café`.
 
+### Security / hardening
+- Edited content can no longer inject markup on output: text set inside
+  `<script>`, `<style>`, `<textarea>` or `<title>` cannot close the element
+  early (a `</script` is written `<\/script`; parsed documents serialize
+  byte-for-byte as before), and `set_attr`, `rename`, `create_element` and
+  `wrap` refuse names that are empty or contain whitespace, quotes, `<`, `>`,
+  `/`, `=` or NUL (tag names must start with an ASCII letter).
+  `create_element` now returns `Option<NodeId>`.
+- Attacker-chosen tag names could make `parse`/`events` quadratic (40,000
+  colliding names: 6.4 s → 2 ms). An end tag now looks for its element among
+  the 256 innermost and 8 outermost open elements; an element open only in
+  between is left open and the end tag is reported as `StrayEndTag`.
+- `resolve_url` reads `\` as `/` in http(s)/ftp/ws(s)/file URLs, as browsers
+  do (`\\evil.com\x` resolves to evil.com, not a relative path), and
+  `base_url` ignores a `<base>` inside `<template>`, `<svg>` or `<math>`.
+
 ### Fixed
+- Linear-time fixes found in review: scoped selector queries
+  (`tr.select(…)`, `matches`, `closest`) no longer pay for the whole document
+  per call (160k rows: 18 s → 70 ms) and selector memo memory is bounded;
+  `append_html` no longer slows with the parent's depth (3.4 s → 1.4 ms);
+  chunk heading paths are capped at 256 characters per title; `table_rows` is
+  linear on nested tables (a cell's text no longer includes tables nested in
+  it — **behaviour change**); CLI `--links SELECTOR` and nested `-e` scopes
+  are linear.
+- `UnknownEntity` only reports WHATWG's 106 legacy names when their `;` is
+  missing (so `x&order=1`, `?a=1&or` are clean), and its position points at
+  the `&`, also inside attribute values.
+- `colspan`/`rowspan` accept a leading `+` and skip only ASCII whitespace;
+  `Link::text` leaves out content hidden with `hidden` or inline
+  `display:none` / `visibility:hidden`.
+- CLI: `lint` no longer reports correctly closed elements as unclosed
+  (`</span foo>`, a final `</span` without `>`), and does report an outer
+  element whose same-named child ends at the same spot; `-B` resolves
+  `<base href>` against `--base` once; combining two output formats is a
+  usage error; `--links -w` skips links without text.
 - `Dom::errors()` no longer flags valid HTML: a bare `&` (`a & b`,
   `?a=1&b=2`) isn't an `UnknownEntity` (reference-shaped `&…` still is, with
   WHATWG's attribute-value exception), and an end tag closing elements whose
@@ -132,7 +167,7 @@ shell, and in JavaScript.
   (`parseJson` keeps the string); new `select`, `selectFirst`, `toText`,
   `toMarkdown`, `toHtml`, `errors`, and a parse-once `Document` class. Invalid
   selectors throw a `SelectorError` with a position. Full TypeScript types,
-  works in Node with no setup, ~40 KB gzipped. **Breaking:** `parseErrorCount`
+  works in Node with no setup, ~41 KB gzipped. **Breaking:** `parseErrorCount`
   and `query` are removed, and `dom-node.d.ts` is replaced by the generated
   types.
 - **Live playground** on GitHub Pages: paste HTML, try selectors, and see the

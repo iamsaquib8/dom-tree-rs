@@ -664,6 +664,25 @@ fn valid_html_is_not_reported_as_an_error() {
     assert!(!kinds("<table><tr><td>x<td>y</table>").contains(&MismatchedEndTag));
     assert!(!kinds("<div><p>text</div>").contains(&MismatchedEndTag));
     assert!(kinds("<ul><li>a</ul>").contains(&ImplicitlyClosed));
+    // An `&` followed by letters is plain text unless they start with one of
+    // WHATWG's 106 legacy names (`amp`, `copy`, …; the only ones that work
+    // without a `;`). `or`, `ne`, `sub`, `part` and `int` are names, but
+    // only with their `;`.
+    for html in [
+        "<p>x&order=1</p>",
+        "<p>Q&A: tom&nearby</p>",
+        "<p>see page?a=1&sub=2&part=3</p>",
+        "<p>a&int b</p>",
+        "<p>a&lend</p>",
+        "<p>Fish&chips, P&L, AT&T</p>",
+        // In attributes a legacy name followed by an alphanumeric or `=` is
+        // valid too.
+        r#"<a href="/s?a=1&or">x</a>"#,
+        r#"<a title="x &ne y">x</a>"#,
+        r#"<a href="?a=1&copyright=2&amp=3&notify">x</a>"#,
+    ] {
+        assert_eq!(kinds(html), [], "{html}");
+    }
 }
 
 #[test]
@@ -675,4 +694,55 @@ fn real_problems_are_still_reported() {
     assert!(kinds(r#"<a title="&copy">x</a>"#).contains(&UnknownEntity));
     assert!(kinds("<div><b>bold</div>").contains(&MismatchedEndTag));
     assert!(kinds("<p>x</span>").contains(&StrayEndTag));
+    for html in [
+        "<p>AT&ampT</p>",
+        "<p>&copy 2026</p>",
+        "<p>a&notin b</p>", // `not` + `in`
+        "<p>&nosuch;</p>",
+        "<p>&#xZZ;</p>",
+        "<p>&#169 x</p>", // numeric without `;`
+        "<p>&#</p>",
+        r#"<a title="&copy">x</a>"#,
+        r#"<a href="?a=1&lt">x</a>"#,
+        r#"<a title="&nosuch;x">x</a>"#,
+    ] {
+        assert_eq!(kinds(html), [UnknownEntity], "{html}");
+    }
+}
+
+#[test]
+fn unknown_entities_are_reported_at_their_ampersand() {
+    let positions = |html: &str| -> Vec<usize> {
+        let dom = parse(html);
+        let mut events = domtree::events(html);
+        for _ in events.by_ref() {}
+        assert_eq!(events.errors(), dom.errors(), "{html}");
+        dom.errors()
+            .iter()
+            .filter(|e| e.kind == domtree::ErrorKind::UnknownEntity)
+            .map(|e| e.position)
+            .collect()
+    };
+    let html = "<p>aaaa\nbbbb &bogus; cc</p>";
+    assert_eq!(positions(html), [13]);
+    assert_eq!(domtree::line_col(html, 13), (2, 6));
+    // Only the first per text run or attribute value; multi-byte text before.
+    let html = "<p>é &amp; &x; &y;</p><p>&#</p>";
+    assert_eq!(
+        positions(html),
+        [html.find("&x").unwrap(), html.find("&#").unwrap()]
+    );
+    // Attribute values: at the `&` inside the value, quoted or not.
+    let html = r#"<a  href='/?q=1&copy' title=a&bogus;b>&lt</a>"#;
+    assert_eq!(
+        positions(html),
+        [
+            html.find("&copy").unwrap(),
+            html.find("&bogus").unwrap(),
+            html.find("&lt").unwrap(),
+        ]
+    );
+    // In `<title>` and `<textarea>` (decoded raw text) too.
+    let html = "<title>a &bogus;</title><textarea>\n&#xZZ;</textarea>";
+    assert_eq!(positions(html), [9, html.find("&#").unwrap()]);
 }

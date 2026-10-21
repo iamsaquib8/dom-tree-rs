@@ -78,10 +78,13 @@ impl<'a> Events<'a> {
     pub(crate) fn new(src: &'a str) -> Self {
         Events {
             tokenizer: Tokenizer::new(src),
-            builder: TreeBuilder::new(Queue {
-                events: VecDeque::new(),
-                attrs: Vec::new(),
-            }),
+            builder: TreeBuilder::new(
+                Queue {
+                    events: VecDeque::new(),
+                    attrs: Vec::new(),
+                },
+                src,
+            ),
             len: src.len(),
             done: false,
         }
@@ -146,7 +149,7 @@ impl<'a> Sink<'a> for Queue<'a> {
         open
     }
 
-    fn attr(&mut self, name: &'a str, value: &'a str) -> bool {
+    fn attr(&mut self, name: &'a str, value: &'a str) -> Option<usize> {
         let (value, unknown) = entities::decode(value, true);
         self.attrs.push((lower(name), value));
         unknown
@@ -181,11 +184,11 @@ impl<'a> Sink<'a> for Queue<'a> {
         decode: bool,
         start: usize,
         end: usize,
-    ) -> bool {
+    ) -> Option<usize> {
         let (text, unknown) = if decode {
             entities::decode(text, false)
         } else {
-            (Cow::Borrowed(text), false)
+            (Cow::Borrowed(text), None)
         };
         self.events.push_back((Event::Text(text), start..end));
         unknown

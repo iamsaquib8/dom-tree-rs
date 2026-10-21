@@ -30,7 +30,6 @@
 
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
-use core::marker::PhantomData;
 
 use crate::error::{ErrorKind, ParseError};
 use crate::node::{AttrRange, NodeId, RawKind, Span, SrcRange};
@@ -43,7 +42,7 @@ use crate::tree::Dom;
 /// [`Dom::errors`].
 pub(crate) fn parse_document(src: &str) -> Dom {
     let mut tk = Tokenizer::new(src);
-    let mut builder = TreeBuilder::new(DomSink::new(src.len()));
+    let mut builder = TreeBuilder::new(DomSink::new(src.len()), src);
     while let Some((tok, pos)) = tk.next_token() {
         let end = tk.offset();
         builder.token(tok, tk.attrs(), pos, end);
@@ -66,9 +65,10 @@ pub(crate) trait Sink<'a> {
 
     /// One attribute of the start tag about to be reported by
     /// [`Sink::start`], as written: the name not yet lower-cased, the value
-    /// not yet entity-decoded. Returns whether decoding met an unknown named
-    /// reference.
-    fn attr(&mut self, name: &'a str, value: &'a str) -> bool;
+    /// not yet entity-decoded. Returns where decoding met the first
+    /// reference-shaped `&…` it left verbatim: a byte offset into `value`
+    /// (see [`crate::entities::decode_into`]).
+    fn attr(&mut self, name: &'a str, value: &'a str) -> Option<usize>;
 
     /// An element starts, inside `parent` (`None`: at the top level). Its
     /// `attrs` attributes were just passed to [`Sink::attr`].
@@ -86,8 +86,9 @@ pub(crate) trait Sink<'a> {
     /// self-closing start tag).
     fn end(&mut self, open: Self::Open, start: usize, end: usize, implied: bool);
 
-    /// Character data, entity-decoded if `decode`. Returns whether decoding
-    /// met an unknown named reference.
+    /// Character data, entity-decoded if `decode`. Returns where decoding met
+    /// the first reference-shaped `&…` it left verbatim: a byte offset into
+    /// `text`.
     fn text(
         &mut self,
         parent: Option<&Self::Open>,
@@ -95,7 +96,7 @@ pub(crate) trait Sink<'a> {
         decode: bool,
         start: usize,
         end: usize,
-    ) -> bool;
+    ) -> Option<usize>;
 
     /// A comment (or bogus comment).
     fn comment(&mut self, parent: Option<&Self::Open>, text: &'a str, start: usize, end: usize);
@@ -111,17 +112,27 @@ pub(crate) struct TreeBuilder<'a, S: Sink<'a>> {
     open: OpenElements<S::Open>,
     /// Recovery diagnostics; complete and sorted after `finish`.
     pub(crate) errors: Vec<ParseError>,
-    _src: PhantomData<&'a str>,
+    /// The source the tokens borrow from.
+    src: &'a str,
 }
 
 impl<'a, S: Sink<'a>> TreeBuilder<'a, S> {
-    pub(crate) fn new(sink: S) -> Self {
+    /// A builder for the tokens of `src`.
+    pub(crate) fn new(sink: S, src: &'a str) -> Self {
         TreeBuilder {
             sink,
             open: OpenElements::default(),
             errors: Vec::new(),
-            _src: PhantomData,
+            src,
         }
+    }
+
+    /// The byte offset in the source of `s`, a slice of it — as every string
+    /// in a token is (an attribute value, say, which the tokenizer hands over
+    /// without its position). `None` if `s` is not inside the source.
+    fn source_offset(&self, s: &str) -> Option<usize> {
+        let offset = s.as_ptr().addr().checked_sub(self.src.as_ptr().addr())?;
+        (offset.checked_add(s.len())? <= self.src.len()).then_some(offset)
     }
 
     /// Feed one token that spans `pos..end`. A start tag's attributes come
@@ -198,8 +209,11 @@ impl<'a, S: Sink<'a>> TreeBuilder<'a, S> {
         }
 
         for &(k, v) in attrs {
-            if self.sink.attr(k, v.as_str()) {
-                self.error(pos, ErrorKind::UnknownEntity);
+            let value = v.as_str();
+            if let Some(at) = self.sink.attr(k, value) {
+                // At the `&`; the tag's start if the value can't be located.
+                let at = self.source_offset(value).map_or(pos, |offset| offset + at);
+                self.error(at, ErrorKind::UnknownEntity);
             }
         }
         let void = self_closing || tags::is_void(&lname);
@@ -256,8 +270,9 @@ impl<'a, S: Sink<'a>> TreeBuilder<'a, S> {
             self.pop(pos, pos, true);
             self.error(pos, ErrorKind::ImplicitlyClosed);
         }
-        if self.sink.text(self.open.top(), t, !raw, pos, end) {
-            self.error(pos, ErrorKind::UnknownEntity);
+        // A text token's string starts at the token.
+        if let Some(at) = self.sink.text(self.open.top(), t, !raw, pos, end) {
+            self.error(pos + at, ErrorKind::UnknownEntity);
         }
     }
 }
@@ -305,7 +320,7 @@ impl<'a> Sink<'a> for DomSink {
     }
 
     #[inline]
-    fn attr(&mut self, name: &'a str, value: &'a str) -> bool {
+    fn attr(&mut self, name: &'a str, value: &'a str) -> Option<usize> {
         let key = self.dom.intern_lower(name);
         let (value, unknown) = self.dom.intern_decoded(value, true);
         self.dom.attrs.push((key, value));
@@ -352,11 +367,11 @@ impl<'a> Sink<'a> for DomSink {
         decode: bool,
         start: usize,
         end: usize,
-    ) -> bool {
+    ) -> Option<usize> {
         let (span, unknown) = if decode {
             self.dom.intern_decoded(text, false)
         } else {
-            (self.dom.intern(text), false)
+            (self.dom.intern(text), None)
         };
         self.leaf(parent, RawKind::Text(span), start, end);
         unknown

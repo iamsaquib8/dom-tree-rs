@@ -59,8 +59,11 @@ pub enum ErrorKind {
     /// An element was closed implicitly by another tag or end-of-input.
     ImplicitlyClosed,
     /// A reference-shaped `&…` was not recognised and was left verbatim: an
-    /// unknown `&name;`, a malformed `&#…`, or a known name missing its `;`.
-    /// A bare `&` (as in `a & b` or `?a=1&b=2`) is valid HTML and not reported.
+    /// unknown `&name;`, a malformed `&#…`, or one of WHATWG's legacy names
+    /// (`&amp`, `&copy`, …) missing its `;`. A bare `&` (as in `a & b`,
+    /// `?a=1&b=2` or `x&order=1`) is valid HTML and not reported. The position
+    /// is that of the `&` (the first such one in a text run or attribute
+    /// value).
     UnknownEntity,
     /// A `<! ... >` or `<? ... >` construct was treated as a bogus comment.
     BogusComment,

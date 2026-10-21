@@ -11,7 +11,10 @@
 //! `scripts/gen_entities.py`; looked up by binary search).
 //!
 //! Either way a named reference needs its `;`: the legacy no-semicolon
-//! spellings browsers also accept (`&amp`, `&copy`) stay verbatim.
+//! spellings browsers also accept (`&amp`, `&copy`) stay verbatim. Whether
+//! one of those is *reported* depends only on WHATWG's 106 legacy names
+//! ([`LEGACY`]), never on which table is compiled in, so both builds report
+//! the same thing.
 
 use alloc::borrow::Cow;
 use alloc::string::String;
@@ -29,12 +32,12 @@ const REPLACEMENT: char = '\u{FFFD}';
 /// Decode HTML entities in `input`.
 ///
 /// Returns the decoded text (borrowed unchanged when there is nothing to do)
-/// and a flag that is `true` if at least one reference-shaped `&…` was left
-/// verbatim. `in_attr` selects the attribute-value reporting rule (see
-/// [`decode_into`]).
-pub(crate) fn decode(input: &str, in_attr: bool) -> (Cow<'_, str>, bool) {
+/// and, if a reference-shaped `&…` was left verbatim, the byte offset in
+/// `input` of the first one's `&`. `in_attr` selects the attribute-value
+/// reporting rule (see [`decode_into`]).
+pub(crate) fn decode(input: &str, in_attr: bool) -> (Cow<'_, str>, Option<usize>) {
     if scan::find_byte(b'&', input.as_bytes()).is_none() {
-        return (Cow::Borrowed(input), false);
+        return (Cow::Borrowed(input), None);
     }
     let mut out = String::with_capacity(input.len());
     let unknown = decode_into(input, &mut out, in_attr);
@@ -42,15 +45,21 @@ pub(crate) fn decode(input: &str, in_attr: bool) -> (Cow<'_, str>, bool) {
 }
 
 /// Append `input` to `out` with its HTML entities decoded (the tree builder
-/// decodes straight into its string arena, with no temporary). Returns `true`
-/// if at least one reference-shaped `&…` was left verbatim.
+/// decodes straight into its string arena, with no temporary). If a
+/// reference-shaped `&…` was left verbatim, returns the byte offset in `input`
+/// of the first one's `&` (the parser adds the token's source offset to it).
 ///
 /// Reporting follows WHATWG: an unknown `&name;` or a malformed `&#…` is always
-/// reported; in text, so is a known legacy name missing its `;` (`AT&ampT`,
-/// `&copy 2026`); in attribute values that is valid when an alphanumeric or `=`
-/// follows (`?a=1&region=eu`), so only an exact known name is reported there.
-pub(crate) fn decode_into(input: &str, out: &mut String, in_attr: bool) -> bool {
-    let mut unknown = false;
+/// reported. So is one of the legacy names browsers accept without a `;`
+/// ([`LEGACY`]) written without it: in text when the run of letters and digits
+/// after the `&` *starts* with one (`AT&ampT`, `&copy 2026`, `&notin`); in an
+/// attribute value only when the run *is* one and no `=` follows
+/// (`title="&copy"`), since there a legacy name followed by an alphanumeric or
+/// `=` is valid
+/// (`?a=1&region=eu`, `&copyright=x`). Any other `&` is plain text, valid
+/// HTML, and not reported (`&order=1`, `tom&nearby`, `x &ne y`).
+pub(crate) fn decode_into(input: &str, out: &mut String, in_attr: bool) -> Option<usize> {
+    let mut unknown = None;
     let mut rest = input;
 
     while let Some(amp) = scan::find_byte(b'&', rest.as_bytes()) {
@@ -74,7 +83,10 @@ pub(crate) fn decode_into(input: &str, out: &mut String, in_attr: bool) -> bool 
                 // Not a valid reference: keep the '&' verbatim and continue.
                 // Only a reference-shaped `&…` is reported; a bare `&`
                 // (`a & b`, `?a=1&b=2`) is valid HTML.
-                unknown |= looks_like_reference(after, in_attr);
+                if unknown.is_none() && looks_like_reference(after, in_attr) {
+                    // `rest` is a suffix of `input` and `amp` indexes it.
+                    unknown = Some(input.len() - rest.len() + amp);
+                }
                 out.push('&');
                 rest = after;
             }
@@ -84,9 +96,34 @@ pub(crate) fn decode_into(input: &str, out: &mut String, in_attr: bool) -> bool 
     unknown
 }
 
-/// Longest WHATWG character reference that may appear without its `;`
-/// (`&middot`, `&frac12`, …).
+/// The names WHATWG also recognizes without their `;` ("legacy" references,
+/// for compatibility with old content): the 106 keys of
+/// <https://html.spec.whatwg.org/entities.json> with no trailing `;`, sorted
+/// in byte order for [`is_legacy`]'s binary search. Each is also a
+/// `;`-terminated name.
+const LEGACY: [&str; 106] = [
+    "AElig", "AMP", "Aacute", "Acirc", "Agrave", "Aring", "Atilde", "Auml", "COPY", "Ccedil",
+    "ETH", "Eacute", "Ecirc", "Egrave", "Euml", "GT", "Iacute", "Icirc", "Igrave", "Iuml", "LT",
+    "Ntilde", "Oacute", "Ocirc", "Ograve", "Oslash", "Otilde", "Ouml", "QUOT", "REG", "THORN",
+    "Uacute", "Ucirc", "Ugrave", "Uuml", "Yacute", "aacute", "acirc", "acute", "aelig", "agrave",
+    "amp", "aring", "atilde", "auml", "brvbar", "ccedil", "cedil", "cent", "copy", "curren", "deg",
+    "divide", "eacute", "ecirc", "egrave", "eth", "euml", "frac12", "frac14", "frac34", "gt",
+    "iacute", "icirc", "iexcl", "igrave", "iquest", "iuml", "laquo", "lt", "macr", "micro",
+    "middot", "nbsp", "not", "ntilde", "oacute", "ocirc", "ograve", "ordf", "ordm", "oslash",
+    "otilde", "ouml", "para", "plusmn", "pound", "quot", "raquo", "reg", "sect", "shy", "sup1",
+    "sup2", "sup3", "szlig", "thorn", "times", "uacute", "ucirc", "ugrave", "uml", "uuml",
+    "yacute", "yen", "yuml",
+];
+
+/// The length of the shortest [`LEGACY`] name (`lt`)…
+const LEGACY_MIN_LEN: usize = 2;
+/// …and of the longest (`middot`, `frac12`, …).
 const LEGACY_MAX_LEN: usize = 6;
+
+/// Whether `name` is one of the [`LEGACY`] names.
+fn is_legacy(name: &str) -> bool {
+    LEGACY.binary_search(&name).is_ok()
+}
 
 /// Whether the text after an undecodable `&` was meant as a reference, by the
 /// rules described on [`decode_into`].
@@ -107,12 +144,12 @@ fn looks_like_reference(after: &str, in_attr: bool) -> bool {
         return true;
     }
     if in_attr {
-        // `&amp` followed by `=` or an alphanumeric is valid in attributes.
-        return named(run).is_some() && !matches!(bytes.get(n), Some(b'='));
+        // A legacy name followed by `=` or an alphanumeric is valid in
+        // attributes; the run ends at the first non-alphanumeric.
+        return is_legacy(run) && bytes.get(n) != Some(&b'=');
     }
-    // In text, a known legacy name at the start of the run is a missing `;`.
-    // WHATWG's no-semicolon legacy names are 2–6 characters long.
-    (2..=n.min(LEGACY_MAX_LEN)).any(|len| run.get(..len).and_then(named).is_some())
+    // In text, a legacy name at the start of the run is a missing `;`.
+    (LEGACY_MIN_LEN..=n.min(LEGACY_MAX_LEN)).any(|len| run.get(..len).is_some_and(is_legacy))
 }
 
 /// Try to decode a single reference whose text begins right after the `&`.
@@ -402,9 +439,43 @@ fn curated(name: &str) -> Option<&'static str> {
     })
 }
 
-#[cfg(all(test, feature = "entities-full"))]
+#[cfg(test)]
 mod tests {
+    use super::{LEGACY, LEGACY_MAX_LEN, LEGACY_MIN_LEN, decode};
+
+    #[test]
+    fn legacy_table_is_sorted_for_binary_search() {
+        assert!(LEGACY.windows(2).all(|w| w[0] < w[1]));
+        let lens = LEGACY.iter().map(|n| n.len());
+        assert_eq!(lens.clone().min(), Some(LEGACY_MIN_LEN));
+        assert_eq!(lens.max(), Some(LEGACY_MAX_LEN));
+        assert!(
+            LEGACY
+                .iter()
+                .all(|n| n.bytes().all(|b| b.is_ascii_alphanumeric()))
+        );
+    }
+
+    #[test]
+    fn the_first_reported_ampersand_is_located() {
+        assert_eq!(decode("a & b", false).1, None);
+        assert_eq!(decode("ab &bogus; &x;", false).1, Some(3));
+        assert_eq!(decode("&amp; é &#xZZ; &nosuch;", false).1, Some(9));
+        assert_eq!(decode("?a=1&b=2&copy", true).1, Some(8));
+        assert_eq!(decode("?a=1&b=2&copy=3", true).1, None);
+    }
+}
+
+#[cfg(all(test, feature = "entities-full"))]
+mod full_tests {
     use crate::entities_full::ENTITIES;
+
+    #[test]
+    fn legacy_names_are_full_names() {
+        for name in super::LEGACY {
+            assert!(super::full(name).is_some(), "&{name};");
+        }
+    }
 
     #[test]
     fn full_table_is_sorted_for_binary_search() {

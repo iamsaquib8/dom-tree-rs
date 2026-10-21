@@ -3,10 +3,10 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::node::NodeId;
+use crate::node::{NodeId, NodeKind};
 use crate::serialize::walk;
 use crate::tags::{self, Display};
-use crate::tree::NodeRef;
+use crate::tree::{Dom, NodeRef};
 
 /// `colspan` and `rowspan` above this are clamped (HTML clamps `colspan` at
 /// 1000 too).
@@ -28,16 +28,20 @@ impl NodeRef<'_> {
     ///
     /// Rows come from the table's `<thead>`, `<tbody>`, `<tfoot>` and direct
     /// `<tr>`s in document order (stray cells outside any row form a row of
-    /// their own). Each cell is its readable text ([`NodeRef::to_text`]), so
-    /// a nested table's content appears as text inside its cell, but its rows
-    /// are not mixed into this table's. Returns an empty list if this node is
-    /// not a `<table>`.
+    /// their own). Each cell is its readable text ([`NodeRef::to_text`])
+    /// **without** the content of tables nested in it — such a table reads as
+    /// a paragraph break — since a nested table has rows of its own (call
+    /// `table_rows` on it). This keeps extracting every table of a page, as
+    /// `domtree --csv` does, linear in the page's size. Returns an empty list
+    /// if this node is not a `<table>`.
     ///
     /// A cell spanning several columns or rows is **repeated** in every slot
-    /// it covers, so each row lists the value under each column. `rowspan=0`
-    /// spans the rest of the row group; spans stop at the end of their row
-    /// group, as in HTML. Rows are not padded to equal length, except where a
-    /// `rowspan` from an earlier row reaches past a row's own cells.
+    /// it covers, so each row lists the value under each column. Span values
+    /// follow HTML's rules for non-negative integers (`" 2"`, `"+2"` and
+    /// `"2px"` are 2; an invalid or missing value is 1). `rowspan=0` spans the
+    /// rest of the row group; spans stop at the end of their row group, as in
+    /// HTML. Rows are not padded to equal length, except where a `rowspan` from
+    /// an earlier row reaches past a row's own cells.
     ///
     /// Bounded work on hostile input: spans are clamped at 1000, and once
     /// the spans of a table have added about four times the table's own
@@ -69,8 +73,15 @@ impl NodeRef<'_> {
 
         let mut texts: Vec<Vec<String>> = Vec::with_capacity(rows.len());
         let (mut cells, mut bytes) = (0usize, 0usize);
+        // Holds copies of the cells that contain nested tables, made without
+        // those tables; created on first use.
+        let mut scratch: Option<Dom> = None;
         for row in &rows {
-            let row_texts: Vec<String> = row.cells.iter().map(NodeRef::to_text).collect();
+            let row_texts: Vec<String> = row
+                .cells
+                .iter()
+                .map(|&cell| cell_text(cell, &mut scratch))
+                .collect();
             cells = cells.saturating_add(row_texts.len());
             bytes = row_texts
                 .iter()
@@ -275,6 +286,73 @@ fn collect_rows(table: NodeRef<'_>) -> Vec<Row<'_>> {
     rows
 }
 
+/// A cell's readable text ([`NodeRef::to_text`]) without the content of the
+/// tables nested in it. Linear in the cell's own content: a cell holding no
+/// table is read directly; one that does is first copied into `scratch`
+/// without the tables' content, then read.
+fn cell_text(cell: NodeRef<'_>, scratch: &mut Option<Dom>) -> String {
+    if !has_nested_table(cell) {
+        return cell.to_text();
+    }
+    let dom = scratch.get_or_insert_with(|| Dom::with_capacity(0));
+    copy_without_tables(dom, cell)
+        .and_then(|copy| dom.get(copy))
+        .map(|copy| copy.to_text())
+        .unwrap_or_default()
+}
+
+/// Whether a `<table>` sits inside `cell`, outside hidden elements (whose
+/// text does not count anyway). Stops descending at the first one.
+fn has_nested_table(cell: NodeRef<'_>) -> bool {
+    let mut found = false;
+    walk(cell, |node, enter| match node.tag_name() {
+        _ if !enter || found => false,
+        Some("table") => {
+            found = true;
+            false
+        }
+        Some(tag) => tags::display(tag) != Display::Hidden,
+        None => false,
+    });
+    found
+}
+
+/// Copy `cell`'s subtree into `dom` as a detached tree, with each nested
+/// `<table>` (and each hidden element, which `to_text` skips anyway) left
+/// empty, so the copy's text is the cell's own. Built bottom-up — a node is
+/// created once its children are — so every `append_child` is O(1).
+fn copy_without_tables(dom: &mut Dom, cell: NodeRef<'_>) -> Option<NodeId> {
+    // The copied children of each open element, innermost last.
+    let mut open: Vec<Vec<NodeId>> = Vec::new();
+    let mut root = None;
+    walk(cell, |node, enter| {
+        let copy = match node.kind() {
+            NodeKind::Text(text) => dom.create_text(text),
+            NodeKind::Element { tag } if enter => {
+                if tag != "table" && tags::display(tag) != Display::Hidden {
+                    open.push(Vec::new());
+                    return true;
+                }
+                dom.create_element(tag)
+            }
+            NodeKind::Element { tag } => {
+                let copy = dom.create_element(tag);
+                for child in open.pop().unwrap_or_default() {
+                    dom.append_child(copy, child);
+                }
+                copy
+            }
+            NodeKind::Comment(_) | NodeKind::Doctype(_) => return false,
+        };
+        match open.last_mut() {
+            Some(children) => children.push(copy),
+            None => root = Some(copy),
+        }
+        false
+    });
+    root
+}
+
 /// Fill `line` from the `rowspan`s covering its next columns.
 fn take_pending(line: &mut Vec<String>, pending: &mut [Option<(usize, String)>]) {
     while let Some(slot) = pending.get_mut(line.len()) {
@@ -293,20 +371,26 @@ fn take_pending(line: &mut Vec<String>, pending: &mut [Option<(usize, String)>])
     }
 }
 
-/// A `colspan`/`rowspan` value, by the HTML rules for non-negative integers
-/// (leading digits; `"2px"` is 2). Missing or invalid: 1.
+/// A `colspan`/`rowspan` value, by the HTML rules for parsing non-negative
+/// integers: leading ASCII whitespace is skipped, then an optional `+` (or a
+/// `-`, valid only before zero), then the leading digits (`"2px"` is 2).
+/// Missing or invalid: 1.
 fn span(value: Option<&str>) -> usize {
     let Some(value) = value else {
         return 1;
     };
-    let digits = value.trim_start().bytes().take_while(u8::is_ascii_digit);
+    let value = value.trim_start_matches(['\t', '\n', '\x0C', '\r', ' ']);
+    let (negative, digits) = match value.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, value.strip_prefix('+').unwrap_or(value)),
+    };
     let mut n: usize = 0;
     let mut any = false;
-    for d in digits {
+    for d in digits.bytes().take_while(u8::is_ascii_digit) {
         any = true;
         n = n.saturating_mul(10).saturating_add(usize::from(d - b'0'));
     }
-    if any { n } else { 1 }
+    if any && (n == 0 || !negative) { n } else { 1 }
 }
 
 /// What spans may still add to a table.

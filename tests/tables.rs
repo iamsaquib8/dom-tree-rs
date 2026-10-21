@@ -108,6 +108,26 @@ fn span_values_follow_html_parsing_rules() {
         ),
         grid![["a", "a", "b", "c", "d", "e", "e"]]
     );
+    // A leading `+` is allowed; `-` only before zero (rowspan=-0 is 0).
+    assert_eq!(
+        rows(
+            "<table><tr><td colspan='+2'>a</td><td colspan=' +2'>b</td><td colspan='+'>c</td>\
+             <td colspan='+-2'>d</td><td colspan='-0'>e</td><td rowspan='-0'>f</td><td colspan='++2'>g</td></tr>\
+             <tr><td>h</td></tr></table>"
+        ),
+        grid![
+            ["a", "a", "b", "b", "c", "d", "e", "f", "g"],
+            ["h", "", "", "", "", "", "", "f"]
+        ]
+    );
+    // Only ASCII whitespace is skipped.
+    assert_eq!(
+        rows(
+            "<table><tr><td colspan='\t\n\x0c\r 2'>a</td><td colspan='\u{3000}2'>b</td>\
+             <td colspan='\u{a0}2'>c</td><td colspan='\x0b2'>d</td></tr></table>"
+        ),
+        grid![["a", "a", "b", "c", "d"]]
+    );
     // Huge spans are clamped at 1000.
     let r = rows("<table><tr><td colspan=99999999999999999999999>w</td></tr></table>");
     assert_eq!(r[0].len(), 1000);
@@ -125,14 +145,48 @@ fn cells_are_readable_text() {
 }
 
 #[test]
-fn nested_tables_stay_inside_their_cell() {
+fn nested_tables_are_left_out_of_their_cell() {
+    // A nested table has rows of its own; its parent's cell does not repeat
+    // them (which made extracting every table quadratic in nesting depth).
     let html = "<table id=outer><tr><td>o1</td><td><table><tr><td>i1</td><td>i2</td></tr><tr><td>i3</td></tr></table></td></tr>\
-                <tr><td>o2</td></tr></table>";
+                <tr><td>o2</td><td>before<div><table><tr><td>i4</td></tr></table>after</div> <b>end</b></td></tr></table>";
     let dom = parse(html);
     let outer = dom.find_by_id("outer").unwrap();
-    assert_eq!(outer.table_rows(), grid![["o1", "i1\ti2\ni3"], ["o2"]]);
+    assert_eq!(
+        outer.table_rows(),
+        grid![["o1", ""], ["o2", "before\n\nafter\nend"]]
+    );
     let inner = dom.find_by_tag("table").nth(1).unwrap();
     assert_eq!(inner.table_rows(), grid![["i1", "i2"], ["i3"]]);
+    let inner = dom.find_by_tag("table").nth(2).unwrap();
+    assert_eq!(inner.table_rows(), grid![["i4"]]);
+    // The rest of such a cell reads as usual.
+    assert_eq!(
+        rows(
+            "<table><tr><td><p>p1</p>x<br>y<pre>  a\n b</pre><table><tr><td>in</table>\
+             <script>s</script><template><table></table></template><i>z</i></td></tr></table>"
+        ),
+        grid![["p1\n\nx\ny\n\n  a\n b\n\nz"]]
+    );
+}
+
+#[test]
+fn every_table_of_a_page_in_linear_time() {
+    // Each level adds a word: repeating nested content in every ancestor's
+    // cell made the total output (and work) quadratic in the depth.
+    let depth = 5_000;
+    let html = "<table><tr><td>x ".repeat(depth);
+    let dom = parse(&html);
+    let mut tables = 0;
+    let mut bytes = 0;
+    for table in dom.find_by_tag("table") {
+        let rows = table.table_rows();
+        assert_eq!(rows, grid![["x"]]);
+        bytes += to_csv(&rows).len();
+        tables += 1;
+    }
+    assert_eq!(tables, depth);
+    assert!(bytes < html.len(), "{bytes} bytes");
 }
 
 #[test]
@@ -238,9 +292,9 @@ fn deep_and_wide_tables() {
     let mut html = "<table><tr><td>".repeat(depth);
     html.push_str("core");
     let dom = parse(&html);
-    // Each nested table's text is part of its parent's single cell.
+    // Each cell holds only the next table, which is left out of its text.
     let outer = dom.find_by_tag("table").next().unwrap();
-    assert_eq!(outer.table_rows().len(), 1);
+    assert_eq!(outer.table_rows(), grid![[""]]);
     let inner = dom.find_by_tag("table").last().unwrap();
     assert_eq!(inner.table_rows(), grid![["core"]]);
     let html = format!("<table>{}</table>", "<tr><td>a<td>b</tr>".repeat(50_000));

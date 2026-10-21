@@ -82,6 +82,88 @@ fn base_url_details() {
 }
 
 #[test]
+fn base_inside_template_or_foreign_content_is_ignored() {
+    // A template's content is not in the document; browsers skip its <base>.
+    let html = "<template><base href='https://evil.example/'></template><a href=x>x</a>";
+    let page = Some("https://a.example/d/");
+    assert_eq!(
+        parse(html).base_url(page).as_deref(),
+        Some("https://a.example/d/")
+    );
+    assert_eq!(urls(html, page), [pair("https://a.example/d/x", "x")]);
+    assert_eq!(parse(html).base_url(None), None);
+    // Nested deeper, in <head>, or inside SVG/MathML (not an HTML <base>).
+    for html in [
+        "<head><template><div><base href=/evil/></div></template></head>",
+        "<svg><base href=/evil/></svg>",
+        "<math><base href=/evil/></math>",
+    ] {
+        assert_eq!(
+            parse(html).base_url(page).as_deref(),
+            Some("https://a.example/d/"),
+            "{html}"
+        );
+    }
+    // The first <base href> outside them counts.
+    let html = "<head><template><base href=/evil/></template><base href=/good/><base href=/second/></head>";
+    assert_eq!(
+        parse(html).base_url(page).as_deref(),
+        Some("https://a.example/good/")
+    );
+    let html = "<svg><base href=/evil/></svg><p><base href=/good/></p>";
+    assert_eq!(
+        parse(html).base_url(page).as_deref(),
+        Some("https://a.example/good/")
+    );
+}
+
+#[test]
+fn base_url_reads_backslashes_as_slashes() {
+    let dom = parse(r"<base href='https:\\cdn.example\a\'><a href=b>b</a>");
+    assert_eq!(
+        dom.base_url(None).as_deref(),
+        Some("https://cdn.example/a/")
+    );
+    assert_eq!(dom.links(None)[0].url, "https://cdn.example/a/b");
+}
+
+#[test]
+fn hidden_content_is_not_link_text() {
+    let html = "<a href=/1><span hidden>secret</span><span style='display:none'>css</span>\
+                <span style='color: red; DISPLAY : None !important'>loud</span>\
+                <span style='visibility:hidden'>invisible</span>shown</a>\
+                <a href=/2><span aria-hidden=true>→</span> Next</a>\
+                <a href=/3><div hidden>block</div>a<b style='display:none'>x</b>b</a>\
+                <a href=/4 title=Icon><img src=i.png alt=Hidden hidden></a>\
+                <a href=/5><span style='--display:none; display: block'>custom</span> \
+                <span style='visibility: visible'>v</span> <span style='display'>bare</span></a>";
+    let texts: Vec<_> = parse(html)
+        .links(None)
+        .into_iter()
+        .map(|l| l.text)
+        .collect();
+    assert_eq!(texts, ["shown", "→ Next", "ab", "Icon", "custom v bare"]);
+}
+
+#[test]
+fn links_inside_hidden_elements_are_still_found() {
+    // A hidden menu still holds links, and a hidden link is still a link: the
+    // check is for content hidden inside a link.
+    let html = "<nav hidden><a href=/menu>Menu item</a></nav>\
+                <a href=/self hidden>Self</a>\
+                <a href=/outer>out<span hidden>in<a href=/inner>inner</a></span>side</a>";
+    assert_eq!(
+        urls(html, None),
+        [
+            pair("/menu", "Menu item"),
+            pair("/self", "Self"),
+            pair("/outer", "outside"),
+            pair("/inner", ""),
+        ]
+    );
+}
+
+#[test]
 fn javascript_links_are_skipped() {
     let html = "<a href='javascript:void(0)'>a</a><a href=' JavaScript:alert(1)'>b</a>\
                 <a href='java\tscript:x()'>c</a><a href='/ok'>ok</a><a href='javascript-guide.html'>d</a>";

@@ -4,7 +4,9 @@
 //! Works on the finished Markdown: it is cut into blocks at blank lines
 //! (never inside a fenced code block), sections start at top-level ATX
 //! headings, and blocks are packed greedily into chunks under the budget.
-//! Linear in the size of the Markdown.
+//! Linear in the size of the Markdown, and so is the output: heading titles
+//! are capped at `MAX_TITLE` characters, so the heading path every chunk
+//! carries is bounded.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -12,6 +14,12 @@ use core::mem;
 
 use super::is_space;
 use crate::tree::{Dom, NodeRef};
+
+/// The longest heading title kept in a [`Chunk::heading_path`], in characters;
+/// a longer title is cut there and marked with `…`. Every chunk carries its
+/// whole path (at most six titles), so without a cap a few huge headings over
+/// many small chunks would make the output quadratic in the input.
+const MAX_TITLE: usize = 256;
 
 /// A piece of a document's Markdown, small enough for an embedding model or a
 /// prompt, with the headings it sits under — so every chunk stands on its
@@ -23,7 +31,9 @@ use crate::tree::{Dom, NodeRef};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Chunk {
     /// The plain-text titles of the headings this chunk sits under, outermost
-    /// first (`["Guide", "Install"]`). Empty before the first heading.
+    /// first (`["Guide", "Install"]`). Empty before the first heading. A title
+    /// longer than 256 characters is cut to its first 256, followed by `…`
+    /// (the heading line itself stays whole in [`Chunk::markdown`]).
     pub heading_path: Vec<String>,
     /// The chunk's Markdown. It starts with its section's heading line when
     /// it is the first chunk of that section.
@@ -55,6 +65,7 @@ impl Dom {
     ///   joins the [`Chunk::heading_path`] (replacing any heading of the same
     ///   or a deeper level). A heading directly followed by a deeper one stays
     ///   in the same chunk, so `# Guide` / `## Install` / text is one chunk.
+    ///   Titles in the path are capped at 256 characters (cut, then `…`).
     /// - **Packing.** Within a section, whole blocks (paragraphs, lists,
     ///   quotes, tables, fenced code) are packed greedily, separated by a
     ///   blank line, while the chunk stays within `max_chars`. Small sections
@@ -72,6 +83,10 @@ impl Dom {
     /// reordered: concatenating the chunks gives back the Markdown, plus any
     /// repeated fences and table headers. `max_chars == 0` is allowed (every
     /// line becomes its own chunk). Blank chunks are never returned.
+    ///
+    /// Work and output are linear in the size of the Markdown: every chunk
+    /// holds at least one line of it, and its heading path at most six capped
+    /// titles.
     ///
     /// ```
     /// let dom = domtree::parse(
@@ -196,7 +211,7 @@ impl Packer {
         while self.path.last().is_some_and(|&(l, _)| l >= level) {
             self.path.pop();
         }
-        self.path.push((level, heading_text(&line)));
+        self.path.push((level, cap_title(heading_text(&line))));
         self.append(&line, len);
         self.level = Some(level);
     }
@@ -477,6 +492,17 @@ fn heading_text(line: &str) -> String {
         text.push_str(word);
     }
     text
+}
+
+/// `title` cut to its first [`MAX_TITLE`] characters, plus `…`, if longer.
+fn cap_title(mut title: String) -> String {
+    if let Some((end, _)) = title.char_indices().nth(MAX_TITLE) {
+        title.truncate(end);
+        let kept = title.trim_end_matches(is_space).len();
+        title.truncate(kept);
+        title.push('…');
+    }
+    title
 }
 
 /// The content of a code span whose opening run of `n` backticks preceded

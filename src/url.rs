@@ -4,8 +4,9 @@
 //!
 //! This is *reference resolution*, not a URL parser: it does not validate,
 //! percent-encode or normalize hosts. Like a browser, it ignores leading and
-//! trailing whitespace (and control characters) and drops tabs and line breaks
-//! inside a URL.
+//! trailing whitespace (and control characters), drops tabs and line breaks
+//! inside a URL, and reads `\` as `/` in `http`, `https`, `ftp`, `ws`, `wss`
+//! and `file` URLs.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -20,6 +21,13 @@ use alloc::vec::Vec;
 /// scheme, such as `mailto:` or `javascript:`) is returned as is, apart from
 /// removing `.`/`..` path segments.
 ///
+/// In the *special* schemes `http`, `https`, `ftp`, `ws`, `wss` and `file`,
+/// browsers read a backslash as a slash, so `\\evil.example\x` or
+/// `/\evil.example/x` on an `https` page leads to another host. Likewise,
+/// every `\` before the query (`?`) or fragment (`#`) of such a URL — the
+/// reference when its own scheme is special, or a relative reference against
+/// a special-scheme base — becomes `/` here, even when `base` is schemeless.
+///
 /// ```
 /// use domtree::resolve_url;
 ///
@@ -31,10 +39,13 @@ use alloc::vec::Vec;
 /// assert_eq!(resolve_url(base, " mailto:hi@example.com "), "mailto:hi@example.com");
 /// // A relative base cannot anchor anything:
 /// assert_eq!(resolve_url("/docs/", "a.html"), "a.html");
+/// // `\` is `/` in http(s) URLs, as in a browser:
+/// assert_eq!(resolve_url(base, "/\\evil.example/x"), "https://evil.example/x");
 /// ```
 pub fn resolve_url(base: &str, reference: &str) -> String {
-    let base = clean(base);
-    let reference = clean(reference);
+    let base = slashes(clean(base), None);
+    let base_scheme = scheme(&base);
+    let reference = slashes(clean(reference), base_scheme);
     let b = Parts::split(&base);
     if b.scheme.is_none() {
         return reference;
@@ -179,6 +190,56 @@ pub(crate) fn clean(url: &str) -> String {
         .chars()
         .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
         .collect()
+}
+
+/// A URL on its own, cleaned up as [`resolve_url`] does with a reference it
+/// cannot anchor: [`clean`], and `\` read as `/` if its scheme is special.
+pub(crate) fn normalize(url: &str) -> String {
+    slashes(clean(url), None)
+}
+
+/// Where `url`'s query or fragment starts (its length if it has neither).
+fn path_end(url: &str) -> usize {
+    // Byte and char loops, here and in `slashes`, rather than `['?', '#']` and
+    // `str::replace`: those generic instances are shared with code the wasm
+    // bindings use, and another caller changes how they inline there.
+    url.bytes()
+        .position(|b| matches!(b, b'?' | b'#'))
+        .unwrap_or(url.len())
+}
+
+/// The scheme of `url`, if it has one: an RFC 3986 scheme followed by `:`,
+/// ahead of any `?` or `#` (where [`Parts::split`] finds it).
+fn scheme(url: &str) -> Option<&str> {
+    let (scheme, _) = url.get(..path_end(url))?.split_once(':')?;
+    is_scheme(scheme).then_some(scheme)
+}
+
+/// Whether `scheme` is one of the WHATWG URL standard's special schemes, in
+/// which browsers read `\` as `/`.
+fn is_special(scheme: &str) -> bool {
+    ["http", "https", "ftp", "ws", "wss", "file"]
+        .iter()
+        .any(|s| s.eq_ignore_ascii_case(scheme))
+}
+
+/// `url` with every `\` ahead of its query or fragment turned into `/` when
+/// its scheme — or, if it has none, `base_scheme` — is special.
+fn slashes(url: String, base_scheme: Option<&str>) -> String {
+    if !scheme(&url).or(base_scheme).is_some_and(is_special) {
+        return url;
+    }
+    match url.split_at_checked(path_end(&url)) {
+        Some((head, tail)) if head.contains('\\') => {
+            let mut out: String = head
+                .chars()
+                .map(|c| if c == '\\' { '/' } else { c })
+                .collect();
+            out.push_str(tail);
+            out
+        }
+        _ => url,
+    }
 }
 
 struct Parts<'a> {

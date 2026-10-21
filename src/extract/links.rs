@@ -5,11 +5,11 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::{collapse, document_order, non_empty};
-use crate::node::NodeKind;
+use crate::node::{NodeId, NodeKind};
 use crate::serialize::{is_space, walk};
 use crate::tags::{self, Display};
 use crate::tree::{Dom, NodeRef};
-use crate::url::{clean, is_javascript, resolve_url, srcset_candidates};
+use crate::url::{is_javascript, normalize, resolve_url, srcset_candidates};
 
 /// A hyperlink — an `<a href>` or `<area href>` — found by [`Dom::links`].
 #[non_exhaustive]
@@ -19,14 +19,21 @@ pub struct Link<'a> {
     pub node: NodeRef<'a>,
     /// The `href` attribute exactly as written.
     pub href: &'a str,
-    /// `href` resolved against the base URL (see [`Dom::base_url`]). Without
-    /// an absolute base this is `href` with surrounding whitespace removed,
-    /// and may be relative.
+    /// `href` resolved against the base URL (see [`Dom::base_url`]) with
+    /// [`resolve_url`]. Without an absolute base this is `href` cleaned up the
+    /// same way (surrounding whitespace removed), and may be relative.
     pub url: String,
     /// The readable link text, on one line: the element's visible text with
     /// whitespace collapsed. When that is empty (an icon link), the first of
-    /// `aria-label`, `alt` (for `<area>`), the `alt` of an image inside, or
-    /// `title`; otherwise empty.
+    /// `aria-label`, `alt` (for `<area>`), the `alt` of a visible image
+    /// inside, or `title`; otherwise empty.
+    ///
+    /// Visible means not inside a hidden element ([`Dom::to_text`] skips the
+    /// same: `<script>`, `<template>`, …), nor inside an element of the link
+    /// that is hidden by its `hidden` attribute or by an inline `style`
+    /// declaring `display: none` or `visibility: hidden` (a simple check of
+    /// the attribute: no CSS cascade). `aria-hidden` content is kept, since it
+    /// is still shown on screen.
     pub text: String,
 }
 
@@ -54,6 +61,10 @@ impl Dom {
     /// `base` (typically the URL the page was fetched from); without a
     /// `<base>` element, `base` itself. `None` when neither is available.
     ///
+    /// As in a browser, a `<base>` inside a `<template>` does not count (a
+    /// template's content is not part of the document), and neither does one
+    /// inside `<svg>` or `<math>` (it is not an HTML `<base>` there).
+    ///
     /// ```
     /// let dom = domtree::parse(r#"<head><base href="/docs/"></head>"#);
     /// assert_eq!(
@@ -64,13 +75,28 @@ impl Dom {
     /// assert_eq!(domtree::parse("<p>x</p>").base_url(None), None);
     /// ```
     pub fn base_url(&self, base: Option<&str>) -> Option<String> {
-        let tag = document_order(self)
-            .filter(|n| n.tag_name() == Some("base"))
-            .find_map(|n| n.attr("href"));
+        let mut tag = None;
+        for root in self.roots() {
+            // Once found, nothing more is entered: the walk only steps over
+            // the remaining siblings on the way out.
+            walk(root, |node, enter| match node.tag_name() {
+                _ if !enter || tag.is_some() => false,
+                Some("base") => {
+                    tag = node.attr("href");
+                    false
+                }
+                Some("template" | "svg" | "math") => false,
+                Some(_) => true,
+                None => false,
+            });
+            if tag.is_some() {
+                break;
+            }
+        }
         match (tag, base) {
             (Some(href), Some(base)) => Some(resolve_url(base, href)),
-            (Some(href), None) => Some(clean(href)).filter(|h| !h.is_empty()),
-            (None, Some(base)) => Some(clean(base)),
+            (Some(href), None) => Some(normalize(href)).filter(|h| !h.is_empty()),
+            (None, Some(base)) => Some(normalize(base)),
             (None, None) => None,
         }
     }
@@ -216,6 +242,9 @@ struct TextCollector<'a> {
     /// Open links: (element, index into `done`).
     open: Vec<(NodeRef<'a>, usize)>,
     done: Vec<LinkText<'a>>,
+    /// The hidden element inside a link that the walk is in, if any: nothing
+    /// in it counts toward any link's text (links in it are still found).
+    hidden: Option<NodeId>,
 }
 
 #[derive(Default)]
@@ -238,8 +267,10 @@ impl<'a> TextCollector<'a> {
         let tag = match node.kind() {
             NodeKind::Element { tag } => tag,
             NodeKind::Text(t) => {
-                if let Some(link) = self.current() {
-                    link.push(t);
+                if self.hidden.is_none() {
+                    if let Some(link) = self.current() {
+                        link.push(t);
+                    }
                 }
                 return false;
             }
@@ -248,6 +279,12 @@ impl<'a> TextCollector<'a> {
         if !enter {
             if self.open.last().is_some_and(|(n, _)| n.id() == node.id()) {
                 self.open.pop();
+            }
+            if self.hidden.is_some() {
+                if self.hidden == Some(node.id()) {
+                    self.hidden = None;
+                }
+                return false;
             }
             if tags::display(tag) != Display::Inline {
                 if let Some(link) = self.current() {
@@ -260,12 +297,17 @@ impl<'a> TextCollector<'a> {
         if display == Display::Hidden {
             return false;
         }
-        if let Some(link) = self.current() {
-            if display != Display::Inline || tag == "br" {
-                link.space = true;
-            }
-            if tag == "img" && link.alt.is_none() {
-                link.alt = node.attr("alt").and_then(non_empty);
+        if self.hidden.is_none() && !self.open.is_empty() && is_hidden(node) {
+            self.hidden = Some(node.id());
+        }
+        if self.hidden.is_none() {
+            if let Some(link) = self.current() {
+                if display != Display::Inline || tag == "br" {
+                    link.space = true;
+                }
+                if tag == "img" && link.alt.is_none() {
+                    link.alt = node.attr("alt").and_then(non_empty);
+                }
             }
         }
         if matches!(tag, "a" | "area") {
@@ -283,6 +325,28 @@ impl<'a> TextCollector<'a> {
         let &(_, index) = self.open.last()?;
         self.done.get_mut(index)
     }
+}
+
+/// Whether `node` hides itself: a `hidden` attribute, or an inline `style`
+/// with a `display: none` or `visibility: hidden` declaration (names and
+/// values ASCII case-insensitive, `!important` allowed; no CSS cascade).
+fn is_hidden(node: NodeRef<'_>) -> bool {
+    node.has_attr("hidden")
+        || node.attr("style").is_some_and(|style| {
+            style.split(';').any(|declaration| {
+                let Some((name, value)) = declaration.split_once(':') else {
+                    return false;
+                };
+                let name = name.trim_matches(|c: char| c.is_ascii_whitespace());
+                let value = value
+                    .split(|c: char| c.is_ascii_whitespace() || c == '!')
+                    .find(|v| !v.is_empty())
+                    .unwrap_or("");
+                (name.eq_ignore_ascii_case("display") && value.eq_ignore_ascii_case("none"))
+                    || (name.eq_ignore_ascii_case("visibility")
+                        && value.eq_ignore_ascii_case("hidden"))
+            })
+        })
 }
 
 impl<'a> LinkText<'a> {

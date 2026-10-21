@@ -123,6 +123,54 @@ fn heading_paths_are_plain_text() {
 }
 
 #[test]
+fn long_heading_titles_are_capped_in_the_path() {
+    // Cut at 256 characters, then `…`; the heading line itself stays whole.
+    let long = "word ".repeat(100);
+    let all = chunks(&format!("<h1>{long}</h1><p>x</p>"), 10_000);
+    let title = &all[0].heading_path[0];
+    assert_eq!(title.chars().count(), 257);
+    assert!(title.ends_with("word w…"), "{title:?}");
+    assert!(
+        all[0]
+            .markdown
+            .starts_with(&format!("# {}\n\nx", long.trim_end()))
+    );
+    // No space is left dangling before the `…`.
+    let spaced = format!("{} tail", "x".repeat(255));
+    let all = chunks(&format!("<h2>{spaced}</h2><p>y</p>"), 10_000);
+    assert_eq!(all[0].heading_path, [format!("{}…", "x".repeat(255))]);
+    // Cut on a character boundary.
+    let all = chunks(&format!("<h2>{}</h2><p>y</p>", "é🦀".repeat(200)), 10_000);
+    assert_eq!(all[0].heading_path, [format!("{}…", "é🦀".repeat(128))]);
+    // Exactly 256 characters: kept as is.
+    let exact = "z".repeat(256);
+    let all = chunks(&format!("<h3>{exact}</h3><p>y</p>"), 10_000);
+    assert_eq!(all[0].heading_path, [exact]);
+}
+
+#[test]
+fn output_stays_linear_with_huge_headings() {
+    // Six ~8 KB nested headings over many small chunks: every chunk carries
+    // the whole path, so uncapped titles made the output ~45x the input.
+    let mut html = String::new();
+    for level in 1..=6 {
+        html.push_str(&format!("<h{level}>{}</h{level}>", "x".repeat(8_000)));
+    }
+    for _ in 0..500 {
+        html.push_str(&format!("<p>{}</p>", "y".repeat(999)));
+    }
+    let all = chunks(&html, 1000);
+    assert!(all.len() > 500);
+    let mut out = 0;
+    for c in &all {
+        let path: usize = c.heading_path.iter().map(String::len).sum();
+        assert!(path <= 6 * (256 + '…'.len_utf8()), "{path}");
+        out += path + c.markdown.len();
+    }
+    assert!(out < 3 * html.len(), "{out} bytes out of {}", html.len());
+}
+
+#[test]
 fn blocks_are_packed_under_the_budget() {
     let html = "<h2>S</h2><p>aaaa</p><p>bbbb</p><p>cccc</p><p>dddd</p>";
     // "## S\n\naaaa\n\nbbbb" is 16 characters.

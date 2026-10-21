@@ -38,11 +38,14 @@ cd dom-tree-wasm && wasm-pack build --target web --release && wasm-pack test --n
 # Playground (after building the wasm into playground/pkg — see playground/README.md)
 python3 -m http.server -d playground 8000
 
-# Benchmarks
+# Benchmarks (see benchmarks/README.md); the memory report; the simd feature
 cd benchmarks && cargo bench
+cd benchmarks && cargo run --release --example memory
+cargo test --features simd
 
 # Fuzzing (nightly)
 cargo +nightly fuzz run parse
+cargo +nightly fuzz run differential   # our tree vs html5ever on the claimed subset
 ```
 
 Snapshot tests use [`insta`]: after an intentional output change, run

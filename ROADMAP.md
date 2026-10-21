@@ -204,7 +204,7 @@ Being easy to *get* matters as much as features.
 
 Concrete follow-ups that came out of building 0.3–0.7.
 
-- [ ] **Quieter diagnostics** — stop flagging valid HTML in `Dom::errors()`:
+- [x] **Quieter diagnostics** — stop flagging valid HTML in `Dom::errors()`:
       a bare `&` that can't start a reference, and end tags that close
       elements whose end tag is optional (`<ul><li>a</ul>`).
 - [ ] **Context-aware fragment parsing** — parse `append_html` input in the

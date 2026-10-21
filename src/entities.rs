@@ -29,21 +29,27 @@ const REPLACEMENT: char = '\u{FFFD}';
 /// Decode HTML entities in `input`.
 ///
 /// Returns the decoded text (borrowed unchanged when there is nothing to do)
-/// and a flag that is `true` if at least one unknown named reference was left
-/// verbatim.
-pub(crate) fn decode(input: &str) -> (Cow<'_, str>, bool) {
+/// and a flag that is `true` if at least one reference-shaped `&…` was left
+/// verbatim. `in_attr` selects the attribute-value reporting rule (see
+/// [`decode_into`]).
+pub(crate) fn decode(input: &str, in_attr: bool) -> (Cow<'_, str>, bool) {
     if scan::find_byte(b'&', input.as_bytes()).is_none() {
         return (Cow::Borrowed(input), false);
     }
     let mut out = String::with_capacity(input.len());
-    let unknown = decode_into(input, &mut out);
+    let unknown = decode_into(input, &mut out, in_attr);
     (Cow::Owned(out), unknown)
 }
 
 /// Append `input` to `out` with its HTML entities decoded (the tree builder
 /// decodes straight into its string arena, with no temporary). Returns `true`
-/// if at least one unknown named reference was left verbatim.
-pub(crate) fn decode_into(input: &str, out: &mut String) -> bool {
+/// if at least one reference-shaped `&…` was left verbatim.
+///
+/// Reporting follows WHATWG: an unknown `&name;` or a malformed `&#…` is always
+/// reported; in text, so is a known legacy name missing its `;` (`AT&ampT`,
+/// `&copy 2026`); in attribute values that is valid when an alphanumeric or `=`
+/// follows (`?a=1&region=eu`), so only an exact known name is reported there.
+pub(crate) fn decode_into(input: &str, out: &mut String, in_attr: bool) -> bool {
     let mut unknown = false;
     let mut rest = input;
 
@@ -66,7 +72,9 @@ pub(crate) fn decode_into(input: &str, out: &mut String) -> bool {
             Some(consumed) => rest = after.get(consumed..).unwrap_or(""),
             None => {
                 // Not a valid reference: keep the '&' verbatim and continue.
-                unknown = true;
+                // Only a reference-shaped `&…` is reported; a bare `&`
+                // (`a & b`, `?a=1&b=2`) is valid HTML.
+                unknown |= looks_like_reference(after, in_attr);
                 out.push('&');
                 rest = after;
             }
@@ -74,6 +82,32 @@ pub(crate) fn decode_into(input: &str, out: &mut String) -> bool {
     }
     out.push_str(rest);
     unknown
+}
+
+/// Whether the text after an undecodable `&` was meant as a reference, by the
+/// rules described on [`decode_into`].
+fn looks_like_reference(after: &str, in_attr: bool) -> bool {
+    let bytes = after.as_bytes();
+    if bytes.first() == Some(&b'#') {
+        return true;
+    }
+    let n = bytes
+        .iter()
+        .take(MAX_ENTITY_LEN)
+        .take_while(|b| b.is_ascii_alphanumeric())
+        .count();
+    let Some(run) = after.get(..n).filter(|r| !r.is_empty()) else {
+        return false;
+    };
+    if bytes.get(n) == Some(&b';') {
+        return true;
+    }
+    if in_attr {
+        // `&amp` followed by `=` or an alphanumeric is valid in attributes.
+        return named(run).is_some() && !matches!(bytes.get(n), Some(b'='));
+    }
+    // In text, any known name at the start of the run is a missing `;`.
+    (2..=n).any(|len| run.get(..len).and_then(named).is_some())
 }
 
 /// Try to decode a single reference whose text begins right after the `&`.

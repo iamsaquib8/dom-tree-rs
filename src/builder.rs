@@ -210,7 +210,15 @@ impl<'a, S: Sink<'a>> TreeBuilder<'a, S> {
         match self.open.find(&self.sink, &lname) {
             Some(idx) => {
                 if idx + 1 != self.open.len() {
-                    self.error(pos, ErrorKind::MismatchedEndTag);
+                    // Closing elements whose end tag is optional (`</ul>` over
+                    // an open `<li>`) is valid HTML; anything else is
+                    // mis-nesting.
+                    let kind = if self.open.only_optional_above(&self.sink, idx) {
+                        ErrorKind::ImplicitlyClosed
+                    } else {
+                        ErrorKind::MismatchedEndTag
+                    };
+                    self.error(pos, kind);
                 }
                 // Mis-nested elements above the match end where this end tag
                 // starts; the match itself ends after it.
@@ -288,7 +296,7 @@ impl<'a> Sink<'a> for DomSink {
     #[inline]
     fn attr(&mut self, name: &'a str, value: &'a str) -> bool {
         let key = self.dom.intern_lower(name);
-        let (value, unknown) = self.dom.intern_decoded(value);
+        let (value, unknown) = self.dom.intern_decoded(value, true);
         self.dom.attrs.push((key, value));
         unknown
     }
@@ -335,7 +343,7 @@ impl<'a> Sink<'a> for DomSink {
         end: usize,
     ) -> bool {
         let (span, unknown) = if decode {
-            self.dom.intern_decoded(text)
+            self.dom.intern_decoded(text, false)
         } else {
             (self.dom.intern(text), false)
         };
@@ -453,6 +461,15 @@ impl<O> OpenElements<O> {
     }
 
     /// The stack index of the innermost open element named `name`.
+    /// Whether every element above stack index `idx` has an optional end tag.
+    fn only_optional_above<'a, S: Sink<'a, Open = O>>(&self, sink: &S, idx: usize) -> bool {
+        self.stack
+            .get(idx + 1..)
+            .unwrap_or(&[])
+            .iter()
+            .all(|open| tags::end_tag_optional(sink.name(open)))
+    }
+
     fn find<'a, S: Sink<'a, Open = O>>(&self, sink: &S, name: &str) -> Option<usize> {
         if self.counts.as_ref().is_some_and(|c| !c.contains(name)) {
             return None;

@@ -150,6 +150,37 @@ pub(crate) fn implicitly_closes(opening: &str, open: &str) -> bool {
 
 /// Whether non-whitespace text implicitly closes the open element `open`:
 /// text never belongs in a `<head>` or a `<colgroup>`.
+/// Elements an ancestor's end tag may close without a parse error, because
+/// their own end tag is optional (WHATWG "generate implied end tags
+/// thoroughly", plus `html`/`head`/`body`): `</ul>` closing an open `<li>` is
+/// valid HTML.
+pub(crate) fn end_tag_optional(name: &str) -> bool {
+    matches!(
+        name,
+        "body"
+            | "caption"
+            | "colgroup"
+            | "dd"
+            | "dt"
+            | "head"
+            | "html"
+            | "li"
+            | "optgroup"
+            | "option"
+            | "p"
+            | "rb"
+            | "rp"
+            | "rt"
+            | "rtc"
+            | "tbody"
+            | "td"
+            | "tfoot"
+            | "th"
+            | "thead"
+            | "tr"
+    )
+}
+
 pub(crate) fn text_closes(open: &str) -> bool {
     matches!(open, "head" | "colgroup")
 }

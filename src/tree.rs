@@ -107,9 +107,9 @@ impl Dom {
 
     /// Append `s` with its character references decoded straight into the
     /// arena. Also returns whether an unknown named reference was left as is.
-    pub(crate) fn intern_decoded(&mut self, s: &str) -> (Span, bool) {
+    pub(crate) fn intern_decoded(&mut self, s: &str, in_attr: bool) -> (Span, bool) {
         let start = self.strings.len();
-        let unknown = crate::entities::decode_into(s, &mut self.strings);
+        let unknown = crate::entities::decode_into(s, &mut self.strings, in_attr);
         (self.span_since(start), unknown)
     }
 

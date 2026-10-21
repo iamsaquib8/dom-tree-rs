@@ -85,6 +85,11 @@ All notable changes to this project are documented here. The format is based on
   do) instead of lossy UTF-8, e.g. `caf\xe9` → `café`.
 
 ### Fixed
+- `Dom::errors()` no longer flags valid HTML: a bare `&` (`a & b`,
+  `?a=1&b=2`) isn't an `UnknownEntity` (reference-shaped `&…` still is, with
+  WHATWG's attribute-value exception), and an end tag closing elements whose
+  end tag is optional (`<ul><li>a</ul>`) is `ImplicitlyClosed`, not
+  `MismatchedEndTag`.
 - Quadratic parsing of many unmatched end tags over a deep open-element stack,
   and quadratic entity decoding when the lookahead ended inside a multi-byte
   character.

@@ -147,7 +147,7 @@ impl<'a> Sink<'a> for Queue<'a> {
     }
 
     fn attr(&mut self, name: &'a str, value: &'a str) -> bool {
-        let (value, unknown) = entities::decode(value);
+        let (value, unknown) = entities::decode(value, true);
         self.attrs.push((lower(name), value));
         unknown
     }
@@ -183,7 +183,7 @@ impl<'a> Sink<'a> for Queue<'a> {
         end: usize,
     ) -> bool {
         let (text, unknown) = if decode {
-            entities::decode(text)
+            entities::decode(text, false)
         } else {
             (Cow::Borrowed(text), false)
         };

@@ -457,3 +457,35 @@ fn implicit_closes_are_reported() {
             .any(|e| e.kind == domtree::ErrorKind::ImplicitlyClosed && e.position == 5)
     );
 }
+
+fn kinds(html: &str) -> Vec<domtree::ErrorKind> {
+    domtree::parse(html)
+        .errors()
+        .iter()
+        .map(|e| e.kind.clone())
+        .collect()
+}
+
+#[test]
+fn valid_html_is_not_reported_as_an_error() {
+    use domtree::ErrorKind::*;
+    // A bare `&` is valid, in text and in attribute values (query strings).
+    assert!(kinds("<p>a & b, 1&2</p>").is_empty());
+    assert!(kinds(r#"<a href="?a=1&b=2&region=eu&not=x">x</a>"#).is_empty());
+    // Ancestor end tags may close elements whose end tag is optional.
+    assert!(!kinds("<ul><li>a<li>b</ul>").contains(&MismatchedEndTag));
+    assert!(!kinds("<table><tr><td>x<td>y</table>").contains(&MismatchedEndTag));
+    assert!(!kinds("<div><p>text</div>").contains(&MismatchedEndTag));
+    assert!(kinds("<ul><li>a</ul>").contains(&ImplicitlyClosed));
+}
+
+#[test]
+fn real_problems_are_still_reported() {
+    use domtree::ErrorKind::*;
+    assert!(kinds("<p>&nosuchentity;</p>").contains(&UnknownEntity));
+    assert!(kinds("<p>&#xZZ;</p>").contains(&UnknownEntity));
+    assert!(kinds("<p>AT&ampT, &copy 2026</p>").contains(&UnknownEntity));
+    assert!(kinds(r#"<a title="&copy">x</a>"#).contains(&UnknownEntity));
+    assert!(kinds("<div><b>bold</div>").contains(&MismatchedEndTag));
+    assert!(kinds("<p>x</span>").contains(&StrayEndTag));
+}

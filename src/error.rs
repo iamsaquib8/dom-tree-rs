@@ -47,10 +47,15 @@ pub enum ErrorKind {
     /// An end tag (`</x>`) had no matching open element and was ignored.
     StrayEndTag,
     /// An end tag closed elements other than the current one (mis-nesting).
+    /// Closing elements whose end tag is optional (`</ul>` over an open
+    /// `<li>`) is reported as [`ImplicitlyClosed`](Self::ImplicitlyClosed)
+    /// instead.
     MismatchedEndTag,
     /// An element was closed implicitly by another tag or end-of-input.
     ImplicitlyClosed,
-    /// A `&entity;` reference was not recognised and was left verbatim.
+    /// A reference-shaped `&…` was not recognised and was left verbatim: an
+    /// unknown `&name;`, a malformed `&#…`, or a known name missing its `;`.
+    /// A bare `&` (as in `a & b` or `?a=1&b=2`) is valid HTML and not reported.
     UnknownEntity,
     /// A `<! ... >` or `<? ... >` construct was treated as a bogus comment.
     BogusComment,

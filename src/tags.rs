@@ -33,6 +33,30 @@ pub(crate) fn is_raw_text(name: &str) -> bool {
     matches!(name, "script" | "style")
 }
 
+/// Elements the tokenizer reads as text up to their end tag: the raw-text
+/// ones plus `title` and `textarea` (whose text is still entity-decoded).
+/// Whatever is serialized inside one must not contain that end tag.
+pub(crate) fn ends_only_at_end_tag(name: &str) -> bool {
+    is_raw_text(name) || matches!(name, "title" | "textarea")
+}
+
+/// Whether `name` can be written out as an attribute name as it is: not
+/// empty, and none of ASCII whitespace, `"`, `'`, `<`, `>`, `/`, `=` or NUL,
+/// which would end the name early or start new markup.
+pub(crate) fn is_valid_attr_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.bytes().any(|b| {
+            b.is_ascii_whitespace() || matches!(b, b'"' | b'\'' | b'<' | b'>' | b'/' | b'=' | 0)
+        })
+}
+
+/// Whether `name` can be written out as a tag name as it is: a valid
+/// attribute name that starts with an ASCII letter. (After `<` anything else
+/// is text, and the element's attribute values would be read as markup.)
+pub(crate) fn is_valid_tag_name(name: &str) -> bool {
+    name.as_bytes().first().is_some_and(u8::is_ascii_alphabetic) && is_valid_attr_name(name)
+}
+
 /// Start tags that implicitly close an open `<p>`: every element the WHATWG
 /// "optional tags" rules let a `</p>` be omitted before, plus the other start
 /// tags tree construction closes a `<p>` for (`center`, `dir`, `li`, `dd`,

@@ -283,6 +283,119 @@ fn set_text_on_script_stays_raw() {
     assert_eq!(dom.to_html(), "<script>if (a < b) go()</script>");
 }
 
+/// The tag names of `html` re-parsed, in document order.
+fn reparsed_tags(html: &str) -> Vec<String> {
+    parse(html)
+        .nodes()
+        .filter_map(|n| n.tag_name().map(str::to_string))
+        .collect()
+}
+
+#[test]
+fn set_text_cannot_close_a_script_or_style_early() {
+    let mut dom = parse("<script>var a=1</script><p>ok</p>");
+    let s = dom.root().unwrap().id();
+    dom.set_text(s, "x</script><img src=x onerror=alert(1)><script>");
+    let html = dom.to_html();
+    assert_eq!(
+        html,
+        "<script>x<\\/script><img src=x onerror=alert(1)><script></script><p>ok</p>"
+    );
+    assert_eq!(reparsed_tags(&html), ["script", "p"]);
+    let reparsed = parse(&html);
+    let script = reparsed.root().unwrap();
+    assert_eq!(script.children().count(), 1);
+    assert_eq!(
+        script.text_content(),
+        "x<\\/script><img src=x onerror=alert(1)><script>"
+    );
+
+    // ASCII case-insensitive, any end-tag delimiter; other names and
+    // non-delimited names are left alone.
+    dom.set_text(s, "a</SCRIPT >b</Script/c</script\td</scriptx></style></");
+    assert_eq!(
+        dom.get(s).unwrap().to_html(),
+        "<script>a<\\/SCRIPT >b<\\/Script/c<\\/script\td</scriptx></style></</script>"
+    );
+    // The serializer, not set_text, does it: the text itself is unchanged.
+    assert_eq!(
+        dom.get(s).unwrap().text_content(),
+        "a</SCRIPT >b</Script/c</script\td</scriptx></style></"
+    );
+
+    // create_text + append_child into a <style>.
+    let mut dom = parse("<style></style>");
+    let st = dom.root().unwrap().id();
+    let t = dom.create_text("</style><b>bold</b>");
+    assert!(dom.append_child(st, t));
+    assert_eq!(dom.to_html(), "<style><\\/style><b>bold</b></style>");
+    assert_eq!(reparsed_tags(&dom.to_html()), ["style"]);
+    // inner_html is the content to_html writes.
+    assert_eq!(dom.root().unwrap().inner_html(), "<\\/style><b>bold</b>");
+    // A text node's own HTML is its text, raw in a <style>.
+    assert_eq!(dom.get(t).unwrap().to_html(), "</style><b>bold</b>");
+}
+
+#[test]
+fn nothing_moved_into_a_raw_text_element_closes_it_early() {
+    // An end tag split across two text nodes.
+    let mut dom = parse("<script></script>");
+    let s = dom.root().unwrap().id();
+    let a = dom.create_text("x<");
+    let b = dom.create_text("/script><img src=x onerror=alert(1)>");
+    dom.append_child(s, a);
+    dom.append_child(s, b);
+    assert_eq!(
+        dom.to_html(),
+        "<script>x<\\/script><img src=x onerror=alert(1)></script>"
+    );
+    assert_eq!(reparsed_tags(&dom.to_html()), ["script"]);
+
+    // A parsed comment moved into a script.
+    let mut dom = parse("<p><!--</script><img src=x onerror=alert(1)>--></p><script></script>");
+    let c = dom.nodes().find(|n| n.comment().is_some()).unwrap().id();
+    let s = tag_ids(&dom, "script")[0];
+    assert!(dom.append_child(s, c));
+    assert_eq!(reparsed_tags(&dom.to_html()), ["p", "script"]);
+
+    // An element whose attribute value holds the end tag. Element children
+    // of a raw-text element come back as text, but never as live markup.
+    let mut dom = parse("<style></style>");
+    let st = dom.root().unwrap().id();
+    dom.append_html(st, "<b title='</style><img src=x onerror=alert(1)>'>b</b>");
+    assert_eq!(reparsed_tags(&dom.to_html()), ["style"]);
+    assert_eq!(
+        dom.root().unwrap().inner_html(),
+        r#"<b title="<\/style><img src=x onerror=alert(1)>">b</b>"#
+    );
+
+    // <textarea> and <title> also end only at their end tag; their text is
+    // escaped, but elements and comments moved in are not.
+    let mut dom = parse("<textarea></textarea><title></title>");
+    let ta = tag_ids(&dom, "textarea")[0];
+    let title = tag_ids(&dom, "title")[0];
+    dom.append_html(ta, "<b title='</textarea><img src=x onerror=alert(1)>'>");
+    dom.append_html(title, "<!--</TITLE><img src=x onerror=alert(1)>-->");
+    let html = dom.to_html();
+    assert_eq!(
+        html,
+        r#"<textarea><b title="<\/textarea><img src=x onerror=alert(1)>"></b></textarea><title><!--<\/TITLE><img src=x onerror=alert(1)>--></title>"#
+    );
+    assert_eq!(reparsed_tags(&html), ["textarea", "title"]);
+
+    // Nested: only the outermost element's end tag can end the text.
+    let mut dom = parse("<style></style>");
+    let st = dom.root().unwrap().id();
+    let inner = dom.create_element("script");
+    dom.set_text(inner, "</script></style><img src=x onerror=alert(1)>");
+    dom.append_child(st, inner);
+    assert_eq!(
+        dom.to_html(),
+        "<style><script></script><\\/style><img src=x onerror=alert(1)></script></style>"
+    );
+    assert_eq!(reparsed_tags(&dom.to_html()), ["style"]);
+}
+
 // --- rename --------------------------------------------------------------
 
 #[test]
@@ -298,7 +411,136 @@ fn rename_elements_only() {
     assert_eq!(dom.find_by_tag("b").count(), 0);
 }
 
+// --- name validation -----------------------------------------------------
+
+/// Names that would break out of a tag if written as they are.
+const BAD_NAMES: [&str; 13] = [
+    "",
+    "x y",
+    "x\ty",
+    "x\ny",
+    "a\"b",
+    "a'b",
+    "a<b",
+    "a>b",
+    "a/b",
+    "a=b",
+    "a\0b",
+    "x><script>alert(1)</script><i y",
+    "b><img src=x onerror=alert(1)",
+];
+
+#[test]
+fn set_attr_refuses_invalid_names() {
+    let mut dom = parse("<p>hi</p>");
+    let p = dom.root().unwrap().id();
+    for name in BAD_NAMES {
+        dom.set_attr(p, name, "v");
+        assert_eq!(dom.to_html(), "<p>hi</p>", "{name:?}");
+    }
+    // Everything else is fine, digits and non-ASCII included.
+    for name in ["data-x", "x:y", "_a.b", "1x", "@click", "data-é"] {
+        dom.set_attr(p, name, "v");
+        assert_eq!(dom.root().unwrap().attr(name), Some("v"), "{name:?}");
+    }
+    assert_eq!(
+        dom.to_html(),
+        r#"<p data-x="v" x:y="v" _a.b="v" 1x="v" @click="v" data-é="v">hi</p>"#
+    );
+    // remove_attr needs no validation: no name it is given gets written.
+    dom.remove_attr(p, "");
+    dom.remove_attr(p, "a b");
+    assert_eq!(dom.root().unwrap().attributes().count(), 6);
+}
+
+#[test]
+fn rename_refuses_invalid_names() {
+    let mut dom = parse("<p class=x>hi</p>");
+    let p = dom.root().unwrap().id();
+    let tag_only = ["1x", "-x", "_x", ":x", "!--", "?x", "éx"];
+    for name in BAD_NAMES.iter().chain(&tag_only) {
+        dom.rename(p, name);
+        assert_eq!(dom.to_html(), r#"<p class="x">hi</p>"#, "{name:?}");
+    }
+    for name in ["H1", "my-élément", "svg:rect", "x1"] {
+        dom.rename(p, name);
+        assert_eq!(
+            dom.root().unwrap().tag_name(),
+            Some(name.to_ascii_lowercase().as_str())
+        );
+    }
+}
+
+#[test]
+fn a_name_that_is_not_a_tag_cannot_expose_attribute_values() {
+    // After `<`, only an ASCII letter starts a tag: `<1x title="...">` would
+    // be text, and the attribute value parsed as markup.
+    let mut dom = parse("<p>hi</p>");
+    let p = dom.root().unwrap().id();
+    dom.set_attr(p, "title", "--><img src=x onerror=alert(1)>");
+    for name in ["1x", "!--", "?x"] {
+        dom.rename(p, name);
+    }
+    let html = dom.to_html();
+    assert_eq!(reparsed_tags(&html), ["p"]);
+}
+
+#[test]
+fn create_element_and_wrap_refuse_invalid_names() {
+    let mut dom = parse("<p>hi</p>");
+    let p = dom.root().unwrap().id();
+    let text = dom.root().unwrap().first_child().unwrap().id();
+    let len = dom.len();
+    for name in BAD_NAMES.iter().chain(&["1x", "!x"]) {
+        let id = dom.create_element(name);
+        assert!(dom.get(id).is_none(), "{name:?}");
+        // The id refers to no node, so every edit ignores it.
+        assert!(!dom.append_child(p, id));
+        assert!(!dom.insert_before(text, id));
+        assert!(dom.append_html(id, "<b>x</b>").is_empty());
+        assert!(dom.wrap(id, "div").is_none());
+        dom.set_attr(id, "a", "b");
+        dom.set_text(id, "x");
+        dom.remove(id);
+
+        assert!(dom.wrap(text, name).is_none(), "{name:?}");
+    }
+    assert_eq!(dom.len(), len, "nothing was allocated");
+    assert_eq!(dom.to_html(), "<p>hi</p>");
+    assert_consistent(&dom, &[]);
+
+    let em = dom.wrap(text, "EM").unwrap();
+    assert_eq!(dom.get(em).unwrap().tag_name(), Some("em"));
+    assert_eq!(dom.to_html(), "<p><em>hi</em></p>");
+}
+
 // --- parsed fragments ----------------------------------------------------
+
+#[test]
+fn append_html_cost_does_not_grow_with_the_parents_depth() {
+    // One cycle check per fragment root would climb all `n` ancestors for
+    // each of the `n` roots: ~3.4 s at n = 40k in release, ~20 s in debug.
+    let n = 40_000;
+    let mut dom = parse(&"<div>".repeat(n));
+    let deepest = dom.nodes().last().unwrap().id();
+    let frag = "<i></i>".repeat(n);
+    let start = std::time::Instant::now();
+    let ids = dom.append_html(deepest, &frag);
+    assert!(start.elapsed().as_secs() < 2, "took {:?}", start.elapsed());
+    assert_eq!(ids.len(), n);
+    assert_eq!(dom.get(deepest).unwrap().children().count(), n);
+    assert_eq!(dom.find_by_tag("i").count(), n);
+    assert!(ids.iter().all(|&id| !dom.get(id).unwrap().is_detached()));
+
+    // Into a detached parent: linked, but left detached.
+    let card = dom.create_element("section");
+    let ids = dom.append_html(card, "<i>a</i>b");
+    assert!(ids.iter().all(|&id| dom.get(id).unwrap().is_detached()));
+    assert_eq!(
+        dom.get(card).unwrap().to_html(),
+        "<section><i>a</i>b</section>"
+    );
+}
 
 #[test]
 fn fragment_insertion_in_all_four_positions() {

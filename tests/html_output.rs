@@ -52,6 +52,54 @@ fn raw_text_is_not_escaped() {
 }
 
 #[test]
+fn parsed_raw_text_is_written_back_byte_for_byte() {
+    // Content that only looks like an end tag. The serializer rewrites a
+    // `</script` that would close the element early, which a parsed document
+    // never contains: the tokenizer ends the content at the first one.
+    let inputs = [
+        "<script>if (a < b && c > d) x('<p>');</script>",
+        "<script>document.write('<\\/script>')</script>",
+        "<script>var s = '</scr' + 'ipt>';</script>",
+        "<script>a</scriptx>b</SCRIPTX></script>",
+        "<script>x</script</script>",
+        "<script>'</style>' + '</textarea>'</script>",
+        "<script><!-- <script> --></script>",
+        "<script>a</</script>",
+        "<style>a::before{content:'</script>'}</style>",
+        "<style>a</styles>b</style>",
+        "<title>a &lt;/title&gt; b</title>",
+        "<textarea>&lt;/textarea&gt;</textarea>",
+    ];
+    for html in inputs {
+        let dom = parse(html);
+        assert_eq!(dom.to_html(), html, "for {html:?}");
+        let root = dom.root().unwrap();
+        assert_eq!(root.to_html(), html);
+        let content = root.first_child().unwrap();
+        assert_eq!(root.inner_html(), content.to_html());
+        assert_eq!(dom.nodes().count(), 2, "one element, one text node");
+    }
+}
+
+#[test]
+fn edited_script_text_reparses_to_a_single_script() {
+    let mut dom = parse("<script>var a=1</script><p>ok</p>");
+    let s = dom.root().unwrap().id();
+    dom.set_text(s, "x</script><img src=x onerror=alert(1)><script>");
+    let html = dom.to_html();
+    assert_eq!(
+        html,
+        "<script>x<\\/script><img src=x onerror=alert(1)><script></script><p>ok</p>"
+    );
+    let reparsed = parse(&html);
+    let tags: Vec<_> = reparsed.nodes().filter_map(|n| n.tag_name()).collect();
+    assert_eq!(tags, ["script", "p"]);
+    assert_eq!(reparsed.root().unwrap().children().count(), 1);
+    // And it is stable from there on.
+    assert_eq!(reparsed.to_html(), html);
+}
+
+#[test]
 fn subtree_serialization() {
     let dom = parse("<div><b>hi</b><i>yo</i></div>");
     let b = dom.find_by_tag("b").next().unwrap();

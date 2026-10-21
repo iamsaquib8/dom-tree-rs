@@ -301,6 +301,32 @@ fn rename_elements_only() {
 // --- parsed fragments ----------------------------------------------------
 
 #[test]
+fn append_html_cost_does_not_grow_with_the_parents_depth() {
+    // One cycle check per fragment root would climb all `n` ancestors for
+    // each of the `n` roots: ~3.4 s at n = 40k in release, ~20 s in debug.
+    let n = 40_000;
+    let mut dom = parse(&"<div>".repeat(n));
+    let deepest = dom.nodes().last().unwrap().id();
+    let frag = "<i></i>".repeat(n);
+    let start = std::time::Instant::now();
+    let ids = dom.append_html(deepest, &frag);
+    assert!(start.elapsed().as_secs() < 2, "took {:?}", start.elapsed());
+    assert_eq!(ids.len(), n);
+    assert_eq!(dom.get(deepest).unwrap().children().count(), n);
+    assert_eq!(dom.find_by_tag("i").count(), n);
+    assert!(ids.iter().all(|&id| !dom.get(id).unwrap().is_detached()));
+
+    // Into a detached parent: linked, but left detached.
+    let card = dom.create_element("section");
+    let ids = dom.append_html(card, "<i>a</i>b");
+    assert!(ids.iter().all(|&id| dom.get(id).unwrap().is_detached()));
+    assert_eq!(
+        dom.get(card).unwrap().to_html(),
+        "<section><i>a</i>b</section>"
+    );
+}
+
+#[test]
 fn fragment_insertion_in_all_four_positions() {
     let mut dom = parse("<ul><li>c</li></ul>");
     let ul = dom.root().unwrap().id();

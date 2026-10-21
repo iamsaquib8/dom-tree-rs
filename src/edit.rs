@@ -136,6 +136,12 @@ impl Dom {
 
     /// Parse `html` and insert its top-level nodes into `parent` before
     /// `before`, in order.
+    ///
+    /// Not one `place` per root: that climbs `parent`'s ancestors for the
+    /// cycle check every time (roots × depth). The grafted roots are fresh
+    /// orphans, so they cannot contain `parent` and need no check, and their
+    /// subtrees are all flagged detached, so only an attached `parent` needs
+    /// them re-flagged.
     fn insert_fragment(
         &mut self,
         parent: Option<NodeId>,
@@ -143,8 +149,18 @@ impl Dom {
         html: &str,
     ) -> Vec<NodeId> {
         let roots = self.graft(&builder::parse_document(html));
+        let attached = match parent {
+            Some(p) => self.node(p).is_some_and(|n| !n.detached),
+            None => true,
+        };
         for &r in &roots {
-            self.place(r, parent, before);
+            self.link(parent, before, r);
+            if attached {
+                self.set_detached(r, false);
+            }
+        }
+        if !roots.is_empty() {
+            self.reordered = true;
         }
         roots
     }

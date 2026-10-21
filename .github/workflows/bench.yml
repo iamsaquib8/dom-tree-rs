@@ -93,7 +93,7 @@ jobs:
           START=$(date +%s.%N)
           cargo build --release --lib
           END=$(date +%s.%N)
-          echo "release build of dom-tree-rs (default features): $(echo "$END - $START" | bc) s" | tee -a sizes.txt
+          echo "release build of dom-tree-rs (default features): $(awk "BEGIN { printf \"%.1f\", $END - $START }") s" | tee -a sizes.txt
           { echo "## Compile time"; tail -1 sizes.txt; } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4

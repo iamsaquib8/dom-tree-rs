@@ -142,6 +142,7 @@ mod entities;
 #[cfg(feature = "entities-full")]
 mod entities_full;
 mod error;
+mod events;
 mod extract;
 mod node;
 mod scan;
@@ -158,6 +159,7 @@ mod serialize;
 mod query;
 
 pub use error::{ErrorKind, ParseError};
+pub use events::{Event, Events};
 pub use extract::{Link, Metadata, Resource, to_csv};
 pub use node::{NodeId, NodeKind};
 pub use source::line_col;
@@ -202,4 +204,60 @@ pub fn parse_fragment(html: &str) -> Dom {
 /// ```
 pub fn tokenize(html: &str) -> Tokenizer<'_> {
     Tokenizer::new(html)
+}
+
+/// Stream a document as [`Event`]s — start and end of elements, text,
+/// comments, doctypes — without building a tree.
+///
+/// Unlike [`tokenize`], the events come **after recovery**, from the same
+/// tree builder [`parse`] uses: omitted end tags are implied (`<li>a<li>b`
+/// ends the first `<li>`), void and self-closing elements end right away,
+/// stray end tags are dropped, mismatched ones close what they skip, and
+/// everything still open ends at the end of the input. So every `Start` has
+/// exactly one matching `End`, and replaying the events builds exactly the
+/// tree `parse` returns. Text and attribute values are entity-decoded, and
+/// each event comes with its byte range in `html` (see [`Events`]).
+///
+/// Memory use is proportional to the nesting depth, not the document size —
+/// except for the recovery diagnostics, which are kept for
+/// [`Events::errors`] (16 bytes each; messy markup has about one per
+/// implicitly closed element). It is not faster than [`parse`]: each start
+/// tag with attributes gets its own `Vec`, where the tree shares one arena.
+///
+/// ```
+/// use domtree::Event;
+///
+/// let html = "<ul><li>Tom &amp; Jerry<li>Spike<br></ul>";
+/// let mut depth = 0;
+/// let mut items = Vec::new();
+/// for (event, range) in domtree::events(html) {
+///     match event {
+///         Event::Start { name, .. } => {
+///             depth += 1;
+///             if name == "li" {
+///                 items.push(String::new());
+///             }
+///         }
+///         Event::End { name, implied } => {
+///             depth -= 1;
+///             if name == "li" {
+///                 // Both `</li>` were omitted: the first is closed by the
+///                 // second `<li>`, the second by `</ul>`.
+///                 assert!(implied);
+///                 assert!(range.is_empty());
+///             }
+///         }
+///         Event::Text(text) => {
+///             if let Some(item) = items.last_mut() {
+///                 item.push_str(&text);
+///             }
+///         }
+///         _ => {}
+///     }
+/// }
+/// assert_eq!(depth, 0);
+/// assert_eq!(items, ["Tom & Jerry", "Spike"]);
+/// ```
+pub fn events(html: &str) -> Events<'_> {
+    Events::new(html)
 }

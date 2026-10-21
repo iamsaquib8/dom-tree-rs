@@ -13,6 +13,7 @@
 //! Either way a named reference needs its `;`: the legacy no-semicolon
 //! spellings browsers also accept (`&amp`, `&copy`) stay verbatim.
 
+use alloc::borrow::Cow;
 use alloc::string::String;
 
 use crate::scan;
@@ -24,6 +25,20 @@ const MAX_ENTITY_LEN: usize = 32;
 
 /// The Unicode replacement character, used for out-of-range / null numeric refs.
 const REPLACEMENT: char = '\u{FFFD}';
+
+/// Decode HTML entities in `input`.
+///
+/// Returns the decoded text (borrowed unchanged when there is nothing to do)
+/// and a flag that is `true` if at least one unknown named reference was left
+/// verbatim.
+pub(crate) fn decode(input: &str) -> (Cow<'_, str>, bool) {
+    if scan::find_byte(b'&', input.as_bytes()).is_none() {
+        return (Cow::Borrowed(input), false);
+    }
+    let mut out = String::with_capacity(input.len());
+    let unknown = decode_into(input, &mut out);
+    (Cow::Owned(out), unknown)
+}
 
 /// Append `input` to `out` with its HTML entities decoded (the tree builder
 /// decodes straight into its string arena, with no temporary). Returns `true`

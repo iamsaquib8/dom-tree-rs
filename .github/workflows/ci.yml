@@ -41,7 +41,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.120.0
+      # The MSRV comes from the `toolchain` input, not the action's ref, so
+      # Dependabot can't bump it (dependabot.yml also ignores this action).
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0
       - uses: Swatinem/rust-cache@v2
       - name: Check library on MSRV (all lib features)
         run: cargo check --no-default-features --features json,serde,query,markdown,std

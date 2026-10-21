@@ -8,6 +8,10 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    ignore:
+      # Referenced by branch (@stable, @nightly, @master); its version-named
+      # tags select a Rust toolchain, so bumping them would change the MSRV.
+      - dependency-name: dtolnay/rust-toolchain
 
   # Dev-dependencies of the core crate (insta, proptest, serde_json) and the
   # optional serde dependency. The default build has no dependencies.

@@ -226,6 +226,31 @@ for id in scripts {
     dom.remove(id);
 }
 assert_eq!(dom.to_html(), r#"<p>Hi <a href="/x">x</a></p>"#);
+
+// Insert parsed HTML, wrap, rename, set attributes and text:
+let a = dom.select_first("a").unwrap().id();
+dom.set_attr(a, "rel", "nofollow");
+dom.insert_html_after(a, " <b>new</b>");
+dom.wrap(a, "em");
+let p = dom.root().unwrap().id();
+dom.rename(p, "div");
+assert_eq!(
+    dom.to_html(),
+    r#"<div>Hi <em><a href="/x" rel="nofollow">x</a></em> <b>new</b></div>"#
+);
+```
+</details>
+
+<details>
+<summary><b>Point back into the source</b></summary>
+
+```rust
+let src = "<ul>\n  <li>one\n  <li>two</ul>";
+let dom = domtree::parse(src);
+let li = dom.select("li").nth(1).unwrap();
+let range = li.source_range().unwrap();              // byte range in `src`
+assert_eq!(&src[range.clone()], "<li>two");
+assert_eq!(domtree::line_col(src, range.start), (3, 3)); // 1-based line, column
 ```
 </details>
 
@@ -288,7 +313,7 @@ markdown = doc.select_first("article").to_markdown()   # ready for an LLM prompt
 | WASM + npm package | **✅** | ❌ | ❌ | ❌ | ❌ |
 | CLI | **✅** | ❌ | ❌ | ❌ | ❌ |
 | `no_std` | **✅** | ❌ | ❌ | ❌ | ❌ |
-| Edit + re-serialize | basic | ❌ | ❌ | ✅ | ✅ (streaming) |
+| Edit + re-serialize | **✅** | ❌ | ❌ | ✅ | ✅ (streaming) |
 | Never panics on input | ✅ | ✅ | ✅ | ✅ | ✅ |
 | WHATWG spec-compliant tree | ❌ | ❌ | ✅ | ✅ | ❌ |
 
@@ -338,6 +363,7 @@ recovers from is recorded in
 | `json` | ✅ | `to_json()` — zero-dependency JSON |
 | `query` | ✅ | CSS selectors: `select`, `select_first`, `Selector`, `closest`, `matches` |
 | `markdown` | ✅ | `to_markdown()` and `to_markdown_chunks()` — zero-dependency HTML → Markdown |
+| `entities-full` | | all 2,125 WHATWG named character references (default: the 178 most common) |
 | `serde` | | `serde::Serialize` for the tree (same JSON shape; adds `serde`) |
 | `std` | | `std::error::Error` impls; the crate is `no_std + alloc` otherwise |
 

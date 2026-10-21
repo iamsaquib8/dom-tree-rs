@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Editing, part 2:** `Dom::set_text`, `rename`, `create_element`,
+  `create_text`, `append_child`, `insert_before`, `wrap`, `unwrap`, and
+  parsed-fragment insertion (`append_html`, `prepend_html`,
+  `insert_html_before`, `insert_html_after`, returning the inserted ids). Moves
+  never create cycles; `nodes()`, `select` and `find_by_*` stay in document
+  order after any edit. `NodeRef::is_detached()`.
+- **Source spans:** `NodeRef::source_range()` (byte range in the input) and
+  `domtree::line_col(src, byte)`.
+- **`entities-full` feature:** all 2,125 WHATWG named character references
+  (off by default; the default table has the 178 most common).
 - `Dom::main_content()` — a deterministic "reader mode" heuristic (semantic
   markup first, then Readability-style paragraph scoring) that picks the
   article and drops nav, sidebars, comments, ads and footers.
@@ -35,7 +45,20 @@ All notable changes to this project are documented here. The format is based on
   error rather than ignored.
 - Prebuilt CLI binaries for Linux arm64.
 
+### Changed
+- More implicit-close rules (WHATWG optional tags): the full list of elements
+  that close `<p>`; a heading closes an open heading; an unclosed `<head>` ends
+  at the first body content (previously such pages lost their body in
+  `to_text`); ruby `rb`/`rt`/`rtc`/`rp`; `<hr>` closes an open
+  `option`/`optgroup`; captions, `colgroup` and `col` close open cells, rows
+  and row groups.
+- Nodes are 64 bytes (were 80); `NodeId` is non-zero, so `Option<NodeId>` is
+  4 bytes.
+
 ### Fixed
+- Quadratic parsing of many unmatched end tags over a deep open-element stack,
+  and quadratic entity decoding when the lookahead ended inside a multi-byte
+  character.
 - CLI `--base` keeps commas inside `srcset` URLs, drops empty candidates, and
   rewrites the first of a repeated attribute (the one that counts).
 

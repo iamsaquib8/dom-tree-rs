@@ -249,19 +249,26 @@ impl Dom {
     }
 
     /// Set attribute `name` (ASCII-lower-cased) to `value` on an element,
-    /// replacing any existing value. Does nothing for non-element nodes.
+    /// replacing any existing value. Does nothing for non-element nodes, and
+    /// nothing if `name` is not a valid attribute name: empty, or containing
+    /// ASCII whitespace, `"`, `'`, `<`, `>`, `/`, `=` or NUL — names are
+    /// written out as they are, so these would change the markup around them.
     ///
     /// ```
     /// let mut dom = domtree::parse("<a href=/x>x</a>");
     /// let a = dom.find_by_tag("a").next().unwrap().id();
     /// dom.set_attr(a, "href", "https://example.com/x");
     /// dom.set_attr(a, "rel", "nofollow");
+    /// dom.set_attr(a, "x><script>alert(1)</script", "refused");
     /// assert_eq!(dom.to_html(), r#"<a href="https://example.com/x" rel="nofollow">x</a>"#);
     /// ```
     pub fn set_attr(&mut self, id: NodeId, name: &str, value: &str) {
         let Some(attrs) = self.attr_range(id) else {
             return;
         };
+        if !tags::is_valid_attr_name(name) {
+            return;
+        }
         let name = name.to_ascii_lowercase();
         let existing = self
             .attr_slice(attrs)
@@ -443,8 +450,10 @@ impl Dom {
         }
     }
 
-    /// Change an element's tag name (ASCII-lower-cased, not validated).
-    /// Attributes and children are kept; does nothing for non-elements.
+    /// Change an element's tag name (ASCII-lower-cased). Attributes and
+    /// children are kept. Does nothing for non-elements, and nothing if `tag`
+    /// is not a valid tag name: one that does not start with an ASCII letter,
+    /// or contains ASCII whitespace, `"`, `'`, `<`, `>`, `/`, `=` or NUL.
     ///
     /// Renaming to a void element (`br`, `img`, …) keeps any children in the
     /// tree, but [`Dom::to_html`] — like the HTML syntax — cannot express them.
@@ -453,13 +462,16 @@ impl Dom {
     /// let mut dom = domtree::parse("<b class=x>bold</b>");
     /// let b = dom.root().unwrap().id();
     /// dom.rename(b, "STRONG");
+    /// dom.rename(b, "b><img src=x onerror=alert(1)"); // refused
     /// assert_eq!(dom.to_html(), r#"<strong class="x">bold</strong>"#);
     /// ```
     pub fn rename(&mut self, id: NodeId, tag: &str) {
-        if !matches!(self.shape(id), Some(Shape::Container | Shape::Void)) {
+        if !matches!(self.shape(id), Some(Shape::Container | Shape::Void))
+            || !tags::is_valid_tag_name(tag)
+        {
             return;
         }
-        let span = self.intern(&tag.to_ascii_lowercase());
+        let span = self.intern_lower(tag);
         if let Some(Node {
             raw: RawKind::Element { name, .. },
             ..
@@ -471,11 +483,15 @@ impl Dom {
 
     // --- creating and moving ---------------------------------------------
 
-    /// Create a new, empty element (tag ASCII-lower-cased, not validated).
+    /// Create a new, empty element (tag ASCII-lower-cased).
     ///
     /// It starts *detached*: not part of the document until you attach it
     /// with [`Dom::append_child`] or [`Dom::insert_before`]. Created nodes have
     /// no [`source_range`](crate::NodeRef::source_range).
+    ///
+    /// If `tag` is not a valid tag name (see [`Dom::rename`]), nothing is
+    /// created and the returned id refers to no node: [`Dom::get`] returns
+    /// `None` for it and every edit ignores it.
     ///
     /// ```
     /// let mut dom = domtree::parse("<ul><li>a</li></ul>");
@@ -486,16 +502,31 @@ impl Dom {
     /// dom.set_attr(li, "class", "new");
     /// dom.append_child(ul, li);
     /// assert_eq!(dom.to_html(), r#"<ul><li>a</li><li class="new">b</li></ul>"#);
+    ///
+    /// let bad = dom.create_element("li><img");
+    /// assert!(dom.get(bad).is_none());
+    /// assert!(!dom.append_child(ul, bad));
     /// ```
     pub fn create_element(&mut self, tag: &str) -> NodeId {
-        let name = self.intern(&tag.to_ascii_lowercase());
+        // Past the end of any arena that fits in memory (`from_index`
+        // saturates there), so no node has this id.
+        self.new_element(tag)
+            .unwrap_or_else(|| NodeId::from_index(usize::MAX))
+    }
+
+    /// A new detached element, or `None` if `tag` is not a valid tag name.
+    fn new_element(&mut self, tag: &str) -> Option<NodeId> {
+        if !tags::is_valid_tag_name(tag) {
+            return None;
+        }
+        let name = self.intern_lower(tag);
         // An empty run at the end of the arena: the first `set_attr` appends
         // in place.
         let attrs = AttrRange {
             start: self.attrs.len() as u32,
             len: 0,
         };
-        self.alloc_detached(RawKind::Element { name, attrs })
+        Some(self.alloc_detached(RawKind::Element { name, attrs }))
     }
 
     /// Create a new, detached text node holding `text` literally (see
@@ -562,8 +593,9 @@ impl Dom {
     }
 
     /// Wrap a node in a new `tag` element, which takes the node's place.
-    /// Returns the wrapper's id, or `None` if `id` is unknown or `tag` is a
-    /// void element. Wrapping a detached node gives a detached wrapper.
+    /// Returns the wrapper's id, or `None` (changing nothing) if `id` is
+    /// unknown, or `tag` is a void element or not a valid tag name (see
+    /// [`Dom::rename`]). Wrapping a detached node gives a detached wrapper.
     ///
     /// ```
     /// let mut dom = domtree::parse("<p>Hello <b>world</b></p>");
@@ -571,13 +603,14 @@ impl Dom {
     /// let a = dom.wrap(b, "a").unwrap();
     /// dom.set_attr(a, "href", "/world");
     /// assert_eq!(dom.to_html(), r#"<p>Hello <a href="/world"><b>world</b></a></p>"#);
+    /// assert!(dom.wrap(b, "").is_none());
     /// ```
     pub fn wrap(&mut self, id: NodeId, tag: &str) -> Option<NodeId> {
         self.node(id)?;
         if tags::is_void(&tag.to_ascii_lowercase()) {
             return None;
         }
-        let wrapper = self.create_element(tag);
+        let wrapper = self.new_element(tag)?;
         if let Some(parent) = self.container(id) {
             self.place(wrapper, parent, Some(id));
         }

@@ -411,6 +411,109 @@ fn rename_elements_only() {
     assert_eq!(dom.find_by_tag("b").count(), 0);
 }
 
+// --- name validation -----------------------------------------------------
+
+/// Names that would break out of a tag if written as they are.
+const BAD_NAMES: [&str; 13] = [
+    "",
+    "x y",
+    "x\ty",
+    "x\ny",
+    "a\"b",
+    "a'b",
+    "a<b",
+    "a>b",
+    "a/b",
+    "a=b",
+    "a\0b",
+    "x><script>alert(1)</script><i y",
+    "b><img src=x onerror=alert(1)",
+];
+
+#[test]
+fn set_attr_refuses_invalid_names() {
+    let mut dom = parse("<p>hi</p>");
+    let p = dom.root().unwrap().id();
+    for name in BAD_NAMES {
+        dom.set_attr(p, name, "v");
+        assert_eq!(dom.to_html(), "<p>hi</p>", "{name:?}");
+    }
+    // Everything else is fine, digits and non-ASCII included.
+    for name in ["data-x", "x:y", "_a.b", "1x", "@click", "data-é"] {
+        dom.set_attr(p, name, "v");
+        assert_eq!(dom.root().unwrap().attr(name), Some("v"), "{name:?}");
+    }
+    assert_eq!(
+        dom.to_html(),
+        r#"<p data-x="v" x:y="v" _a.b="v" 1x="v" @click="v" data-é="v">hi</p>"#
+    );
+    // remove_attr needs no validation: no name it is given gets written.
+    dom.remove_attr(p, "");
+    dom.remove_attr(p, "a b");
+    assert_eq!(dom.root().unwrap().attributes().count(), 6);
+}
+
+#[test]
+fn rename_refuses_invalid_names() {
+    let mut dom = parse("<p class=x>hi</p>");
+    let p = dom.root().unwrap().id();
+    let tag_only = ["1x", "-x", "_x", ":x", "!--", "?x", "éx"];
+    for name in BAD_NAMES.iter().chain(&tag_only) {
+        dom.rename(p, name);
+        assert_eq!(dom.to_html(), r#"<p class="x">hi</p>"#, "{name:?}");
+    }
+    for name in ["H1", "my-élément", "svg:rect", "x1"] {
+        dom.rename(p, name);
+        assert_eq!(
+            dom.root().unwrap().tag_name(),
+            Some(name.to_ascii_lowercase().as_str())
+        );
+    }
+}
+
+#[test]
+fn a_name_that_is_not_a_tag_cannot_expose_attribute_values() {
+    // After `<`, only an ASCII letter starts a tag: `<1x title="...">` would
+    // be text, and the attribute value parsed as markup.
+    let mut dom = parse("<p>hi</p>");
+    let p = dom.root().unwrap().id();
+    dom.set_attr(p, "title", "--><img src=x onerror=alert(1)>");
+    for name in ["1x", "!--", "?x"] {
+        dom.rename(p, name);
+    }
+    let html = dom.to_html();
+    assert_eq!(reparsed_tags(&html), ["p"]);
+}
+
+#[test]
+fn create_element_and_wrap_refuse_invalid_names() {
+    let mut dom = parse("<p>hi</p>");
+    let p = dom.root().unwrap().id();
+    let text = dom.root().unwrap().first_child().unwrap().id();
+    let len = dom.len();
+    for name in BAD_NAMES.iter().chain(&["1x", "!x"]) {
+        let id = dom.create_element(name);
+        assert!(dom.get(id).is_none(), "{name:?}");
+        // The id refers to no node, so every edit ignores it.
+        assert!(!dom.append_child(p, id));
+        assert!(!dom.insert_before(text, id));
+        assert!(dom.append_html(id, "<b>x</b>").is_empty());
+        assert!(dom.wrap(id, "div").is_none());
+        dom.set_attr(id, "a", "b");
+        dom.set_text(id, "x");
+        dom.remove(id);
+
+        assert!(dom.wrap(text, name).is_none(), "{name:?}");
+    }
+    assert_eq!(dom.len(), len, "nothing was allocated");
+    assert_eq!(dom.to_html(), "<p>hi</p>");
+    assert_consistent(&dom, &[]);
+
+    let em = dom.wrap(text, "EM").unwrap();
+    assert_eq!(dom.get(em).unwrap().tag_name(), Some("em"));
+    assert_eq!(dom.to_html(), "<p><em>hi</em></p>");
+}
+
 // --- parsed fragments ----------------------------------------------------
 
 #[test]

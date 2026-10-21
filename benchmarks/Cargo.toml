@@ -5,7 +5,14 @@ publish = false
 edition = "2024"
 
 # Independent crate (excluded from the main workspace) so its heavier
-# benchmark-only dependencies never touch the published crate's graph.
+# benchmark-only dependencies never touch the published crate's graph. The
+# empty `[workspace]` keeps cargo from looking further up for one (e.g. when
+# this checkout sits inside another cargo workspace).
+[workspace]
+
+[features]
+# Measure the optional memchr-backed scanning: `cargo bench --features simd`.
+simd = ["dom-tree-rs/simd"]
 
 [dependencies]
 dom-tree-rs = { path = "..", features = ["json", "query"] }
@@ -13,6 +20,9 @@ dom-tree-rs = { path = "..", features = ["json", "query"] }
 [dev-dependencies]
 criterion = "0.5"
 tl = "0.7"
+scraper = "0.27"
+html5ever = "0.39"
+markup5ever_rcdom = "0.39"
 
 [[bench]]
 name = "parse"

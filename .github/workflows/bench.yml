@@ -1,0 +1,108 @@
+name: Benchmarks
+
+# Throughput, memory, wasm size and compile time, tracked over time. Not part
+# of PR CI: timings depend on the runner, so numbers are only comparable
+# within one run (every run measures dom-tree-rs next to tl, scraper and
+# html5ever on the same machine). Weekly and on demand; each run's results
+# are uploaded as an artifact and summarised on the run page.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1" # Mondays, 04:17 UTC
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            benchmarks
+            dom-tree-wasm
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: Machine
+        run: |
+          {
+            echo "## Machine"
+            echo '```'
+            lscpu | grep -E '^(Model name|CPU\(s\)|Thread)'
+            free -h | head -2
+            rustc -V
+            echo "commit $GITHUB_SHA"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Throughput (cargo bench)
+        working-directory: benchmarks
+        run: cargo bench 2>&1 | tee bench.txt
+
+      - name: Throughput with the `simd` feature (dom-tree-rs only)
+        working-directory: benchmarks
+        env:
+          # Its own criterion directory, so it does not overwrite the run above.
+          CARGO_TARGET_DIR: target-simd
+        run: cargo bench --features simd -- 'dom-tree-rs$' 2>&1 | tee bench-simd.txt
+
+      - name: Throughput summary
+        working-directory: benchmarks
+        run: |
+          {
+            echo "## Throughput (median)"
+            echo '```'
+            grep -E '^parse/|time:|thrpt:' bench.txt
+            echo '```'
+            echo "## With --features simd"
+            echo '```'
+            grep -E '^parse/|time:|thrpt:' bench-simd.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Memory
+        working-directory: benchmarks
+        run: |
+          cargo run --release --example memory | tee memory.md
+          { echo "## Memory"; cat memory.md; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Wasm size (npm package build)
+        working-directory: dom-tree-wasm
+        run: |
+          wasm-pack build --target web --release
+          SIZE=$(gzip -9 -c pkg/dom_tree_wasm_bg.wasm | wc -c)
+          RAW=$(wc -c < pkg/dom_tree_wasm_bg.wasm)
+          echo "wasm: $SIZE bytes gzipped, $RAW raw (budget 40960 gzipped)" | tee ../sizes.txt
+          { echo "## Wasm"; cat ../sizes.txt; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Compile time (clean release build of the library)
+        run: |
+          cargo clean --release -p dom-tree-rs
+          START=$(date +%s.%N)
+          cargo build --release --lib
+          END=$(date +%s.%N)
+          echo "release build of dom-tree-rs (default features): $(echo "$END - $START" | bc) s" | tee -a sizes.txt
+          { echo "## Compile time"; tail -1 sizes.txt; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ github.run_number }}
+          path: |
+            benchmarks/target/criterion
+            benchmarks/target-simd/criterion
+            benchmarks/bench.txt
+            benchmarks/bench-simd.txt
+            benchmarks/memory.md
+            sizes.txt

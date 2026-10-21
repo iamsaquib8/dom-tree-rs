@@ -29,7 +29,8 @@ EXAMPLES:
     domtree -c 'img:not([alt])' < page.html
     domtree lint index.html docs/*.html
 
-OUTPUT (default: matching elements as HTML, one per line):
+OUTPUT (default: matching elements as HTML, one per line; -t, -m, -j, --jsonl,
+--csv and -c each pick the format, so give at most one):
     -a, --attribute <NAME>      Print this attribute of each match (skips matches
                                 without it). With no selector, searches all elements.
     -t, --text                  Print readable text of each match
@@ -43,6 +44,7 @@ OUTPUT (default: matching elements as HTML, one per line):
     -p, --pretty                Pretty-print HTML output
     -1, --first                 Only use the first match
     -w, --ignore-whitespace     Skip matches whose output is empty or whitespace
+                                (with --links, links without text)
 
 EXTRACT:
     -e, --extract <NAME=SPEC>   Print a JSON object with a NAME key (repeat it);
@@ -64,7 +66,8 @@ DOCUMENT:
         --main                  Keep only the main content (the article, without
                                 navigation, sidebars and footer)
     -b, --base <URL>            Resolve relative href/src/... URLs against URL
-    -B, --detect-base           Use the document's <base href> (falls back to --base)
+    -B, --detect-base           Use the document's <base href>, itself resolved
+                                against --base (falls back to --base)
 
 INPUT / OUTPUT:
     -f, --filename <FILE>       Read from FILE instead of stdin ('-' = stdin)
@@ -264,7 +267,7 @@ pub fn parse<I: IntoIterator<Item = OsString>>(args: I) -> Result<Command, ArgEr
                 apply_value(&mut opts, flag, value)?;
             } else if inline.is_some() {
                 return Err(ArgError::new(format!("option '--{name}' takes no value")));
-            } else if let Some(cmd) = apply_switch(&mut opts, flag) {
+            } else if let Some(cmd) = apply_switch(&mut opts, flag)? {
                 return Ok(cmd);
             }
         } else if arg.len() > 1 && arg.starts_with('-') {
@@ -283,7 +286,7 @@ pub fn parse<I: IntoIterator<Item = OsString>>(args: I) -> Result<Command, ArgEr
                     };
                     apply_value(&mut opts, flag, value)?;
                     break;
-                } else if let Some(cmd) = apply_switch(&mut opts, flag) {
+                } else if let Some(cmd) = apply_switch(&mut opts, flag)? {
                     return Ok(cmd);
                 }
             }
@@ -371,8 +374,11 @@ fn validate(opts: &Options) -> Result<(), ArgError> {
             return err("--meta takes no SELECTOR (it describes the whole page)".into());
         }
     }
-    if opts.mode == Mode::Csv && opts.attribute.is_some() {
-        return err("--csv cannot be combined with --attribute".into());
+    if matches!(opts.mode, Mode::Csv | Mode::Markdown) && opts.attribute.is_some() {
+        return err(format!(
+            "{} cannot be combined with --attribute",
+            opts.mode.flag()
+        ));
     }
     Ok(())
 }
@@ -492,26 +498,57 @@ fn apply_value(opts: &mut Options, flag: Flag, value: String) -> Result<(), ArgE
 }
 
 /// Apply a value-less flag; returns a command that short-circuits parsing.
-fn apply_switch(opts: &mut Options, flag: Flag) -> Option<Command> {
-    match flag {
-        Flag::Text => opts.mode = Mode::Text,
-        Flag::Markdown => opts.mode = Mode::Markdown,
-        Flag::Json => opts.mode = Mode::Json,
-        Flag::Jsonl => opts.mode = Mode::Jsonl,
-        Flag::Csv => opts.mode = Mode::Csv,
-        Flag::Count => opts.mode = Mode::Count,
-        Flag::Pretty => opts.pretty = true,
-        Flag::First => opts.first = true,
-        Flag::IgnoreWhitespace => opts.ignore_whitespace = true,
-        Flag::Links => opts.links = true,
-        Flag::Meta => opts.meta = true,
-        Flag::Main => opts.main = true,
-        Flag::DetectBase => opts.detect_base = true,
-        Flag::Help => return Some(Command::Help),
-        Flag::Version => return Some(Command::Version),
-        _ => {}
+fn apply_switch(opts: &mut Options, flag: Flag) -> Result<Option<Command>, ArgError> {
+    let mode = match flag {
+        Flag::Text => Mode::Text,
+        Flag::Markdown => Mode::Markdown,
+        Flag::Json => Mode::Json,
+        Flag::Jsonl => Mode::Jsonl,
+        Flag::Csv => Mode::Csv,
+        Flag::Count => Mode::Count,
+        Flag::Pretty => {
+            opts.pretty = true;
+            return Ok(None);
+        }
+        Flag::First => {
+            opts.first = true;
+            return Ok(None);
+        }
+        Flag::IgnoreWhitespace => {
+            opts.ignore_whitespace = true;
+            return Ok(None);
+        }
+        Flag::Links => {
+            opts.links = true;
+            return Ok(None);
+        }
+        Flag::Meta => {
+            opts.meta = true;
+            return Ok(None);
+        }
+        Flag::Main => {
+            opts.main = true;
+            return Ok(None);
+        }
+        Flag::DetectBase => {
+            opts.detect_base = true;
+            return Ok(None);
+        }
+        Flag::Help => return Ok(Some(Command::Help)),
+        Flag::Version => return Ok(Some(Command::Version)),
+        _ => return Ok(None),
+    };
+    // One output format: a second, different one is a mistake, not an
+    // override (repeating the same flag is fine).
+    if opts.mode != Mode::Html && opts.mode != mode {
+        return Err(ArgError::new(format!(
+            "{} and {} cannot be combined (pick one output format)",
+            opts.mode.flag(),
+            mode.flag()
+        )));
     }
-    None
+    opts.mode = mode;
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -645,8 +682,52 @@ mod tests {
             &["--meta", "p"],
             &["--links", "-m"],
             &["--csv", "-a", "href"],
+            &["-m", "-a", "href"],
+            // Two output formats: no silent "last one wins".
+            &["-t", "-j"],
+            &["-tj"],
+            &["-c", "--json"],
+            &["--jsonl", "-j"],
+            &["--csv", "-c"],
+            &["-m", "-t"],
+            &["--links", "-t", "--jsonl"],
+            &["--meta", "-j", "--jsonl"],
+            &["-e", "a=h1", "-j", "--jsonl"],
         ] {
             assert!(try_run(args).is_err(), "{args:?}");
+        }
+        assert_eq!(
+            try_run(&["-c", "-j"])
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            Err("--count and --json cannot be combined (pick one output format)".into())
+        );
+    }
+
+    #[test]
+    fn compatible_flags() {
+        for args in [
+            &["-c", "-a", "href"][..],
+            &["-j", "-a", "href"],
+            &["--jsonl", "-a", "href"],
+            &["-t", "-a", "href"],
+            &["-p", "-a", "href"],
+            &["-j", "-e", "a=h1"],
+            &["--jsonl", "-e", "a=h1", "p"],
+            &["--links", "-t"],
+            &["--links", "-c", "-w", "-1"],
+            &["--links", "-j"],
+            &["--links", "--jsonl", "nav"],
+            &["--meta", "-j"],
+            &["--meta", "--jsonl"],
+            &["--csv", "-1", "table"],
+            &["-1", "-t", "-w", "p"],
+            &["-c", "-1"],
+            &["-t", "--text"],
+            &["-tt"],
+            &["-p", "-1"],
+        ] {
+            assert!(try_run(args).is_ok(), "{args:?}");
         }
     }
 }

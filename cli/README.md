@@ -62,19 +62,27 @@ domtree -j 'table tr:nth-child(3)' -f report.html
 | `-c, --count` | number of matches |
 | `-p, --pretty` | indent HTML output |
 | `-1, --first` | only the first match |
-| `-w, --ignore-whitespace` | skip blank results |
+| `-w, --ignore-whitespace` | skip blank results (with `--links`, links without text) |
 | `-e, --extract <NAME=SPEC>` | add a field to a JSON object (repeatable; see below) |
 | `--links` | every link as `url<TAB>text` (JSON objects with `-j`/`--jsonl`) |
 | `--meta` | page metadata (title, description, canonical, OpenGraph, JSON-LD, …) as JSON |
 | `-r, --remove-nodes <SEL>` | remove matching nodes first (repeatable) |
 | `--main` | keep only the main content (the article, without navigation, sidebars, footer) |
 | `-b, --base <URL>` | make relative `href`/`src`/`srcset`/… URLs absolute |
-| `-B, --detect-base` | use the document's `<base href>` |
+| `-B, --detect-base` | use the document's `<base href>` (itself resolved against `-b`) |
 | `--encoding <LABEL>` | decode the input as `utf-8`, `utf-16le`, `utf-16be` or `windows-1252` |
 | `-f, --filename <FILE>` / `-o, --output <FILE>` | read / write a file instead of stdin / stdout |
 
 Several selector arguments are joined with spaces (`domtree ul '>' li`). With no
 selector, the whole document is used.
+
+`-t`, `-m`, `-j`, `--jsonl`, `--csv` and `-c` each pick the output format, so
+give at most one: combining two is a usage error (exit 2), not "the last one
+wins". The modifiers `-1`, `-w` and `-p` can be added to any of them; `-a`
+works with the default output, `-t`, `-j`, `--jsonl` and `-c`. `-e` prints JSON (`-j`, the default, or
+`--jsonl`); `--links` prints text lines (the default, or `-t`), `-c`, `-j` or
+`--jsonl`; `--meta` prints JSON. `-e`, `--links` and `--meta` are one task each
+and don't combine with each other or with `-a`.
 
 The document is prepared in this order: decode, parse, `-r` removals, `-b`/`-B`
 URL resolution, `--main`; then the selector runs. `--meta` always describes the
@@ -115,11 +123,19 @@ Write `\@` for a literal `@` before a name-like suffix (`.w-1\@sm`) — it is al
 the CSS escape, so the selector engine reads it as `@`. `-w` skips blank values;
 `-1` keeps only the first scope.
 
+Scopes may nest (`domtree div -e …` on nested `<div>`s); each one searches its
+own subtree, nested scopes included. Each field's selector runs once over the
+whole page, so that stays fast however deep the nesting — except a selector
+using `:scope`, whose matches differ per scope and which is run inside each
+scope separately. Text values cost as much as the text they read, so the text
+of deeply nested elements (`-e t=` on nested scopes) adds up, as with `-t div`.
+
 `--links` prints every `<a href>`/`<area href>` (except `javascript:`) with its
 readable text — the visible text, else `aria-label`, an image's `alt`, or
 `title`. A selector keeps only the links inside its matches (`domtree --links
-nav`). URLs are resolved like everything else: as written by default, against
-`-b URL`, or against the page's `<base href>` with `-B`.
+nav`), and `-w` skips links without text. URLs are resolved like everything
+else: as written by default, against `-b URL`, or against the page's `<base
+href>` with `-B` (which is itself resolved against `-b`, once).
 
 ```sh
 $ curl -sL https://www.rust-lang.org | domtree -b https://www.rust-lang.org --links nav

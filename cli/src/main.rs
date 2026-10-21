@@ -67,7 +67,7 @@ fn run(opts: &Options) -> Result<String, String> {
 
     let base = base_url(&dom, opts);
     if let Some(base) = &base {
-        absolutize(&mut dom, base);
+        absolutize(&mut dom, base, opts.base.as_deref());
     }
 
     if opts.meta {
@@ -184,15 +184,13 @@ fn extract_output(dom: &Dom, scope: Option<&Selector>, opts: &Options) -> Result
     let fields = extract::compile(&opts.extract)?;
     let ws = opts.ignore_whitespace;
     let Some(scope) = scope else {
-        return Ok(format!("{}\n", extract::object(dom, None, &fields, ws)));
+        return Ok(format!("{}\n", extract::object(dom, &fields, ws)));
     };
     let mut scopes: Vec<NodeRef<'_>> = dom.select(scope).collect();
     if opts.first {
         scopes.truncate(1);
     }
-    let objects = scopes
-        .iter()
-        .map(|s| extract::object(dom, Some(*s), &fields, ws));
+    let objects = extract::scoped_objects(dom, &scopes, &fields, ws).into_iter();
     Ok(if opts.mode == Mode::Jsonl {
         lines(objects, "\n")
     } else {
@@ -202,27 +200,19 @@ fn extract_output(dom: &Dom, scope: Option<&Selector>, opts: &Options) -> Result
 
 /// `--links`: every link (inside a match of `scope`, if given), its URL
 /// resolved as `--base`/`-B` say — so with neither, URLs print as written.
+/// With `-w`, links without text are skipped.
 fn links_output(dom: &Dom, scope: Option<&Selector>, base: Option<&str>, opts: &Options) -> String {
-    let inside: Option<Vec<bool>> = scope.map(|sel| {
-        let mut marks = vec![false; dom.len()];
-        for m in dom.select(sel) {
-            if let Some(mark) = marks.get_mut(m.id().index()) {
-                *mark = true;
-            }
-        }
-        marks
-    });
+    let inside = scope.map(|sel| inside_matches(dom, sel));
     let in_scope = |node: NodeRef<'_>| {
-        inside.as_ref().is_none_or(|marks| {
-            std::iter::once(node)
-                .chain(node.ancestors())
-                .any(|n| marks.get(n.id().index()).copied().unwrap_or(false))
-        })
+        inside
+            .as_ref()
+            .is_none_or(|marks| marks.get(node.id().index()).copied().unwrap_or(false))
     };
     let mut links: Vec<(String, String)> = dom
         .links(None)
         .into_iter()
         .filter(|l| in_scope(l.node))
+        .filter(|l| !(opts.ignore_whitespace && l.text.trim().is_empty()))
         .map(|l| (domtree::resolve_url(base.unwrap_or(""), l.href), l.text))
         .collect();
     if opts.first {
@@ -245,6 +235,28 @@ fn links_output(dom: &Dom, scope: Option<&Selector>, base: Option<&str>, opts: &
             "\n",
         ),
     }
+}
+
+/// Which nodes are a match of `sel` or inside one, indexed by
+/// `NodeId::index()`: one pass in document order, where parents come before
+/// their children (rather than a walk up the ancestors of every node, which
+/// is quadratic in deep documents).
+fn inside_matches(dom: &Dom, sel: &Selector) -> Vec<bool> {
+    let mut marks = vec![false; dom.len()];
+    for m in dom.select(sel) {
+        if let Some(mark) = marks.get_mut(m.id().index()) {
+            *mark = true;
+        }
+    }
+    for node in dom.nodes() {
+        let parent_inside = node
+            .parent()
+            .is_some_and(|p| marks.get(p.id().index()).copied().unwrap_or(false));
+        if let Some(mark) = marks.get_mut(node.id().index()) {
+            *mark |= parent_inside;
+        }
+    }
+    marks
 }
 
 /// `s` with tabs and line breaks turned into spaces, for one TSV field.
@@ -339,14 +351,26 @@ fn base_url(dom: &Dom, opts: &Options) -> Option<String> {
     }
 }
 
-/// Rewrite every relative URL attribute in the document to an absolute one.
+/// Rewrite every relative URL attribute in the document to an absolute one,
+/// resolved against `base`.
+///
+/// A `<base href>` is the exception: it is relative to the document's own
+/// URL (`--base`, if given), not to the base URL it defines — so with `-B`
+/// it is resolved once, as in [`Dom::base_url`], instead of against itself.
 ///
 /// A repeated attribute (`<a href=a href=b>`) is read and rewritten through
 /// its first occurrence only — the one `NodeRef::attr` and `Dom::set_attr`
 /// use — so the value that counts is the one resolved.
-fn absolutize(dom: &mut Dom, base: &str) {
+fn absolutize(dom: &mut Dom, base: &str, document_url: Option<&str>) {
     let mut edits = Vec::new();
     for node in dom.nodes() {
+        let base = match node.tag_name() {
+            Some("base") => match document_url {
+                Some(url) => url,
+                None => continue,
+            },
+            _ => base,
+        };
         for &name in URL_ATTRS.iter().chain(&["srcset"]) {
             let Some(value) = node.attr(name) else {
                 continue;

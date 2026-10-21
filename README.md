@@ -257,8 +257,9 @@ assert_eq!(domtree::line_col(src, range.start), (3, 3)); // 1-based line, column
 ## Command line
 
 `domtree` is a maintained, zero-dependency, drop-in replacement for
-[`htmlq`](https://github.com/mgdm/htmlq) — same flags, plus `--markdown`,
-`--json`, `--count` and modern selectors. [Full CLI docs →](./cli)
+[`htmlq`](https://github.com/mgdm/htmlq) — same flags, plus Markdown, JSON/JSON
+Lines and CSV output, structured extraction, reader mode, encoding detection,
+a linter, and modern selectors. [Full CLI docs →](./cli)
 
 ```sh
 curl -s https://news.ycombinator.com | domtree -t '.titleline > a'           # headlines
@@ -266,6 +267,19 @@ curl -sL https://www.rust-lang.org | domtree -b https://www.rust-lang.org -a hre
 curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer' --markdown body # page → Markdown
 domtree -c 'img:not([alt])' < page.html                                       # a11y check
 echo '<ul><li>a<li>b</ul>' | domtree -p                                       # pretty-print
+
+# Structured extraction: one JSON object per post
+curl -sL https://blog.rust-lang.org | domtree --jsonl -b https://blog.rust-lang.org/ \
+  -e title=a -e url=a@href 'tr:has(a)'
+# {"title":"Announcing Rust 1.99.1","url":"https://blog.rust-lang.org/2026/10/15/Rust-1.99.1/"}
+
+# Reader mode → Markdown, tables → CSV, page metadata → JSON
+curl -sL https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/ | domtree --main --markdown
+domtree --csv 'table#prices' < report.html
+domtree --meta < page.html
+
+# Lint HTML in CI (file:line:col, exit 1 on findings)
+domtree lint public/**/*.html
 ```
 
 ## JavaScript & WebAssembly

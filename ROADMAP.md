@@ -174,14 +174,14 @@ Most scraping code is the same five helpers rewritten by hand. Ship them.
 
 ## 0.7 — "Tools"
 
-- [ ] **`domtree lint`** — fast HTML checks with `file:line:col` output: images
+- [x] **`domtree lint`** — fast HTML checks with `file:line:col` output: images
       without `alt`, empty links and buttons, duplicate ids, skipped heading
       levels, and every recovered parse error. CI-friendly exit codes.
-- [ ] **Structured extraction from the shell** — `domtree -e title=h1
+- [x] **Structured extraction from the shell** — `domtree -e title=h1
       -e price=.price` → one JSON object; `--jsonl` for one object per match.
-- [ ] **`--main`** — main-content extraction in the CLI (`curl … | domtree
+- [x] **`--main`** — main-content extraction in the CLI (`curl … | domtree
       --main --markdown`).
-- [ ] **Encoding detection in the CLI** — BOM, `<meta charset>`, and
+- [x] **Encoding detection in the CLI** — BOM, `<meta charset>`, and
       Windows-1252 fallback for non-UTF-8 pages.
 
 ## Ecosystem & distribution

@@ -42,7 +42,7 @@ Numbers we hold ourselves to (CI-enforced where marked):
 | budget | limit |
 |---|---|
 | runtime dependencies, default build | **0** (CI: `cargo tree`) |
-| gzipped wasm, all bindings (selectors, text, Markdown) | **< 40 KB** (CI size gate: 40,960 bytes; 40,135 today) |
+| gzipped wasm, all bindings (selectors, text, Markdown) | **< 40 KB** (CI size gate: 40,960 bytes; 40,450 today) |
 | panics on any input — `parse`, `select`, `to_text`, `to_markdown` | **none** (proptest + `cargo-fuzz`) |
 | stack usage on deeply nested input | **bounded** (no recursion proportional to input depth) |
 | MSRV | Rust 1.85 (CI) |

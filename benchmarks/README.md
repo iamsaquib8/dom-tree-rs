@@ -148,6 +148,9 @@ are identical.
 
 ### WebAssembly
 
-The npm package's module (json + query + markdown, `wasm-opt -Oz`) is 39,974
-bytes gzipped after this work, against 39,707 before and a CI budget of 40,960.
-The `simd` feature is not enabled there.
+The npm package's module (json + query + markdown, `wasm-opt -Oz`) is 40,137
+bytes gzipped after this work (`gzip -9`), against 39,707 before — the
+arena-wide attribute storage, the SWAR search, the sink-generic builder and
+the post-parse shrink cost ~430 bytes — and a CI budget of 40,960. The
+streaming API is not in the bindings, so it costs nothing there, and the
+`simd` feature is not enabled.

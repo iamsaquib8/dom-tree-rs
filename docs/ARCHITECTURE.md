@@ -55,8 +55,8 @@ flowchart LR
    `Option<NodeId>` is 4 bytes and a `Node` is 52 bytes. Each parsed node also
    records its **source range** (two `u32`s; `NodeRef::source_range`,
    `domtree::line_col` in `src/source.rs`). The arenas are reserved up front
-   from the input length (sized for dense markup) and shrunk after parsing if
-   more than half is unused.
+   from the input length (sized for dense markup); the node and attribute
+   arenas are shrunk after parsing if more than half is unused (prose).
 4. **Editing** (`src/edit.rs`) — `remove`, attribute edits, `set_text`,
    `rename`, `create_*`, `append_child` / `insert_before`, `wrap` / `unwrap`,
    and parsed-fragment insertion. Removed and created nodes stay in the arena

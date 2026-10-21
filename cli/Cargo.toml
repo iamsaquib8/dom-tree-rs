@@ -1,0 +1,30 @@
+[package]
+name = "domtree-cli"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
+description = "Query HTML from the command line with CSS selectors — get elements, attributes, readable text, Markdown or JSON. A tiny, zero-dependency, htmlq-compatible CLI."
+repository = "https://github.com/iamsaquib8/dom-tree-rs"
+homepage = "https://github.com/iamsaquib8/dom-tree-rs/tree/main/cli"
+readme = "README.md"
+license = "MIT"
+keywords = ["html", "cli", "css-selector", "scraping", "markdown"]
+categories = ["command-line-utilities", "parser-implementations", "web-programming"]
+
+[[bin]]
+name = "domtree"
+path = "src/main.rs"
+
+[dependencies]
+dom-tree-rs = { path = "..", version = "0.3", default-features = false, features = ["json", "query", "markdown", "std"] }
+
+# `cargo binstall domtree-cli` downloads the prebuilt binary from the GitHub
+# release (built by .github/workflows/release.yml) instead of compiling.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/domtree-v{ version }-{ target }{ archive-suffix }"
+bin-dir = "domtree-v{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"

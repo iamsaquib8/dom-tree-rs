@@ -1,0 +1,7 @@
+---
+source: tests/corpus.rs
+expression: parse(html).to_html()
+---
+<p><ruby>漢<rp>(</rp><rt>kan</rt><rp>)</rp>字<rp>(</rp><rt>ji</rt><rp>)</rp></ruby></p>
+<p><ruby><rb>旧</rb><rb>字</rb><rb>体</rb><rt>kyū</rt><rt>ji</rt><rt>tai</rt></ruby></p>
+<p><ruby><rb>東</rb><rb>京</rb><rtc><rt>とう</rt><rt>きょう</rt></rtc><rtc>Tokyo</rtc></ruby></p>

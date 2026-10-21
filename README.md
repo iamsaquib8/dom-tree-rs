@@ -1,64 +1,343 @@
-# dom-tree-rs
+<div align="center">
 
-[![crates.io](https://img.shields.io/crates/v/dom-tree-rs.svg)](https://crates.io/crates/dom-tree-rs)
-[![docs.rs](https://img.shields.io/docsrs/dom-tree-rs)](https://docs.rs/dom-tree-rs)
-[![downloads](https://img.shields.io/crates/d/dom-tree-rs.svg)](https://crates.io/crates/dom-tree-rs)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+  <img src="docs/assets/banner-light.svg" width="100%" alt="dom-tree-rs — messy HTML in, clean tree, text, Markdown, or JSON out">
+</picture>
+
+A tiny, zero-dependency, never-panicking HTML parser with CSS selectors —
+for Rust, your shell, and JavaScript (via a ~41 KB gzipped WebAssembly module).
+
+[![crates.io](https://img.shields.io/crates/v/dom-tree-rs.svg?logo=rust)](https://crates.io/crates/dom-tree-rs)
+[![npm](https://img.shields.io/npm/v/dom-tree-wasm.svg?logo=npm)](https://www.npmjs.com/package/dom-tree-wasm)
+[![docs.rs](https://img.shields.io/docsrs/dom-tree-rs?logo=docs.rs)](https://docs.rs/dom-tree-rs)
 [![CI](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml)
-[![license](https://img.shields.io/github/license/iamsaquib8/dom-tree-rs)](./LICENSE)
-[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](#msrv)
-![no_std](https://img.shields.io/badge/no__std-yes-success)
 ![dependencies](https://img.shields.io/badge/dependencies-0-success)
+![no_std](https://img.shields.io/badge/no__std-yes-success)
+![unsafe](https://img.shields.io/badge/unsafe-forbidden-success)
+[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](#msrv)
+[![license](https://img.shields.io/github/license/iamsaquib8/dom-tree-rs)](./LICENSE)
 
+[**▶ Try it in your browser**](https://iamsaquib8.github.io/dom-tree-rs/) ·
+[Rust docs](https://docs.rs/dom-tree-rs) ·
+[CLI](./cli) ·
+[JavaScript](./dom-tree-wasm) ·
+[Roadmap](./ROADMAP.md)
 
-**A tiny, zero-dependency, forgiving HTML parser.** Turn messy real-world HTML
-into a clean tree (and JSON) — in the browser, on the edge, or anywhere you
-don't want to pull in a 100 KB+ parser. It **never panics** on bad input.
+<img src="docs/assets/demo.svg" width="760" alt="Terminal demo: domtree lists the navigation links of rust-lang.org, converts its first section to Markdown, counts images without alt text, and pretty-prints a fragment with unclosed list items.">
+
+</div>
+
+---
 
 ```rust
-let dom = domtree::parse(r#"<ul id="list"><li class="item">Item 1<li>Item 2"#);
+let dom = domtree::parse(r#"<ul id=links><li><a href="/a">One</a><li><a href="/b">Two</a></ul>"#);
 
-let items: Vec<_> = dom.find_by_tag("li").map(|li| li.text_content()).collect();
-assert_eq!(items, ["Item 1", "Item 2"]); // note the missing </li> — recovered
+for a in dom.select("#links a[href]") {
+    println!("{} -> {}", a.text_content(), a.attr("href").unwrap_or_default());
+}
+// One -> /a
+// Two -> /b        (the missing </li>s were recovered)
 
-println!("{}", dom.to_json()); // self-describing JSON tree, zero deps
+let md = domtree::parse("<h2>Notes</h2><p>Some <b>bold</b> text</p>").to_markdown();
+assert_eq!(md, "## Notes\n\nSome **bold** text");
 ```
 
-> **What it is not:** a spec-compliant WHATWG parser (use
-> [`html5ever`](https://crates.io/crates/html5ever)) or a raw-throughput record
-> (use [`tl`](https://crates.io/crates/tl)). It's the *smallest* way to turn
-> arbitrary HTML into a usable tree.
+## Pick your entry point
 
-## Why
+<table>
+<tr>
+<th width="33%">🦀 Rust library</th>
+<th width="33%">🖥️ Command line</th>
+<th width="33%">🌐 JavaScript / WASM</th>
+</tr>
+<tr valign="top">
+<td>
 
-Most Rust HTML parsers are either spec-grade and heavy (`html5ever`, `scraper`,
-`lol_html` — 5–11 dependencies, hundreds of KB of WASM) or fast and low-level
-(`tl`). `dom-tree-rs` fills a specific gap:
+```toml
+[dependencies]
+dom-tree-rs = "0.3"
+```
 
-- **Zero dependencies** in the default build. Your `cargo tree` stays clean.
-- **WASM-first**: a ~19 KB-gzipped module that parses HTML to JSON in any JS
-  runtime (browser / Deno / Cloudflare Workers / Node).
-- **Built-in JSON** output — no `serde` required (it's an optional feature).
-- **Forgiving**: missing end tags, void elements, mis-nesting, stray tags,
-  unquoted/boolean attributes, comments, doctypes, `<script>`/`<style>`,
-  entities — all handled, and it never panics.
-- **`no_std` + `alloc`** compatible.
-- **Ergonomic tree**: `parent`/`children`/`descendants`/`ancestors`,
-  `find_by_tag/id/class`, and optional CSS-selector querying.
+```rust
+let dom = domtree::parse(html);
+dom.select_first("h1")
+   .map(|h| h.to_text());
+```
+
+</td>
+<td>
+
+```sh
+cargo install domtree-cli
+```
+
+```sh
+curl -sL rust-lang.org \
+  | domtree -t h1
+```
+
+</td>
+<td>
+
+```sh
+npm install dom-tree-wasm
+```
+
+```js
+import init, { select }
+  from "dom-tree-wasm";
+await init();
+select(html, "a[href]");
+```
+
+</td>
+</tr>
+</table>
+
+Also: 🐍 **Python** — `pip install dom-tree-rs` ([docs](./python)) · 🍺 **Homebrew** —
+`brew install iamsaquib8/tap/domtree` · ⚡ **WASI** — `domtree.wasm` on every
+[release](https://github.com/iamsaquib8/dom-tree-rs/releases).
+
+## Why dom-tree-rs?
+
+- **Zero dependencies.** One crate in your `cargo tree`. A clean build takes
+  **0.6 s** — `scraper` pulls in 42 crates and takes 5.3 s.¹
+- **Never panics.** Any byte sequence gives you a best-effort tree. Proptested and
+  fuzzed: `parse`, `select`, `to_text`, `to_markdown`. Deep nesting can't blow the
+  stack.
+- **Real CSS selectors.** Combinators (` `, `>`, `+`, `~`), every attribute
+  operator, `:nth-child()`, `:not()`, `:is()`, `:has()`, and the scraper's
+  favourite, `:contains("text")`.
+- **Content out, not just a tree.** Readable text (`to_text`), CommonMark/GFM
+  Markdown (`to_markdown`) for LLM prompts and RAG pipelines, JSON, and HTML.
+- **Runs everywhere.** `no_std + alloc`, `#![forbid(unsafe_code)]`, a ~41 KB
+  gzipped wasm module for browsers, Cloudflare Workers, Deno, Bun and Node, and a
+  single static binary for your shell.
+- **Fast.** ~500 MB/s on markup — about 8× `scraper`, level with or ahead of
+  [`tl`][tl] — with ~20 allocations per parse (see [Performance](#performance)).
+- **Streams, too.** `domtree::events` yields start/end/text events with the
+  same recovery as the tree builder, for documents you don't want to keep.
+
+<sub>¹ Clean debug `cargo build` of an empty crate depending only on the parser (default
+features), Apple M4 Pro, 14 cores: dom-tree-rs 0.6 s · tl 0.4 s · html5ever 2.9 s ·
+scraper 5.3 s · lol_html 6.9 s. Fewer cores widens the gap.</sub>
+
+## Cookbook
+
+<details open>
+<summary><b>Scrape links, titles, and attributes</b></summary>
+
+```rust
+let dom = domtree::parse(html);
+
+let title = dom.select_first("title").map(|t| t.to_text());
+let links: Vec<&str> = dom.select("a[href^='https://']").filter_map(|a| a.attr("href")).collect();
+let price = dom.select_first(".product:has(.in-stock) .price").map(|p| p.to_text());
+```
+</details>
+
+<details>
+<summary><b>Turn a web page into Markdown for an LLM</b></summary>
+
+```rust
+let dom = domtree::parse(html);
+let article = dom.select_first("article, main").map(|n| n.to_markdown());
+```
+
+Or from the shell, stripping the chrome first:
+
+```sh
+curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer, script' --markdown body
+```
+</details>
+
+<details>
+<summary><b>Keep just the article, chunked for RAG</b></summary>
+
+```rust
+let dom = domtree::parse(html);
+let article = dom.main_content();                   // reader mode: drops nav, ads, comments…
+let chunks = match article {
+    Some(node) => node.to_markdown_chunks(1500),
+    None => dom.to_markdown_chunks(1500),
+};
+for chunk in &chunks {
+    println!("[{}]\n{}", chunk.context(), chunk.markdown); // e.g. "[Guide > Install]"
+}
+```
+</details>
+
+<details>
+<summary><b>Links, page metadata, and tables as data</b></summary>
+
+```rust
+let dom = domtree::parse(html);
+
+for link in dom.links(Some("https://example.com/blog/")) {
+    println!("{} -> {}", link.text, link.url);       // resolved, honours <base href>
+}
+
+let meta = dom.metadata();                          // title, description, OpenGraph, JSON-LD…
+println!("{:?} {:?}", meta.title, meta.canonical);
+
+if let Some(table) = dom.select_first("table#prices") {
+    let rows = table.table_rows();                  // colspan/rowspan expanded
+    print!("{}", domtree::to_csv(&rows));
+}
+```
+</details>
+
+<details>
+<summary><b>Compile a selector once, reuse it, and get real errors</b></summary>
+
+```rust
+use domtree::Selector;
+
+let sel = Selector::parse("li:nth-child(odd) > a").expect("valid selector");
+for page in pages {
+    let dom = domtree::parse(page);
+    let count = dom.select(&sel).count();
+}
+
+let err = Selector::parse("a:hover").unwrap_err();
+println!("{err}"); // unsupported pseudo-class ':hover' at byte 1
+```
+</details>
+
+<details>
+<summary><b>Walk the tree</b></summary>
+
+```rust
+let link = dom.select_first("a").unwrap();
+let section = link.closest("section");          // nearest matching ancestor
+let parent = link.parent();                     // O(1) — arena-backed
+let next = link.next_element_sibling();
+for node in link.ancestors() { /* … */ }
+for node in dom.root().unwrap().descendants() { /* … */ }
+```
+</details>
+
+<details>
+<summary><b>Edit and re-serialize</b></summary>
+
+```rust
+let mut dom = domtree::parse("<p>Hi <script>track()</script><a href=/x>x</a></p>");
+let scripts: Vec<_> = dom.select("script").map(|n| n.id()).collect();
+for id in scripts {
+    dom.remove(id);
+}
+assert_eq!(dom.to_html(), r#"<p>Hi <a href="/x">x</a></p>"#);
+
+// Insert parsed HTML, wrap, rename, set attributes and text:
+let a = dom.select_first("a").unwrap().id();
+dom.set_attr(a, "rel", "nofollow");
+dom.insert_html_after(a, " <b>new</b>");
+dom.wrap(a, "em");
+let p = dom.root().unwrap().id();
+dom.rename(p, "div");
+assert_eq!(
+    dom.to_html(),
+    r#"<div>Hi <em><a href="/x" rel="nofollow">x</a></em> <b>new</b></div>"#
+);
+```
+</details>
+
+<details>
+<summary><b>Point back into the source</b></summary>
+
+```rust
+let src = "<ul>\n  <li>one\n  <li>two</ul>";
+let dom = domtree::parse(src);
+let li = dom.select("li").nth(1).unwrap();
+let range = li.source_range().unwrap();              // byte range in `src`
+assert_eq!(&src[range.clone()], "<li>two");
+assert_eq!(domtree::line_col(src, range.start), (3, 3)); // 1-based line, column
+```
+</details>
+
+## Command line
+
+`domtree` is a maintained, zero-dependency, drop-in replacement for
+[`htmlq`](https://github.com/mgdm/htmlq) — same flags, plus Markdown, JSON/JSON
+Lines and CSV output, structured extraction, reader mode, encoding detection,
+a linter, and modern selectors. [Full CLI docs →](./cli)
+
+```sh
+curl -s https://news.ycombinator.com | domtree -t '.titleline > a'           # headlines
+curl -sL https://www.rust-lang.org | domtree -b https://www.rust-lang.org -a href 'nav a'
+curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer' --markdown body # page → Markdown
+domtree -c 'img:not([alt])' < page.html                                       # a11y check
+echo '<ul><li>a<li>b</ul>' | domtree -p                                       # pretty-print
+
+# Structured extraction: one JSON object per post
+curl -sL https://blog.rust-lang.org | domtree --jsonl -b https://blog.rust-lang.org/ \
+  -e title=a -e url=a@href 'tr:has(a)'
+# {"title":"Announcing Rust 1.99.1","url":"https://blog.rust-lang.org/2026/10/15/Rust-1.99.1/"}
+
+# Reader mode → Markdown, tables → CSV, page metadata → JSON
+curl -sL https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/ | domtree --main --markdown
+domtree --csv 'table#prices' < report.html
+domtree --meta < page.html
+
+# Lint HTML in CI (file:line:col, exit 1 on findings)
+domtree lint public/**/*.html
+```
+
+## JavaScript & WebAssembly
+
+The same parser — selectors, text, Markdown and all — in a ~41 KB (gzipped) wasm
+module with zero JS dependencies and full TypeScript types. Works in the browser,
+Cloudflare Workers, Deno, Bun, and Node (no setup needed in Node).
+[Package docs →](./dom-tree-wasm) · [**Playground →**](https://iamsaquib8.github.io/dom-tree-rs/)
+
+```js
+import init, { parse, select, toMarkdown, Document } from "dom-tree-wasm";
+await init(); // browsers and Workers; harmless in Node
+
+const tree = parse("<ul><li>a<li>b</ul>");   // typed tree: { type: "document", children: [...] }
+const links = select(html, "a[href]");       // [{ tag, attrs, text, html, nodeIndex }, ...]
+const md = toMarkdown(html, "article");      // just the article, as Markdown
+
+const page = new Document(html);             // parse once, query many times
+const headings = page.select("h2").map((h) => h.text);
+page.free();
+```
+
+## Python
+
+Same engine, Pythonic API, abi3 wheels for Linux, macOS and Windows (Python ≥ 3.9).
+The GIL is released while parsing large documents. [Package docs →](./python)
+
+```python
+import domtree
+
+doc = domtree.parse(html)
+links = [a.attr("href") for a in doc.select("a[href]")]
+price = doc.select_first(".product:has(.in-stock) .price").text
+markdown = doc.select_first("article").to_markdown()   # ready for an LLM prompt
+```
 
 ## How it compares
 
 | | dom-tree-rs | [tl] | [scraper] | [html5ever] | [lol_html] |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Default dependencies | **0** | 0 | 5+ | 10+ | 11+ |
-| WASM + npm package | **✅** | ✅ | ❌ | ❌ | ❌ |
-| Built-in JSON output | **✅** | ❌ | ❌ | ❌ | ❌ |
-| CSS-selector querying | subset¹ | limited | ✅ | ❌ | ✅ |
-| Streaming tokenizer | ✅ | ❌ | ❌ | partial | ✅ |
+| Transitive dependencies | **0** | 0 | 42 | 19 | 41 |
+| CSS selectors | **✅** | limited | ✅ | ❌ | ✅ |
+| Text / Markdown output | **✅** | ❌ | ❌ | ❌ | ❌ |
+| JSON output | **✅** | ❌ | ❌ | ❌ | ❌ |
+| WASM + npm package | **✅** | ❌ | ❌ | ❌ | ❌ |
+| CLI | **✅** | ❌ | ❌ | ❌ | ❌ |
 | `no_std` | **✅** | ❌ | ❌ | ❌ | ❌ |
+| Edit + re-serialize | **✅** | ❌ | ❌ | ✅ | ✅ (streaming) |
+| Streaming events with recovery | **✅** | ❌ | ❌ | ✅ (`TreeSink`) | ✅ |
 | Never panics on input | ✅ | ✅ | ✅ | ✅ | ✅ |
-| WHATWG spec-compliant | ❌ | ❌ | ✅ | ✅ | ❌ |
+| WHATWG spec-compliant tree | ❌ | ❌ | ✅ | ✅ | ❌ |
 
-¹ behind the `query` feature.
+**When to pick something else:** if you need byte-exact browser parsing, use
+[`html5ever`][html5ever]/[`scraper`][scraper]. If raw throughput is all that matters, use [`tl`][tl]. If
+you're sanitizing untrusted HTML, use [`ammonia`](https://crates.io/crates/ammonia)
+— never a forgiving, non-spec parser.
 
 [tl]: https://crates.io/crates/tl
 [scraper]: https://crates.io/crates/scraper
@@ -67,154 +346,71 @@ Most Rust HTML parsers are either spec-grade and heavy (`html5ever`, `scraper`,
 
 ## Performance
 
-Parsing is fast *for an owned tree*. On a synthetic article workload (Apple
-M-series, single core, `--release`):
+Fast *for an owned tree* — full recovery, entity decoding, source spans and
+all. Apple M4 Pro, `cargo bench` (generated inputs; see
+[benchmarks/](./benchmarks) for method and caveats):
 
-| input | dom-tree-rs | tl | html5ever† |
-|---|---:|---:|---:|
-| ~1 KB   | ~256 MiB/s | ~308 MiB/s | — |
-| ~50 KB  | ~250 MiB/s | ~297 MiB/s | — |
-| ~1 MB   | ~248 MiB/s | ~257 MiB/s | — |
+| input | dom-tree-rs | [tl] | [scraper] | [html5ever]¹ |
+|---|---:|---:|---:|---:|
+| small (0.5 KiB) | **400 MB/s** | 395 MB/s | 53 MB/s | 48 MB/s |
+| medium (21 KiB) | **491 MB/s** | 462 MB/s | 60 MB/s | 53 MB/s |
+| large (420 KiB) | **512 MB/s** | 358 MB/s | 61 MB/s | 54 MB/s |
+| table-heavy (712 KiB) | **422 MB/s** | 326 MB/s | 58 MB/s | 51 MB/s |
+| text-heavy (547 KiB) | 7.7 GB/s | **8.5 GB/s** | 1.9 GB/s | 1.6 GB/s |
 
-We land within ~5–15 % of `tl` (a SIMD speed specialist) and roughly on par on
-large documents, while staying zero-dependency and producing an *owned* tree.
-`tl` will usually win on raw throughput — **if speed is your only goal, use
-`tl`.** † html5ever benches around ~50 MB/s in the community
-[rust-html-parser-benchmark]; we don't include it in our harness to keep the
-benchmark crate dependency-light. Run the numbers yourself:
+About 8× faster than `scraper`/`html5ever` on markup, ahead of `tl` on large
+documents, and ~10% behind it on prose (`tl` borrows from the input and skips
+entity decoding and recovery). A parse makes ~20 allocations in total, and the
+optional `simd` feature cuts text-heavy parse time by another ~24%. Run them
+yourself: `cd benchmarks && cargo bench`.
 
-```sh
-cd benchmarks && cargo bench
-```
-
-[rust-html-parser-benchmark]: https://github.com/y21/rust-html-parser-benchmark
-
-## Install
-
-```toml
-[dependencies]
-dom-tree-rs = "0.2"
-```
-
-The library is imported as `domtree`:
-
-```rust
-use domtree::parse;
-```
-
-## Usage
-
-### Traverse
-
-```rust
-let dom = domtree::parse("<article><h1>Title</h1><p>Body <a href=\"/x\">link</a></p></article>");
-
-let h1 = dom.find_by_tag("h1").next().unwrap();
-assert_eq!(h1.text_content(), "Title");
-
-for a in dom.find_by_tag("a") {
-    println!("{} -> {}", a.text_content(), a.attr("href").unwrap_or(""));
-}
-
-// arena-backed: parent / siblings / ancestors are O(1) per step
-let link = dom.find_by_tag("a").next().unwrap();
-assert_eq!(link.parent().unwrap().tag_name(), Some("p"));
-```
-
-### Query with CSS selectors (`query` feature)
-
-```toml
-dom-tree-rs = { version = "0.2", features = ["query"] }
-```
-
-```rust
-# #[cfg(feature = "query")] {
-let dom = domtree::parse("<ul class=links><li><a href=/a>a</a><li><a href=/b rel=next>b</a></ul>");
-assert_eq!(dom.select("ul.links a[href]").count(), 2);
-assert_eq!(dom.select("a[rel=next]").next().unwrap().text_content(), "b");
-# }
-```
-
-Supported: type / `*` / `#id` / `.class` / `[attr]` / `[attr=value]`,
-descendant (` `) and child (`>`) combinators, and `,` selector lists.
-
-### JSON
-
-```rust
-let dom = domtree::parse("<p>hi</p>");
-let json = dom.to_json();
-// {"type":"document","errors":0,"children":[
-//   {"type":"element","tag":"p","attrs":{},"children":[
-//     {"type":"text","value":"hi"}]}]}
-```
-
-With the `serde` feature, the tree also implements `serde::Serialize` (same JSON
-shape).
-
-### HTML
-
-Re-serialize a tree (or subtree) back to HTML — a `parse → to_html → parse`
-round-trip is stable:
-
-```rust
-let dom = domtree::parse("<ul><li>a<li>b</ul>"); // missing </li>s
-assert_eq!(dom.to_html(), "<ul><li>a</li><li>b</li></ul>");
-```
-
-### WebAssembly
-
-See [`dom-tree-wasm/`](./dom-tree-wasm) — parse HTML to JSON from JavaScript with
-a ~19 KB-gzipped module and zero JS dependencies.
-
-```js
-import init, { parse } from "dom-tree-wasm";
-await init();
-const doc = JSON.parse(parse("<ul><li>a<li>b</ul>"));
-```
+<sub>¹ into its reference `RcDom`.</sub>
 
 ## What it handles
 
-Void elements (`<br>`, `<img>`, …), self-closing tags, comments, doctypes,
-CDATA, raw text (`<script>`/`<style>`), escapable raw text
-(`<title>`/`<textarea>`), boolean and unquoted attributes,
-hyphenated/namespaced/custom tags, the common HTML entities (named + numeric),
-and implicit closing for the everyday cases (`<li>`, `<p>`, table cells/rows,
-`<dt>`/`<dd>`, `<option>`).
+Void elements, self-closing tags, comments, doctypes, CDATA, raw text
+(`<script>`/`<style>`), escapable raw text (`<title>`/`<textarea>`), boolean and
+unquoted attributes, hyphenated/namespaced/custom tags, named + numeric entities
+(with browser-style Windows-1252 remapping), and implicit closing for the everyday
+cases (`<li>`, `<p>`, table cells/rows, `<dt>`/`<dd>`, `<option>`). Everything it
+recovers from is recorded in
+[`Dom::errors`](https://docs.rs/dom-tree-rs/latest/domtree/struct.Dom.html#method.errors).
 
-## What it deliberately does not do
+**Deliberately not done:** full WHATWG tree construction (adoption agency, automatic
+`<html>`/`<head>`/`<body>`, foster parenting). See the [non-goals](./ROADMAP.md#non-goals).
 
-It is **not** a full WHATWG tree builder: no adoption-agency algorithm, no
-automatic `<html>`/`<head>`/`<body>` insertion, no foster parenting, and only a
-curated subset (~130) of named entities. Everything it recovers from is recorded
-in [`Dom::errors`](https://docs.rs/dom-tree-rs/latest/domtree/struct.Dom.html#method.errors).
-If you need byte-exact browser parsing, use `html5ever`.
-
-## Features
+## Cargo features
 
 | feature | default | what it adds |
 |---|:---:|---|
-| `json` | ✅ | the zero-dependency `Dom::to_json` serializer |
-| `serde` | | `serde::Serialize` for the tree (adds the `serde` dep) |
-| `query` | | the CSS-subset selector engine, `Dom::select` |
-| `std` | | `std`-only conveniences; the crate is `no_std + alloc` otherwise |
+| `json` | ✅ | `to_json()` — zero-dependency JSON |
+| `query` | ✅ | CSS selectors: `select`, `select_first`, `Selector`, `closest`, `matches` |
+| `markdown` | ✅ | `to_markdown()` and `to_markdown_chunks()` — zero-dependency HTML → Markdown |
+| `entities-full` | | all 2,125 WHATWG named character references (default: the 178 most common) |
+| `simd` | | `memchr`-backed scanning (~24% faster on text-heavy pages; adds `memchr`) |
+| `serde` | | `serde::Serialize` for the tree (same JSON shape; adds `serde`) |
+| `std` | | `std::error::Error` impls; the crate is `no_std + alloc` otherwise |
 
 ## MSRV
 
-Rust **1.85** (edition 2024). Built and tested on the latest stable.
+Rust **1.85** (edition 2024), enforced in CI.
 
 ## Quality
 
-Property-tested for "never panics" + tree invariants (proptest, thousands of
-cases per run), snapshot-tested against a corpus of messy HTML, and CI runs
-fmt / clippy / a `no_std` build / a wasm size gate / `cargo-fuzz`.
+Property-tested ("never panics" + tree invariants), snapshot-tested against a
+corpus of messy HTML, fuzzed with `cargo-fuzz`, and CI-checked for fmt, clippy,
+`no_std`, MSRV, zero dependencies and a wasm size budget.
 
-## Roadmap
+## Contributing
 
-See [ROADMAP.md](./ROADMAP.md) for what's planned (`to_html()` re-serialization,
-wider selectors and entities, streaming events, performance) — and, just as
-importantly, the **non-goals** that keep this crate tiny and honest. Ideas and
-PRs that fit the philosophy are welcome.
+Issues and PRs are welcome! Start with [CONTRIBUTING.md](./CONTRIBUTING.md), the
+[architecture guide](./docs/ARCHITECTURE.md), and the [roadmap](./ROADMAP.md) —
+issues labelled **good first issue** are a friendly way in. Please follow the
+[code of conduct](./CODE_OF_CONDUCT.md), and report security problems privately
+as described in [SECURITY.md](./SECURITY.md).
+
+If dom-tree-rs saved you some time, a ⭐ helps other people find it.
 
 ## License
 
-[MIT](./LICENSE).
+[MIT](./LICENSE)

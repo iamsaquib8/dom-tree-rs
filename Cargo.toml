@@ -1,6 +1,6 @@
 [package]
 name = "dom-tree-rs"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
@@ -10,27 +10,41 @@ homepage = "https://github.com/iamsaquib8/dom-tree-rs"
 documentation = "https://docs.rs/dom-tree-rs"
 readme = "README.md"
 license = "MIT"
-keywords = ["html", "parser", "dom", "wasm", "no-std"]
+keywords = ["html", "parser", "css-selector", "markdown", "wasm"]
 categories = ["parser-implementations", "wasm", "web-programming", "no-std"]
-exclude = ["/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/docs/launch"]
+exclude = ["/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/cli", "/python", "/packaging", "/playground", "/docs/launch"]
 
 [lib]
 name = "domtree"
 
 [features]
-default = ["json"]
+default = ["json", "query", "markdown"]
 # Built-in, zero-dependency JSON serializer (`Dom::to_json`).
 json = []
 # Optional `serde::Serialize` impls on the tree (pulls in `serde`).
 serde = ["dep:serde"]
-# Hand-rolled CSS-subset selector engine (`Dom::select`). Off by default for size.
+# Hand-rolled CSS selector engine (`Dom::select`, `Selector`). Zero-dependency.
 query = []
+# Zero-dependency HTML -> Markdown (`Dom::to_markdown`).
+markdown = []
+# The complete WHATWG named character reference table (2,125 names) instead of
+# the curated ~180. Off by default to keep the default build small.
+entities-full = []
 # Enables std-only conveniences (e.g. `std::error::Error` for `ParseError`).
 # The crate is `no_std + alloc` by default.
 std = []
+# SIMD-accelerated scanning of text and attribute values via `memchr` (adds
+# that one dependency, `no_std`). Off by default: the default build stays
+# zero-dependency and produces exactly the same tokens.
+simd = ["dep:memchr"]
+
+[[example]]
+name = "to_markdown"
+required-features = ["query", "markdown"]
 
 [dependencies]
 serde = { version = "1", default-features = false, features = ["alloc"], optional = true }
+memchr = { version = "2.7", default-features = false, optional = true }
 
 [dev-dependencies]
 # Snapshot testing for the corpus suite (dev-only; not a runtime dependency).
@@ -51,7 +65,10 @@ lto = true
 
 [workspace]
 resolver = "2"
-# The WASM bindings, the comparison benchmarks, and the fuzz harness are
-# independent crates with their own (heavier) dependency graphs and release
-# profiles, so they are kept out of this crate's pristine, minimal-dep graph.
-exclude = ["dom-tree-wasm", "benchmarks", "fuzz"]
+# The `domtree` command-line tool. Shares this crate's lockfile and target dir.
+members = ["cli"]
+# The WASM bindings, the Python bindings, the comparison benchmarks, and the
+# fuzz harness are independent crates with their own (heavier) dependency
+# graphs and release profiles, so they are kept out of this crate's pristine,
+# minimal-dep graph.
+exclude = ["dom-tree-wasm", "python", "benchmarks", "fuzz"]

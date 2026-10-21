@@ -1,0 +1,11 @@
+---
+source: tests/corpus.rs
+expression: parse(html).to_html()
+---
+<div class="card">
+  <img src="a.png">
+  <p>First paragraph
+  </p><p>Second paragraph with a <br> line break
+  </p><ul><li>one</li><li>two</li><li>three</li></ul>
+  <b><i>bold italic</i></b> just italic
+</div>

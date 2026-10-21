@@ -1,0 +1,41 @@
+name: Bug report
+description: Wrong tree, wrong selector match, bad text/Markdown output, or a panic.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The single most useful thing is a **small HTML input** that shows the problem.
+        A panic or stack overflow on *any* input is always a bug — please include the input.
+  - type: textarea
+    id: input
+    attributes:
+      label: Input HTML (and selector, if relevant)
+      description: The smallest input you can find that reproduces the problem.
+      render: html
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Code or command
+      description: e.g. `dom.select("a[href]")`, `domtree -a href 'a'`, or the JS call.
+      render: rust
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: crate / CLI / npm version, and where it ran (native, wasm, browser, Workers…)
+      placeholder: dom-tree-rs 0.3.0, native

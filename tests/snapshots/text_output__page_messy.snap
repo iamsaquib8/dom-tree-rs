@@ -1,0 +1,22 @@
+---
+source: tests/text_output.rs
+expression: parse(html).to_text()
+---
+Bob’s Hardware – Weekly Specials
+
+Welcome! This week only:
+
+Hammers €9.99
+Nails (100 pack) — now half price
+Saws ™ brand
+
+Prices:
+
+Item	Price
+Drill	$49
+Glue	$3	(limit 2)
+
+Call us at 555-0100
+or visit
+
+© 1999 Bob & Sons. Last modified: 12/31/99

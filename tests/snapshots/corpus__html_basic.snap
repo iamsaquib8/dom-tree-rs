@@ -1,0 +1,8 @@
+---
+source: tests/corpus.rs
+expression: parse(html).to_html()
+---
+<ul id="list">
+  <li class="item">Item 1</li>
+  <li class="item">Item 2</li>
+</ul>

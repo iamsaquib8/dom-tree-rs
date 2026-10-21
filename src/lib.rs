@@ -40,11 +40,97 @@
 //! `<html>`/`<head>`/`<body>` insertion, no foster parenting. Anything it has
 //! to recover from is recorded in [`Dom::errors`].
 //!
+//! No unbounded search for the element an end tag closes: it must be among
+//! the 256 innermost open elements or the 8 outermost (where `</body>` and
+//! `</html>` find theirs). An end tag for an element open only in between is
+//! ignored as stray ([`ErrorKind::StrayEndTag`]) and the element stays open.
+//! Real documents almost never nest that deep, and the bound keeps every end
+//! tag O(1) on hostile input.
+//!
+//! ## Getting content out
+//!
+//! - [`Dom::to_text`] — readable plain text: no `<script>`/`<style>`/`<head>`,
+//!   whitespace collapsed, a line per block, a blank line between paragraphs.
+//! - [`Dom::to_markdown`] — CommonMark + GFM (headings, lists, links, images,
+//!   code blocks, tables, quotes): for LLM prompts, RAG indexes and notes.
+//! - [`Dom::to_html`], [`NodeRef::inner_html`], [`NodeRef::outer_html`] — HTML.
+//! - [`Dom::to_markdown_chunks`] — that Markdown split at headings into
+//!   chunks under a size budget, each with its heading path: for RAG indexes.
+//!
+//! ```
+//! let dom = domtree::parse(
+//!     "<article><h2>News</h2><p>It <em>works</em>!</p><script>track()</script></article>",
+//! );
+//! assert_eq!(dom.to_text(), "News\n\nIt works!");
+//! # #[cfg(feature = "markdown")]
+//! assert_eq!(dom.to_markdown(), "## News\n\nIt *works*!");
+//! ```
+//!
+//! ## Editing and source positions
+//!
+//! A [`Dom`] doubles as a small HTML rewriter: [`Dom::remove`],
+//! [`Dom::set_text`], [`Dom::set_attr`], [`Dom::rename`], [`Dom::wrap`],
+//! [`Dom::unwrap`], parsed-fragment insertion ([`Dom::append_html`] and
+//! friends) and node moves ([`Dom::append_child`], [`Dom::insert_before`]).
+//! Parsed nodes also remember where they came from:
+//! [`NodeRef::source_range`] plus [`line_col`].
+//!
+//! ```
+//! let src = "<p>Hello <b>world</b></p>";
+//! let mut dom = domtree::parse(src);
+//! let b = dom.find_by_tag("b").next().unwrap();
+//! assert_eq!(b.source_range(), Some(9..21));
+//! assert_eq!(domtree::line_col(src, 9), (1, 10));
+//!
+//! let b = b.id();
+//! dom.rename(b, "strong");
+//! dom.insert_html_after(b, "!");
+//! assert_eq!(dom.to_html(), "<p>Hello <strong>world</strong>!</p>");
+//! ```
+//!
+//! ## Structure and data
+//!
+//! - [`Dom::main_content`] — the article / post / docs body without the
+//!   navigation, sidebars, comments and footer ("reader mode").
+//! - [`Dom::links`] / [`Dom::resources`] — every link (with its text) and
+//!   every embedded URL, resolved against the page URL and `<base href>`
+//!   ([`resolve_url`], [`resolve_srcset`]: RFC 3986, zero-dependency).
+//! - [`Dom::metadata`] — title, description, canonical URL, language,
+//!   OpenGraph / Twitter-card fields, JSON-LD blocks and feeds.
+//! - [`NodeRef::table_rows`] — a `<table>` as rows of cell text with
+//!   `colspan`/`rowspan` expanded; [`to_csv`] formats them.
+//!
+//! ```
+//! let dom = domtree::parse(r#"<html lang="en"><head><title>Release notes</title></head>
+//!   <body><nav><a href="/">Home</a></nav>
+//!   <article><h1>Version 2</h1>
+//!     <p>This release adds link extraction, page metadata, tables as data and a
+//!        reader mode, all without a single new dependency.</p>
+//!     <p>See the <a href="changelog.html">full changelog</a> for details.</p>
+//!   </article></body></html>"#);
+//!
+//! assert_eq!(dom.metadata().title.as_deref(), Some("Release notes"));
+//! let article = dom.main_content().unwrap();
+//! assert_eq!(article.tag_name(), Some("article"));
+//! let links = dom.links(Some("https://example.com/news/"));
+//! assert_eq!(links[1].url, "https://example.com/news/changelog.html");
+//! assert_eq!(links[1].text, "full changelog");
+//! ```
+//!
 //! ## Features
 //!
 //! - `json` *(default)* — the zero-dependency [`Dom::to_json`] serializer.
-//! - `serde` — optional `serde::Serialize` for the tree (adds the `serde` dep).
-//! - `query` — a small CSS-selector engine, [`Dom::select`].
+//! - `markdown` *(default)* — the zero-dependency [`Dom::to_markdown`] and
+//!   [`Dom::to_markdown_chunks`].
+//! - `serde` — optional `serde::Serialize` for the tree, [`Metadata`] and
+//!   [`Chunk`] (adds the `serde` dep).
+//! - `query` — a zero-dependency CSS selector engine ([`Dom::select`], [`Selector`]).
+//! - `entities-full` — decode all 2,125 WHATWG named character references
+//!   instead of the curated ~180 (a sorted static table, about 70 KB).
+//! - `simd` — scan text and attribute values with
+//!   [`memchr`](https://crates.io/crates/memchr) (SIMD, `no_std`) instead of
+//!   the built-in word-at-a-time search. Adds that one dependency; tokens and
+//!   trees are identical either way. Worth it only for very text-heavy input.
 //! - `std` — adds `std`-only conveniences; the crate is `no_std + alloc` by default.
 
 #![no_std]
@@ -62,13 +148,21 @@ extern crate alloc;
 extern crate std;
 
 mod builder;
+mod edit;
 mod entities;
+#[cfg(feature = "entities-full")]
+mod entities_full;
 mod error;
+mod events;
+mod extract;
 mod node;
+mod scan;
+mod source;
 mod tags;
 mod token;
 mod tokenizer;
 mod tree;
+mod url;
 
 mod serialize;
 
@@ -76,10 +170,20 @@ mod serialize;
 mod query;
 
 pub use error::{ErrorKind, ParseError};
+pub use events::{Event, Events};
+pub use extract::{Link, Metadata, Resource, to_csv};
 pub use node::{NodeId, NodeKind};
+pub use source::line_col;
 pub use token::{AttrValue, Token};
 pub use tokenizer::Tokenizer;
 pub use tree::{Descendants, Dom, NodeRef};
+pub use url::{resolve_srcset, resolve_url};
+
+#[cfg(feature = "markdown")]
+pub use serialize::Chunk;
+
+#[cfg(feature = "query")]
+pub use query::{AsSelector, Selector, SelectorError};
 
 /// Parse a full HTML document into a best-effort tree.
 ///
@@ -111,4 +215,60 @@ pub fn parse_fragment(html: &str) -> Dom {
 /// ```
 pub fn tokenize(html: &str) -> Tokenizer<'_> {
     Tokenizer::new(html)
+}
+
+/// Stream a document as [`Event`]s — start and end of elements, text,
+/// comments, doctypes — without building a tree.
+///
+/// Unlike [`tokenize`], the events come **after recovery**, from the same
+/// tree builder [`parse`] uses: omitted end tags are implied (`<li>a<li>b`
+/// ends the first `<li>`), void and self-closing elements end right away,
+/// stray end tags are dropped, mismatched ones close what they skip, and
+/// everything still open ends at the end of the input. So every `Start` has
+/// exactly one matching `End`, and replaying the events builds exactly the
+/// tree `parse` returns. Text and attribute values are entity-decoded, and
+/// each event comes with its byte range in `html` (see [`Events`]).
+///
+/// Memory use is proportional to the nesting depth, not the document size —
+/// except for the recovery diagnostics, which are kept for
+/// [`Events::errors`] (16 bytes each; messy markup has about one per
+/// implicitly closed element). It is not faster than [`parse`]: each start
+/// tag with attributes gets its own `Vec`, where the tree shares one arena.
+///
+/// ```
+/// use domtree::Event;
+///
+/// let html = "<ul><li>Tom &amp; Jerry<li>Spike<br></ul>";
+/// let mut depth = 0;
+/// let mut items = Vec::new();
+/// for (event, range) in domtree::events(html) {
+///     match event {
+///         Event::Start { name, .. } => {
+///             depth += 1;
+///             if name == "li" {
+///                 items.push(String::new());
+///             }
+///         }
+///         Event::End { name, implied } => {
+///             depth -= 1;
+///             if name == "li" {
+///                 // Both `</li>` were omitted: the first is closed by the
+///                 // second `<li>`, the second by `</ul>`.
+///                 assert!(implied);
+///                 assert!(range.is_empty());
+///             }
+///         }
+///         Event::Text(text) => {
+///             if let Some(item) = items.last_mut() {
+///                 item.push_str(&text);
+///             }
+///         }
+///         _ => {}
+///     }
+/// }
+/// assert_eq!(depth, 0);
+/// assert_eq!(items, ["Tom & Jerry", "Spike"]);
+/// ```
+pub fn events(html: &str) -> Events<'_> {
+    Events::new(html)
 }

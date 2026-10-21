@@ -7,9 +7,15 @@ edition = "2021"
 [package.metadata]
 cargo-fuzz = true
 
+# Its own workspace: never picked up by (or looking for) another one.
+[workspace]
+
 [dependencies]
 libfuzzer-sys = "0.4"
-dom-tree-rs = { path = "..", features = ["json", "query"] }
+dom-tree-rs = { path = "..", features = ["json", "query", "markdown"] }
+# The reference parser for the `differential` target.
+html5ever = "0.39"
+markup5ever_rcdom = "0.39"
 
 [[bin]]
 name = "parse"
@@ -21,6 +27,27 @@ bench = false
 [[bin]]
 name = "tokenize"
 path = "fuzz_targets/tokenize.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "select"
+path = "fuzz_targets/select.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "markdown"
+path = "fuzz_targets/markdown.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "differential"
+path = "fuzz_targets/differential.rs"
 test = false
 doc = false
 bench = false

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="dom-tree-rs — messy HTML in, clean tree, text, Markdown or JSON out">
+<defs>
+  <linearGradient id="acc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fb923c"/><stop offset="1" stop-color="#ea580c"/></linearGradient>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0d1117"/><stop offset="1" stop-color="#161b22"/></linearGradient>
+</defs>
+<style>
+  .title { font: 800 96px system-ui, -apple-system, "Segoe UI", Inter, sans-serif; fill: #f0f6fc; letter-spacing: -1.5px; }
+  .rs { fill: url(#acc); }
+  .tag { font: 500 31px system-ui, -apple-system, "Segoe UI", Inter, sans-serif; fill: #9198a1; }
+  .chip { font: 600 17px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #d1d7e0; }
+  .url { font: 500 24px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #9198a1; }
+</style>
+<rect width="1280" height="640" rx="0" fill="url(#bg)"/>
+<path d="M1010 70 C1010 108 898 108 898 145" stroke="#262c36" stroke-width="2" fill="none"/>
+<path d="M1010 70 C1010 108 1122 108 1122 145" stroke="#262c36" stroke-width="2" fill="none"/>
+<path d="M898 145 C898 182 860 182 860 220" stroke="#262c36" stroke-width="2" fill="none"/>
+<path d="M898 145 C898 182 935 182 935 220" stroke="#262c36" stroke-width="2" fill="none"/>
+<path d="M1122 145 C1122 182 1085 182 1085 220" stroke="#262c36" stroke-width="2" fill="none"/>
+<path d="M1122 145 C1122 182 1172 182 1172 220" stroke="#262c36" stroke-width="2" fill="none"/>
+<path d="M1085 220 C1085 258 1035 258 1035 295" stroke="#262c36" stroke-width="2" fill="none"/>
+<path d="M1085 220 C1085 258 1098 258 1098 295" stroke="#262c36" stroke-width="2" fill="none"/>
+<path d="M1085 220 C1085 258 1160 258 1160 295" stroke="#262c36" stroke-width="2" fill="none"/>
+<path d="M1160 295 C1160 332 1135 332 1135 370" stroke="#262c36" stroke-width="2" fill="none"/>
+<path d="M1160 295 C1160 332 1185 332 1185 370" stroke="#262c36" stroke-width="2" fill="none"/>
+<circle cx="1010" cy="70" r="7.5" fill="#262c36"/>
+<circle cx="898" cy="145" r="5.6" fill="#262c36"/>
+<circle cx="1122" cy="145" r="5.6" fill="#262c36"/>
+<circle cx="860" cy="220" r="5.6" fill="#262c36"/>
+<circle cx="935" cy="220" r="5.6" fill="#262c36"/>
+<circle cx="1085" cy="220" r="5.6" fill="#262c36"/>
+<circle cx="1172" cy="220" r="5.6" fill="#262c36"/>
+<circle cx="1035" cy="295" r="5.6" fill="#262c36"/>
+<circle cx="1098" cy="295" r="5.6" fill="#262c36"/>
+<circle cx="1160" cy="295" r="5.6" fill="#262c36"/>
+<circle cx="1135" cy="370" r="5.6" fill="#262c36"/>
+<circle cx="1185" cy="370" r="5.6" fill="#262c36"/>
+<g transform="translate(96 96) scale(1.2)">
+  <path d="M30 40 L14 64 L30 88" fill="none" stroke="url(#acc)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M98 40 L114 64 L98 88" fill="none" stroke="url(#acc)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <g stroke="#cbd5e1" stroke-width="4" stroke-linecap="round" fill="none">
+    <path d="M64 38 L46 64"/><path d="M64 38 L82 64"/><path d="M82 64 L72 90"/><path d="M82 64 L92 90"/>
+  </g>
+  <circle cx="64" cy="36" r="9" fill="url(#acc)"/>
+  <circle cx="46" cy="66" r="7" fill="#f8fafc"/><circle cx="82" cy="66" r="7" fill="#f8fafc"/>
+  <circle cx="72" cy="92" r="6" fill="#94a3b8"/><circle cx="92" cy="92" r="6" fill="#94a3b8"/>
+</g>
+<text x="110" y="330" class="title">dom-tree<tspan class="rs">-rs</tspan></text>
+<text x="110" y="392" class="tag">Messy HTML in. Clean tree, text, Markdown, or JSON out.</text>
+<rect x="110" y="446" width="176" height="42" rx="21.0" fill="#21262d"/><text x="198.0" y="473.1" text-anchor="middle" class="chip">0 dependencies</text><rect x="296" y="446" width="155" height="42" rx="21.0" fill="#21262d"/><text x="373.5" y="473.1" text-anchor="middle" class="chip">never panics</text><rect x="461" y="446" width="165" height="42" rx="21.0" fill="#21262d"/><text x="543.5" y="473.1" text-anchor="middle" class="chip">CSS selectors</text><rect x="636" y="446" width="134" height="42" rx="21.0" fill="#21262d"/><text x="703.0" y="473.1" text-anchor="middle" class="chip">→ Markdown</text><rect x="780" y="446" width="208" height="42" rx="21.0" fill="#21262d"/><text x="884.0" y="473.1" text-anchor="middle" class="chip">Rust · CLI · WASM</text>
+<text x="110" y="570" class="url">github.com/iamsaquib8/dom-tree-rs</text>
+</svg>

@@ -1,0 +1,65 @@
+name: Playground
+
+# Builds the wasm module into playground/pkg and deploys playground/ to GitHub
+# Pages (https://iamsaquib8.github.io/dom-tree-rs/). One-time setup: in the repo
+# settings, Pages -> Build and deployment -> Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "dom-tree-wasm/**"
+      - "playground/**"
+      - "Cargo.toml"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push supersedes a queued one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: dom-tree-wasm
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - name: Build the wasm module into playground/pkg
+        working-directory: dom-tree-wasm
+        run: wasm-pack build --target web --release --no-pack --out-dir ../playground/pkg
+      - name: Report the module size
+        run: |
+          echo "wasm: $(wc -c < playground/pkg/dom_tree_wasm_bg.wasm) bytes," \
+               "$(gzip -9 -c playground/pkg/dom_tree_wasm_bg.wasm | wc -c) gzipped"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: playground
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

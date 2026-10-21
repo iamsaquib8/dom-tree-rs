@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Why we rewrote the importer in Rust &#8211; Field Notes</title>
+  <meta name="description" content="Three months, one importer, and what changed when the hot path stopped allocating.">
+  <link rel="canonical" href="https://fieldnotes.example/2026/03/why-we-rewrote-the-importer/">
+  <link rel="alternate" type="application/rss+xml" title="Field Notes &raquo; Feed" href="https://fieldnotes.example/feed/">
+  <link rel="alternate" type="application/rss+xml" title="Field Notes &raquo; Comments Feed" href="https://fieldnotes.example/comments/feed/">
+  <link rel="alternate" type="application/json" href="https://fieldnotes.example/wp-json/wp/v2/posts/42">
+  <link rel="stylesheet" id="theme-css" href="https://fieldnotes.example/wp-content/themes/plain/style.css?ver=2.1" media="all">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Why we rewrote the importer in Rust">
+  <meta property="og:site_name" content="Field Notes">
+  <meta property="og:image" content="https://fieldnotes.example/wp-content/uploads/2026/03/flame.png">
+  <meta property="article:published_time" content="2026-03-14T09:30:00+00:00">
+  <meta property="article:author" content="https://fieldnotes.example/author/maya/">
+  <meta property="article:tag" content="rust">
+  <meta property="article:tag" content="performance">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:creator" content="@maya">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Why we rewrote the importer in Rust","author":{"@type":"Person","name":"Maya Lindqvist"}}</script>
+  <script>window._wpemojiSettings = {"baseUrl":"https:\/\/s.w.org\/images\/core\/emoji\/"};</script>
+</head>
+<body class="post-template-default single single-post postid-42 single-format-standard has-sidebar">
+<div id="page" class="site">
+  <a class="skip-link screen-reader-text" href="#content">Skip to content</a>
+
+  <header id="masthead" class="site-header">
+    <div class="site-branding">
+      <p class="site-title"><a href="https://fieldnotes.example/" rel="home">Field Notes</a></p>
+      <p class="site-description">Writing about small, boring, reliable software</p>
+    </div>
+    <nav id="site-navigation" class="main-navigation">
+      <button class="menu-toggle" aria-controls="primary-menu" aria-expanded="false">Menu</button>
+      <ul id="primary-menu" class="menu">
+        <li><a href="https://fieldnotes.example/">Home</a></li>
+        <li><a href="https://fieldnotes.example/archive/">Archive</a></li>
+        <li><a href="https://fieldnotes.example/talks/">Talks</a></li>
+        <li><a href="https://fieldnotes.example/about/">About</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <div id="content" class="site-content">
+    <div id="primary" class="content-area">
+      <div id="main" class="site-main">
+
+        <div id="post-42" class="post-42 post type-post status-publish format-standard hentry category-engineering">
+          <div class="entry-header">
+            <h1 class="entry-title">Why we rewrote the importer in Rust</h1>
+            <div class="entry-meta">
+              <span class="posted-on">Posted on <time class="entry-date published" datetime="2026-03-14T09:30:00+00:00">14 March 2026</time></span>
+              <span class="byline"> by <a class="url fn n" rel="author" href="https://fieldnotes.example/author/maya/">Maya Lindqvist</a></span>
+            </div>
+          </div>
+
+          <div class="entry-content">
+            <p>For four years the nightly import job was the part of our system that everyone was afraid of. It read about forty gigabytes of partner feeds, normalised them, and wrote the result into the warehouse, and on a good night it finished before the analysts arrived.</p>
+            <p>On a bad night, which by last autumn meant roughly one night in three, it ran out of memory somewhere in the middle, restarted from scratch, and finished at lunchtime. Nobody could say exactly why, because the memory profile changed with every partner, every feed format, and every library upgrade.</p>
+
+            <h2>Measuring before cutting</h2>
+            <p>We started with a week of measurement rather than a rewrite. The flame graphs told a consistent story: most of the time, and almost all of the memory, went into building intermediate strings that were thrown away a few microseconds later, usually while trimming, lower-casing, or splitting fields.</p>
+            <figure>
+              <img src="https://fieldnotes.example/wp-content/uploads/2026/03/flame.png" alt="Flame graph of the old importer" width="800" height="400">
+              <figcaption>Allocation, allocation, allocation.</figcaption>
+            </figure>
+            <p>The fix for that is not a language, of course. But the new importer had to be written by two people in a quarter, and we wanted the compiler to stop us from reintroducing the same allocations, so we picked a language where borrowing is the default and copying is visible.</p>
+
+            <h2>The new hot path</h2>
+            <p>The core loop now borrows every field from the input buffer and only allocates when a value actually has to change:</p>
+            <pre><code class="language-rust">fn normalise&lt;'a&gt;(field: &amp;'a str) -&gt; Cow&lt;'a, str&gt; {
+    let trimmed = field.trim();
+    if trimmed.bytes().any(|b| b.is_ascii_uppercase()) {
+        Cow::Owned(trimmed.to_ascii_lowercase())
+    } else {
+        Cow::Borrowed(trimmed)
+    }
+}
+</code></pre>
+            <p>That one function, applied consistently, removed about eighty percent of the allocations. The rest came from reading feeds in fixed-size chunks instead of whole files, and from reusing a single output buffer per worker.</p>
+
+            <h2>Results</h2>
+            <ul>
+              <li>Peak memory went from 14 GB to 900 MB.</li>
+              <li>The median run takes 41 minutes instead of three and a half hours.</li>
+              <li>We have not had a single out-of-memory restart since January.</li>
+            </ul>
+            <blockquote><p>The best performance work is the work that makes the next bug impossible, not just the current one fast.</p></blockquote>
+            <p>If you are thinking about a rewrite of your own, measure first, write down what you expect to change, and keep the old system running in parallel for longer than feels necessary. Ours ran side by side for six weeks, and the diffs it produced caught three real bugs in the new code.</p>
+
+            <div class="sharedaddy sd-sharing-enabled">
+              <h3 class="sd-title">Share this:</h3>
+              <ul>
+                <li><a class="share-twitter" href="https://fieldnotes.example/2026/03/why-we-rewrote-the-importer/?share=twitter">Twitter</a></li>
+                <li><a class="share-mastodon" href="https://fieldnotes.example/2026/03/why-we-rewrote-the-importer/?share=mastodon">Mastodon</a></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="entry-footer">
+            <span class="cat-links">Posted in <a href="https://fieldnotes.example/category/engineering/" rel="category tag">Engineering</a></span>
+            <span class="tags-links">Tagged <a href="https://fieldnotes.example/tag/rust/" rel="tag">rust</a>, <a href="https://fieldnotes.example/tag/performance/" rel="tag">performance</a></span>
+          </div>
+        </div>
+
+        <nav class="navigation post-navigation" aria-label="Posts">
+          <div class="nav-links">
+            <div class="nav-previous"><a href="https://fieldnotes.example/2026/02/on-call-without-heroics/" rel="prev">On-call without heroics</a></div>
+            <div class="nav-next"><a href="https://fieldnotes.example/2026/04/the-boring-database/" rel="next">The boring database</a></div>
+          </div>
+        </nav>
+
+        <div id="comments" class="comments-area">
+          <h2 class="comments-title">3 thoughts on &ldquo;Why we rewrote the importer in Rust&rdquo;</h2>
+          <ol class="comment-list">
+            <li id="comment-7" class="comment even thread-even depth-1">
+              <article id="div-comment-7" class="comment-body">
+                <footer class="comment-meta"><b class="fn">Jonas</b> <a href="#comment-7"><time datetime="2026-03-14T11:02:00+00:00">14 March 2026 at 11:02</time></a></footer>
+                <div class="comment-content"><p>Great write-up. We had almost exactly the same experience with our billing exports, except that in our case the culprit was a logging library that formatted every record twice, even when the log level was off.</p></div>
+              </article>
+            </li>
+            <li id="comment-8" class="comment odd alt thread-odd depth-1">
+              <article id="div-comment-8" class="comment-body">
+                <footer class="comment-meta"><b class="fn">Priya</b> <a href="#comment-8"><time datetime="2026-03-15T08:40:00+00:00">15 March 2026 at 08:40</time></a></footer>
+                <div class="comment-content"><p>How did you handle partners that send Latin-1 instead of UTF-8? That was always the part of our importer that made the borrowing approach impossible, because every field had to be converted before we could even look at it.</p></div>
+              </article>
+            </li>
+            <li id="comment-9" class="comment byuser bypostauthor even depth-2">
+              <article id="div-comment-9" class="comment-body">
+                <footer class="comment-meta"><b class="fn">Maya Lindqvist</b></footer>
+                <div class="comment-content"><p>We detect the encoding once per file and transcode the whole chunk up front, so the field-level code only ever sees UTF-8. It costs one copy per chunk instead of one per field, which turned out to be fine.</p></div>
+              </article>
+            </li>
+          </ol>
+          <div id="respond" class="comment-respond">
+            <h3 id="reply-title" class="comment-reply-title">Leave a Reply</h3>
+            <form action="https://fieldnotes.example/wp-comments-post.php" method="post" id="commentform" class="comment-form">
+              <p class="comment-notes">Your email address will not be published. Required fields are marked *</p>
+              <p class="comment-form-comment"><label for="comment">Comment *</label> <textarea id="comment" name="comment" cols="45" rows="8" required></textarea></p>
+              <p class="form-submit"><input name="submit" type="submit" id="submit" class="submit" value="Post Comment"></p>
+            </form>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div id="secondary" class="widget-area" role="complementary">
+      <section id="search-2" class="widget widget_search">
+        <form role="search" method="get" class="search-form" action="https://fieldnotes.example/"><label>Search for: <input type="search" class="search-field" name="s"></label><input type="submit" class="search-submit" value="Search"></form>
+      </section>
+      <section id="text-3" class="widget widget_text">
+        <h2 class="widget-title">About</h2>
+        <div class="textwidget"><p>Field Notes is written by Maya Lindqvist, a backend engineer who likes small, boring, reliable software and long walks away from the pager.</p></div>
+      </section>
+      <section id="recent-posts-2" class="widget widget_recent_entries">
+        <h2 class="widget-title">Recent Posts</h2>
+        <ul>
+          <li><a href="https://fieldnotes.example/2026/04/the-boring-database/">The boring database</a></li>
+          <li><a href="https://fieldnotes.example/2026/02/on-call-without-heroics/">On-call without heroics</a></li>
+          <li><a href="https://fieldnotes.example/2026/01/feature-flags-are-debt/">Feature flags are debt</a></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <footer id="colophon" class="site-footer">
+    <div class="site-info">
+      <a href="https://wordpress.org/">Proudly powered by WordPress</a>
+      <span class="sep"> | </span>
+      Theme: Plain by Field Notes.
+    </div>
+  </footer>
+</div>
+<script src="https://fieldnotes.example/wp-content/themes/plain/js/navigation.js?ver=2.1" id="plain-navigation-js"></script>
+</body>
+</html>

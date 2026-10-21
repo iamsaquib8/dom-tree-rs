@@ -17,7 +17,8 @@ automatically — edit the drafts in your own voice before using them.
 3. Tag and push: `git tag v0.3.0 && git push origin v0.3.0`. The `Release`
    workflow attaches prebuilt `domtree` binaries (Linux, macOS, Windows) and
    `SHA256SUMS` to the GitHub release.
-4. Publish the npm package (see `docs/PUBLISHING.md`).
+4. npm: one-time *trusted publishing* setup for `dom-tree-wasm` (see
+   `docs/PUBLISHING.md`); the tag push then publishes it.
 5. Python: add a PyPI *pending trusted publisher* (project `dom-tree-rs`, owner
    `iamsaquib8`, repo `dom-tree-rs`, workflow `python.yml`, environment `pypi`);
    the tag push then publishes wheels.

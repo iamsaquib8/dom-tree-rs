@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Streaming events:** `domtree::events(html)` yields `Start` / `End`
+  (including implied ends) / `Text` / `Comment` / `Doctype`, each with its byte
+  range, applying exactly the same recovery as `parse` but without building a
+  tree; `Events::errors()` matches `Dom::errors()`.
+- **`simd` feature** (off by default): `memchr`-backed scanning, identical
+  output, ~24% faster on text-heavy input. The default build stays
+  zero-dependency.
+- Benchmarks against `scraper` and `html5ever`, text- and table-heavy inputs,
+  a memory report, and a weekly `Benchmarks` workflow; a `differential` fuzz
+  target against html5ever.
 - **Editing, part 2:** `Dom::set_text`, `rename`, `create_element`,
   `create_text`, `append_child`, `insert_before`, `wrap`, `unwrap`, and
   parsed-fragment insertion (`append_html`, `prepend_html`,
@@ -57,6 +67,11 @@ All notable changes to this project are documented here. The format is based on
 - Prebuilt CLI binaries for Linux arm64.
 
 ### Changed
+- **Faster parsing:** one attribute arena per document (nodes are now 52
+  bytes), no per-tag allocations, and a word-at-a-time byte search. Parse time
+  is 25–37% lower on markup and 69% lower on text-heavy pages; a parse makes
+  ~20 allocations instead of thousands; peak memory is 10–14% lower, and unused
+  arena capacity is released after parsing.
 - More implicit-close rules (WHATWG optional tags): the full list of elements
   that close `<p>`; a heading closes an open heading; an unclosed `<head>` ends
   at the first body content (previously such pages lost their body in
@@ -112,7 +127,7 @@ shell, and in JavaScript.
   (`parseJson` keeps the string); new `select`, `selectFirst`, `toText`,
   `toMarkdown`, `toHtml`, `errors`, and a parse-once `Document` class. Invalid
   selectors throw a `SelectorError` with a position. Full TypeScript types,
-  works in Node with no setup, ~38 KB gzipped. **Breaking:** `parseErrorCount`
+  works in Node with no setup, ~40 KB gzipped. **Breaking:** `parseErrorCount`
   and `query` are removed, and `dom-node.d.ts` is replaced by the generated
   types.
 - **Live playground** on GitHub Pages: paste HTML, try selectors, and see the

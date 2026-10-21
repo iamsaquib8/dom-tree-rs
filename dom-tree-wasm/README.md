@@ -3,7 +3,7 @@
 **Messy HTML in. Clean tree, text, Markdown, or JSON out.** A forgiving HTML
 parser with CSS selectors for JavaScript: browsers, Node, Deno, Bun and edge
 workers. It is the Rust crate [`dom-tree-rs`](https://github.com/iamsaquib8/dom-tree-rs)
-compiled to one **~38 KB (gzipped)** WebAssembly module, with zero JS
+compiled to one **~40 KB (gzipped)** WebAssembly module, with zero JS
 dependencies.
 
 **[Try it in the playground](https://iamsaquib8.github.io/dom-tree-rs/)**: paste
@@ -24,7 +24,7 @@ toMarkdown(html); // "- [One](/a)\n- [Two](/b)"
   `:not()`, `:is()`, `:has()`, plus jQuery-style `:contains("text")`.
 - **Content out.** Readable text (no scripts or styles), CommonMark/GFM Markdown
   for LLM prompts and RAG, a JSON-ready tree, or repaired HTML.
-- **Small.** One `.wasm` (~38 KB gzipped) plus ~4 KB of generated glue JS.
+- **Small.** One `.wasm` (~40 KB gzipped) plus ~4 KB of generated glue JS.
 
 It is not a spec-compliant WHATWG parser (no implicit `<html>`/`<body>`, no
 adoption agency) and not a sanitizer. Use DOMPurify for untrusted HTML that you
@@ -218,7 +218,7 @@ pseudo-elements, `:hover` and other interactive states, namespaces, and
 
 | File | Raw | Gzipped |
 |---|---:|---:|
-| `dom_tree_wasm_bg.wasm` | ~84 KB | ~38 KB |
+| `dom_tree_wasm_bg.wasm` | ~88 KB | ~40 KB |
 | `dom_tree_wasm.js` (glue) | ~22 KB | ~4 KB |
 
 The module contains the parser, the selector engine, and the text, Markdown,

@@ -6,7 +6,7 @@
 </picture>
 
 A tiny, zero-dependency, never-panicking HTML parser with CSS selectors —
-for Rust, your shell, and JavaScript (via a ~38 KB gzipped WebAssembly module).
+for Rust, your shell, and JavaScript (via a ~40 KB gzipped WebAssembly module).
 
 [![crates.io](https://img.shields.io/crates/v/dom-tree-rs.svg?logo=rust)](https://crates.io/crates/dom-tree-rs)
 [![npm](https://img.shields.io/npm/v/dom-tree-wasm.svg?logo=npm)](https://www.npmjs.com/package/dom-tree-wasm)
@@ -111,11 +111,13 @@ Also: 🐍 **Python** — `pip install dom-tree-rs` ([docs](./python)) · 🍺 *
   favourite, `:contains("text")`.
 - **Content out, not just a tree.** Readable text (`to_text`), CommonMark/GFM
   Markdown (`to_markdown`) for LLM prompts and RAG pipelines, JSON, and HTML.
-- **Runs everywhere.** `no_std + alloc`, `#![forbid(unsafe_code)]`, a ~38 KB
+- **Runs everywhere.** `no_std + alloc`, `#![forbid(unsafe_code)]`, a ~40 KB
   gzipped wasm module for browsers, Cloudflare Workers, Deno, Bun and Node, and a
   single static binary for your shell.
-- **Fast enough.** ~250 MiB/s — within 5–15 % of [`tl`][tl] while building an owned
-  tree (see [Performance](#performance)).
+- **Fast.** ~500 MB/s on markup — about 8× `scraper`, level with or ahead of
+  [`tl`][tl] — with ~20 allocations per parse (see [Performance](#performance)).
+- **Streams, too.** `domtree::events` yields start/end/text events with the
+  same recovery as the tree builder, for documents you don't want to keep.
 
 <sub>¹ Clean debug `cargo build` of an empty crate depending only on the parser (default
 features), Apple M4 Pro, 14 cores: dom-tree-rs 0.6 s · tl 0.4 s · html5ever 2.9 s ·
@@ -284,7 +286,7 @@ domtree lint public/**/*.html
 
 ## JavaScript & WebAssembly
 
-The same parser — selectors, text, Markdown and all — in a ~38 KB (gzipped) wasm
+The same parser — selectors, text, Markdown and all — in a ~40 KB (gzipped) wasm
 module with zero JS dependencies and full TypeScript types. Works in the browser,
 Cloudflare Workers, Deno, Bun, and Node (no setup needed in Node).
 [Package docs →](./dom-tree-wasm) · [**Playground →**](https://iamsaquib8.github.io/dom-tree-rs/)
@@ -328,6 +330,7 @@ markdown = doc.select_first("article").to_markdown()   # ready for an LLM prompt
 | CLI | **✅** | ❌ | ❌ | ❌ | ❌ |
 | `no_std` | **✅** | ❌ | ❌ | ❌ | ❌ |
 | Edit + re-serialize | **✅** | ❌ | ❌ | ✅ | ✅ (streaming) |
+| Streaming events with recovery | **✅** | ❌ | ❌ | ✅ (`TreeSink`) | ✅ |
 | Never panics on input | ✅ | ✅ | ✅ | ✅ | ✅ |
 | WHATWG spec-compliant tree | ❌ | ❌ | ✅ | ✅ | ❌ |
 
@@ -343,19 +346,25 @@ you're sanitizing untrusted HTML, use [`ammonia`](https://crates.io/crates/ammon
 
 ## Performance
 
-Parsing is fast *for an owned tree*. Synthetic article workload, Apple M-series,
-single core, `--release`:
+Fast *for an owned tree* — full recovery, entity decoding, source spans and
+all. Apple M4 Pro, `cargo bench` (generated inputs; see
+[benchmarks/](./benchmarks) for method and caveats):
 
-| input | dom-tree-rs | tl |
-|---|---:|---:|
-| ~1 KB   | ~256 MiB/s | ~308 MiB/s |
-| ~50 KB  | ~250 MiB/s | ~297 MiB/s |
-| ~1 MB   | ~248 MiB/s | ~257 MiB/s |
+| input | dom-tree-rs | [tl] | [scraper] | [html5ever]¹ |
+|---|---:|---:|---:|---:|
+| small (0.5 KiB) | **400 MB/s** | 395 MB/s | 53 MB/s | 48 MB/s |
+| medium (21 KiB) | **491 MB/s** | 462 MB/s | 60 MB/s | 53 MB/s |
+| large (420 KiB) | **512 MB/s** | 358 MB/s | 61 MB/s | 54 MB/s |
+| table-heavy (712 KiB) | **422 MB/s** | 326 MB/s | 58 MB/s | 51 MB/s |
+| text-heavy (547 KiB) | 7.7 GB/s | **8.5 GB/s** | 1.9 GB/s | 1.6 GB/s |
 
-html5ever benches around ~50 MB/s in the community
-[rust-html-parser-benchmark]. Run ours with `cd benchmarks && cargo bench`.
+About 8× faster than `scraper`/`html5ever` on markup, ahead of `tl` on large
+documents, and ~10% behind it on prose (`tl` borrows from the input and skips
+entity decoding and recovery). A parse makes ~20 allocations in total, and the
+optional `simd` feature cuts text-heavy parse time by another ~24%. Run them
+yourself: `cd benchmarks && cargo bench`.
 
-[rust-html-parser-benchmark]: https://github.com/y21/rust-html-parser-benchmark
+<sub>¹ into its reference `RcDom`.</sub>
 
 ## What it handles
 
@@ -378,6 +387,7 @@ recovers from is recorded in
 | `query` | ✅ | CSS selectors: `select`, `select_first`, `Selector`, `closest`, `matches` |
 | `markdown` | ✅ | `to_markdown()` and `to_markdown_chunks()` — zero-dependency HTML → Markdown |
 | `entities-full` | | all 2,125 WHATWG named character references (default: the 178 most common) |
+| `simd` | | `memchr`-backed scanning (~24% faster on text-heavy pages; adds `memchr`) |
 | `serde` | | `serde::Serialize` for the tree (same JSON shape; adds `serde`) |
 | `std` | | `std::error::Error` impls; the crate is `no_std + alloc` otherwise |
 

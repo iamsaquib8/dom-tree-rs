@@ -124,3 +124,44 @@ jobs:
         with:
           name: homebrew-formula
           path: domtree.rb
+
+  # Publishes the wasm bindings to npm with trusted publishing (OIDC): no token
+  # is stored in the repo. One-time setup on npmjs.com → dom-tree-wasm →
+  # Settings → Trusted publishing: repository iamsaquib8/dom-tree-rs, workflow
+  # release.yml, environment npm. The tag must match dom-tree-wasm's version.
+  npm:
+    name: publish dom-tree-wasm to npm
+    needs: release
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Check the tag matches the package version
+        shell: bash
+        run: |
+          VERSION=$(grep -m1 '^version' dom-tree-wasm/Cargo.toml | cut -d'"' -f2)
+          test "v$VERSION" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != v$VERSION"; exit 1; }
+      - name: Build
+        working-directory: dom-tree-wasm
+        run: |
+          wasm-pack build --target web --release
+          node npm/finish.mjs
+          sh npm/smoke-test.sh
+      - name: Publish (trusted publishing, with provenance)
+        working-directory: dom-tree-wasm/pkg
+        run: |
+          npm install -g npm@latest
+          npm publish --access public --provenance

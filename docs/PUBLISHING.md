@@ -39,6 +39,13 @@ docs.rs builds automatically from the published crate (config is already in
 
 ## 2. npm (WASM bindings)
 
+**Automated:** pushing a `v*` tag runs the `npm` job in
+`.github/workflows/release.yml`, which builds, smoke-tests and publishes with
+npm *trusted publishing* (OIDC, with provenance) — no token in the repo. One-time
+setup: npmjs.com → `dom-tree-wasm` → Settings → Trusted publishing → GitHub
+Actions, repository `iamsaquib8/dom-tree-rs`, workflow `release.yml`,
+environment `npm`. The manual steps below are the fallback.
+
 The npm version comes from `dom-tree-wasm/Cargo.toml`; bump it there. The
 package is one `--target web` build plus a small Node entry point
 (`npm/node.js`) and an `"exports"` map that `npm/finish.mjs` adds. Don't build
@@ -50,7 +57,7 @@ wasm-pack build --target web --release
 node npm/finish.mjs                             # Node entry point + "exports" in pkg/package.json
 wasm-pack test --node                           # binding tests
 sh npm/smoke-test.sh                            # npm-pack pkg/, install it, run tests/node.mjs
-gzip -9 -c pkg/dom_tree_wasm_bg.wasm | wc -c    # expect ~38 KB (CI gate: 40960 bytes)
+gzip -9 -c pkg/dom_tree_wasm_bg.wasm | wc -c    # expect ~40 KB (CI gate: 40960 bytes)
 
 cd pkg
 npm pack --dry-run                              # expect 7 files, incl. node.js and the .wasm

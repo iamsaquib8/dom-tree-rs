@@ -19,7 +19,7 @@ below are very welcome.
    in a prompt or an embedding index, on a server or at the edge, without a
    headless browser or a Python dependency.
 4. **JavaScript on the edge** — Cloudflare Workers, Deno, Bun, the browser:
-   places where a ~38 KB wasm module beats a 200 KB parser and there is no DOM.
+   places where a ~40 KB wasm module beats a 200 KB parser and there is no DOM.
 
 Every item below should make at least one of these people's day better. If it
 doesn't, it probably doesn't belong.
@@ -42,7 +42,7 @@ Numbers we hold ourselves to (CI-enforced where marked):
 | budget | limit |
 |---|---|
 | runtime dependencies, default build | **0** (CI: `cargo tree`) |
-| gzipped wasm, all bindings (selectors, text, Markdown) | **< 40 KB** (CI size gate; ~38 KB today) |
+| gzipped wasm, all bindings (selectors, text, Markdown) | **< 40 KB** (CI size gate: 40,960 bytes; 40,135 today) |
 | panics on any input — `parse`, `select`, `to_text`, `to_markdown` | **none** (proptest + `cargo-fuzz`) |
 | stack usage on deeply nested input | **bounded** (no recursion proportional to input depth) |
 | MSRV | Rust 1.85 (CI) |
@@ -78,7 +78,7 @@ These are deliberately *out of scope* — reach for the right tool instead:
 - `no_std + alloc`; ~19.5 KB-gzipped WASM bindings.
 - Property tests, snapshot corpus, `cargo-fuzz` harness, criterion benches, CI.
 
-## 0.3 — "One-line scraping" (shipped)
+## 0.3 — "One-line scraping" (done)
 
 Make the everyday job — find things, read their text — trivial in every
 environment.
@@ -119,9 +119,9 @@ environment.
 - [x] **WASM / npm 0.3** — selectors, text, Markdown and HTML output, a
       parse-once `Document`, typed `.d.ts`, zero-setup Node support.
 - [x] **Live playground** on GitHub Pages — paste HTML, try selectors, see the
-      tree, JSON, text and Markdown, all in a ~38 KB wasm module.
+      tree, JSON, text and Markdown, all in a ~40 KB wasm module.
 
-## 0.4 — "Edit and point"
+## 0.4 — "Edit and point" (done)
 
 From read-only to a small HTML rewriter, and from "a tree" to "a tree that knows
 where it came from".
@@ -143,22 +143,23 @@ where it came from".
 - [x] **`entities-full` feature** — the complete WHATWG named-entity set
       (default stays the curated 178).
 
-## 0.5 — "Fast and lean"
+## 0.5 — "Fast and lean" (done)
 
-- [ ] **Inline small-attribute storage** — drop the per-element attribute `Vec`
+- [x] **Inline small-attribute storage** — drop the per-element attribute `Vec`
       allocation (closes more of the `tl` gap, no dependency).
-- [ ] **Optional `simd` feature** — `memchr`-backed scanning for text-heavy
+- [x] **Optional `simd` feature** — `memchr`-backed scanning for text-heavy
       documents (off by default; the default build stays zero-dependency).
-- [ ] **Streaming events** — a SAX-style API that applies the same recovery as
+- [x] **Streaming events** — a SAX-style API that applies the same recovery as
       the tree builder, for documents you don't want to materialize.
-- [ ] **Benchmark depth** — add `html5ever`/`scraper` to the harness; track
+- [x] **Benchmark depth** — add `html5ever`/`scraper` to the harness; track
       throughput, wasm size and compile time over time in CI.
-- [ ] **Differential fuzzing vs `html5ever`** on the subset we claim to support.
-- [ ] **Borrowed-tree mode** — *evaluate first*: an opt-in `Dom<'a>` that
-      borrows from the source. Ship only if profiling shows a real win;
-      otherwise record the numbers here and close it.
+- [x] **Differential fuzzing vs `html5ever`** on the subset we claim to support.
+- [x] **Borrowed-tree mode** — *evaluated and declined*: string copying is
+      10–15% of parse time on dense markup and nothing on prose, below the 15%
+      bar, and it would need a lifetime on `Dom` or a duplicated API. Numbers in
+      [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
-## 0.6 — "Structure and data"
+## 0.6 — "Structure and data" (done)
 
 Most scraping code is the same five helpers rewritten by hand. Ship them.
 
@@ -172,7 +173,7 @@ Most scraping code is the same five helpers rewritten by hand. Ship them.
       keep each chunk under a size budget, and carry the heading path
       (`# Guide > ## Install`) so every chunk stands on its own.
 
-## 0.7 — "Tools"
+## 0.7 — "Tools" (done)
 
 - [x] **`domtree lint`** — fast HTML checks with `file:line:col` output: images
       without `alt`, empty links and buttons, duplicate ids, skipped heading
@@ -192,11 +193,30 @@ Being easy to *get* matters as much as features.
       installable with `cargo binstall domtree-cli`.
 - [x] Homebrew formula (`brew install iamsaquib8/tap/domtree`) — filled in by the
       release workflow (`packaging/homebrew/`).
-- [ ] npm package published from CI in lock-step with the crate version.
+- [x] npm package published from CI (trusted publishing, provenance) in
+      lock-step with the crate version.
 - [x] **Python package** (`pip install dom-tree-rs`, `import domtree`; PyO3 +
       maturin abi3 wheels, typed stubs, GIL released on large inputs). Python is
       where most scraping and RAG code lives.
 - [x] WASI build of the CLI (`domtree.wasm` on releases; runs under `wasmtime`).
+
+## Next
+
+Concrete follow-ups that came out of building 0.3–0.7.
+
+- [ ] **Quieter diagnostics** — stop flagging valid HTML in `Dom::errors()`:
+      a bare `&` that can't start a reference, and end tags that close
+      elements whose end tag is optional (`<ul><li>a</ul>`).
+- [ ] **Context-aware fragment parsing** — parse `append_html` input in the
+      context of its parent (e.g. `<td>` inside a `<tr>`).
+- [ ] **Optional `<tbody>` insertion** — a builder option for browser-identical
+      table structure.
+- [ ] **Streaming selectors** — run a `Selector` over `domtree::events` for
+      huge documents (matches on the open-element path).
+- [ ] **Playground: reader mode, chunks, lint** — expose `main_content`,
+      `to_markdown_chunks` and lint findings in the browser.
+- [ ] **Python editing API** and `events` iterator.
+- [ ] **CLI `lint` rules config** — `--allow` / `--deny` per rule, summary line.
 
 ## Exploring
 

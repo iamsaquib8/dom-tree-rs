@@ -50,8 +50,8 @@ jobs:
         # The abi3 floor and the newest stable CPython.
         python: ["3.9", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - uses: dtolnay/rust-toolchain@stable
@@ -88,7 +88,7 @@ jobs:
       matrix:
         target: [x86_64, aarch64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: PyO3/maturin-action@v1
         with:
           working-directory: python
@@ -102,7 +102,7 @@ jobs:
           .venv/bin/pip install pytest
           .venv/bin/pip install --no-index --find-links python/dist dom-tree-rs
           .venv/bin/python -m pytest -q python/tests
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-linux-${{ matrix.target }}
           path: python/dist
@@ -116,8 +116,8 @@ jobs:
       matrix:
         target: [x86_64, aarch64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - uses: PyO3/maturin-action@v1
@@ -131,7 +131,7 @@ jobs:
           python -m pip install pytest
           python -m pip install --no-index --find-links python/dist dom-tree-rs
           python -m pytest -q python/tests
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-macos-${{ matrix.target }}
           path: python/dist
@@ -140,8 +140,8 @@ jobs:
     name: wheel (windows x64)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
           architecture: x64
@@ -155,7 +155,7 @@ jobs:
           python -m pip install pytest
           python -m pip install --no-index --find-links python/dist dom-tree-rs
           python -m pytest -q python/tests
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-windows-x64
           path: python/dist
@@ -164,7 +164,7 @@ jobs:
     name: sdist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Tag matches the package version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -176,7 +176,7 @@ jobs:
           working-directory: python
           command: sdist
           args: --out dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: python/dist
@@ -194,7 +194,7 @@ jobs:
       # OIDC token for PyPI trusted publishing — no API token needed.
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           merge-multiple: true

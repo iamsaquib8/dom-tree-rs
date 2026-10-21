@@ -3,9 +3,10 @@ name: Release
 # Builds prebuilt `domtree` CLI binaries (plus a WASI `domtree.wasm`) and
 # attaches them to a GitHub Release when a version tag (v0.3.0, …) is pushed,
 # then prints a filled-in Homebrew formula for the tap (see
-# packaging/homebrew/README.md). Python wheels are published to PyPI by
-# python.yml. Publishing the crates to crates.io and the wasm package to npm
-# stays manual — see docs/PUBLISHING.md.
+# packaging/homebrew/README.md) and publishes the wasm package to npm (the
+# `npm` job, trusted publishing). Python wheels are published to PyPI by
+# python.yml. Publishing the crates to crates.io stays manual — see
+# docs/PUBLISHING.md.
 
 on:
   push:
@@ -33,7 +34,7 @@ jobs:
           - { target: x86_64-apple-darwin, os: macos-14 }
           - { target: x86_64-pc-windows-msvc, os: windows-latest }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -60,7 +61,7 @@ jobs:
           Copy-Item "target/${{ matrix.target }}/release/domtree.exe", cli/README.md, LICENSE $name
           Compress-Archive -Path $name -DestinationPath "$name.zip"
           "ASSET=$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}
           path: ${{ env.ASSET }}
@@ -76,12 +77,12 @@ jobs:
     needs: [build, wasi]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
       - name: Checksums
         run: sha256sum domtree-* domtree.wasm > SHA256SUMS
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: |
@@ -99,8 +100,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
           path: assets
@@ -120,7 +121,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           cat domtree.rb
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: homebrew-formula
           path: domtree.rb
@@ -138,14 +139,14 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org

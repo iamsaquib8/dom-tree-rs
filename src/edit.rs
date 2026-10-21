@@ -397,8 +397,15 @@ impl Dom {
     /// On a text node, replaces its content. On an element, removes all of
     /// its children and puts `text` in a single new text node (none if `text`
     /// is empty) — the DOM's `textContent = text`. Does nothing on void
-    /// elements, comments and doctypes. `text` is literal: markup in it is
-    /// escaped on output, never parsed (use [`Dom::append_html`] for that).
+    /// elements, comments and doctypes.
+    ///
+    /// `text` is literal, never parsed (use [`Dom::append_html`] for markup),
+    /// and [`Dom::to_html`] escapes `&`, `<` and `>` in it — except inside
+    /// `<script>` and `<style>`, whose content HTML has no escapes for. There
+    /// it is written as is, apart from any `</script` (or `</style`) that
+    /// would end the element early, which is written `<\/script` — the same
+    /// string inside a JavaScript or CSS string literal — so the output still
+    /// parses back to a single element.
     ///
     /// ```
     /// let mut dom = domtree::parse("<h1>Old <em>title</em></h1><p>x</p>");
@@ -409,6 +416,11 @@ impl Dom {
     /// let x = dom.find_by_tag("p").next().unwrap().first_child().unwrap().id();
     /// dom.set_text(x, "y");
     /// assert_eq!(dom.to_html(), "<h1>New &amp; &lt;improved&gt;</h1><p>y</p>");
+    ///
+    /// let mut dom = domtree::parse("<script>old()</script>");
+    /// let script = dom.root().unwrap().id();
+    /// dom.set_text(script, r#"if (a < b) log("</script>")"#);
+    /// assert_eq!(dom.to_html(), r#"<script>if (a < b) log("<\/script>")</script>"#);
     /// ```
     pub fn set_text(&mut self, id: NodeId, text: &str) {
         match self.shape(id) {

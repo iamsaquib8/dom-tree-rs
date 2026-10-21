@@ -283,6 +283,119 @@ fn set_text_on_script_stays_raw() {
     assert_eq!(dom.to_html(), "<script>if (a < b) go()</script>");
 }
 
+/// The tag names of `html` re-parsed, in document order.
+fn reparsed_tags(html: &str) -> Vec<String> {
+    parse(html)
+        .nodes()
+        .filter_map(|n| n.tag_name().map(str::to_string))
+        .collect()
+}
+
+#[test]
+fn set_text_cannot_close_a_script_or_style_early() {
+    let mut dom = parse("<script>var a=1</script><p>ok</p>");
+    let s = dom.root().unwrap().id();
+    dom.set_text(s, "x</script><img src=x onerror=alert(1)><script>");
+    let html = dom.to_html();
+    assert_eq!(
+        html,
+        "<script>x<\\/script><img src=x onerror=alert(1)><script></script><p>ok</p>"
+    );
+    assert_eq!(reparsed_tags(&html), ["script", "p"]);
+    let reparsed = parse(&html);
+    let script = reparsed.root().unwrap();
+    assert_eq!(script.children().count(), 1);
+    assert_eq!(
+        script.text_content(),
+        "x<\\/script><img src=x onerror=alert(1)><script>"
+    );
+
+    // ASCII case-insensitive, any end-tag delimiter; other names and
+    // non-delimited names are left alone.
+    dom.set_text(s, "a</SCRIPT >b</Script/c</script\td</scriptx></style></");
+    assert_eq!(
+        dom.get(s).unwrap().to_html(),
+        "<script>a<\\/SCRIPT >b<\\/Script/c<\\/script\td</scriptx></style></</script>"
+    );
+    // The serializer, not set_text, does it: the text itself is unchanged.
+    assert_eq!(
+        dom.get(s).unwrap().text_content(),
+        "a</SCRIPT >b</Script/c</script\td</scriptx></style></"
+    );
+
+    // create_text + append_child into a <style>.
+    let mut dom = parse("<style></style>");
+    let st = dom.root().unwrap().id();
+    let t = dom.create_text("</style><b>bold</b>");
+    assert!(dom.append_child(st, t));
+    assert_eq!(dom.to_html(), "<style><\\/style><b>bold</b></style>");
+    assert_eq!(reparsed_tags(&dom.to_html()), ["style"]);
+    // inner_html is the content to_html writes.
+    assert_eq!(dom.root().unwrap().inner_html(), "<\\/style><b>bold</b>");
+    // A text node's own HTML is its text, raw in a <style>.
+    assert_eq!(dom.get(t).unwrap().to_html(), "</style><b>bold</b>");
+}
+
+#[test]
+fn nothing_moved_into_a_raw_text_element_closes_it_early() {
+    // An end tag split across two text nodes.
+    let mut dom = parse("<script></script>");
+    let s = dom.root().unwrap().id();
+    let a = dom.create_text("x<");
+    let b = dom.create_text("/script><img src=x onerror=alert(1)>");
+    dom.append_child(s, a);
+    dom.append_child(s, b);
+    assert_eq!(
+        dom.to_html(),
+        "<script>x<\\/script><img src=x onerror=alert(1)></script>"
+    );
+    assert_eq!(reparsed_tags(&dom.to_html()), ["script"]);
+
+    // A parsed comment moved into a script.
+    let mut dom = parse("<p><!--</script><img src=x onerror=alert(1)>--></p><script></script>");
+    let c = dom.nodes().find(|n| n.comment().is_some()).unwrap().id();
+    let s = tag_ids(&dom, "script")[0];
+    assert!(dom.append_child(s, c));
+    assert_eq!(reparsed_tags(&dom.to_html()), ["p", "script"]);
+
+    // An element whose attribute value holds the end tag. Element children
+    // of a raw-text element come back as text, but never as live markup.
+    let mut dom = parse("<style></style>");
+    let st = dom.root().unwrap().id();
+    dom.append_html(st, "<b title='</style><img src=x onerror=alert(1)>'>b</b>");
+    assert_eq!(reparsed_tags(&dom.to_html()), ["style"]);
+    assert_eq!(
+        dom.root().unwrap().inner_html(),
+        r#"<b title="<\/style><img src=x onerror=alert(1)>">b</b>"#
+    );
+
+    // <textarea> and <title> also end only at their end tag; their text is
+    // escaped, but elements and comments moved in are not.
+    let mut dom = parse("<textarea></textarea><title></title>");
+    let ta = tag_ids(&dom, "textarea")[0];
+    let title = tag_ids(&dom, "title")[0];
+    dom.append_html(ta, "<b title='</textarea><img src=x onerror=alert(1)>'>");
+    dom.append_html(title, "<!--</TITLE><img src=x onerror=alert(1)>-->");
+    let html = dom.to_html();
+    assert_eq!(
+        html,
+        r#"<textarea><b title="<\/textarea><img src=x onerror=alert(1)>"></b></textarea><title><!--<\/TITLE><img src=x onerror=alert(1)>--></title>"#
+    );
+    assert_eq!(reparsed_tags(&html), ["textarea", "title"]);
+
+    // Nested: only the outermost element's end tag can end the text.
+    let mut dom = parse("<style></style>");
+    let st = dom.root().unwrap().id();
+    let inner = dom.create_element("script");
+    dom.set_text(inner, "</script></style><img src=x onerror=alert(1)>");
+    dom.append_child(st, inner);
+    assert_eq!(
+        dom.to_html(),
+        "<style><script></script><\\/style><img src=x onerror=alert(1)></script></style>"
+    );
+    assert_eq!(reparsed_tags(&dom.to_html()), ["style"]);
+}
+
 // --- rename --------------------------------------------------------------
 
 #[test]

@@ -33,6 +33,13 @@ pub(crate) fn is_raw_text(name: &str) -> bool {
     matches!(name, "script" | "style")
 }
 
+/// Elements the tokenizer reads as text up to their end tag: the raw-text
+/// ones plus `title` and `textarea` (whose text is still entity-decoded).
+/// Whatever is serialized inside one must not contain that end tag.
+pub(crate) fn ends_only_at_end_tag(name: &str) -> bool {
+    is_raw_text(name) || matches!(name, "title" | "textarea")
+}
+
 /// Start tags that implicitly close an open `<p>`: every element the WHATWG
 /// "optional tags" rules let a `</p>` be omitted before, plus the other start
 /// tags tree construction closes a `<p>` for (`center`, `dir`, `li`, `dd`,

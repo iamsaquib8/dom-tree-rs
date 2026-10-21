@@ -88,6 +88,34 @@ fn detect_base_uses_base_tag() {
 }
 
 #[test]
+fn base_href_is_resolved_once() {
+    let html = r#"<head><base href="sub/"></head><a href="x">x</a>"#;
+    let both = ["-B", "-b", "http://e.com/a/"];
+    // Not against itself (`…/a/sub/sub/`): against `--base`, as `-B` reads it.
+    assert_eq!(
+        ok(&[&both[..], &["-a", "href", "base, a"]].concat(), html),
+        "http://e.com/a/sub/\nhttp://e.com/a/sub/x\n"
+    );
+    assert_eq!(
+        ok(&[&both[..], &["--links"]].concat(), html),
+        "http://e.com/a/sub/x\tx\n"
+    );
+    // `-b` alone: everything, `<base href>` included, against `--base`.
+    assert_eq!(
+        ok(&["-b", "http://e.com/a/", "-a", "href", "base, a"], html),
+        "http://e.com/a/sub/\nhttp://e.com/a/x\n"
+    );
+    // `-B` alone: no document URL to resolve `<base href>` against.
+    assert_eq!(ok(&["-B", "-a", "href", "base"], html), "sub/\n");
+    // An absolute `<base href>` stays as it is.
+    assert_eq!(
+        ok(&[&both[..], &["-a", "href", "base, a"]].concat(), PAGE),
+        "https://example.com/blog/\nhttps://example.com/\nhttps://example.com/blog/post-1.html\n\
+         https://other.dev/x\n"
+    );
+}
+
+#[test]
 fn base_keeps_commas_inside_srcset_urls() {
     let html = r#"<img srcset="https://c.io/up/c_fill,w_300/a.jpg 300w, https://c.io/up/c_fill,w_600/a.jpg 600w">"#;
     assert_eq!(
@@ -188,6 +216,39 @@ fn usage_errors_exit_2() {
     let (_, err, code) = domtree(&["--bogus"], "");
     assert_eq!(code, 2);
     assert!(err.contains("--bogus"), "{err}");
+}
+
+#[test]
+fn output_formats_do_not_combine() {
+    for (args, message) in [
+        (&["-t", "-j"][..], "--text and --json cannot be combined"),
+        (&["-c", "--csv"], "--count and --csv cannot be combined"),
+        (
+            &["--jsonl", "-m"],
+            "--jsonl and --markdown cannot be combined",
+        ),
+        (&["-tc", "p"], "--text and --count cannot be combined"),
+        (
+            &["--links", "-j", "--jsonl"],
+            "--json and --jsonl cannot be combined",
+        ),
+        (&["--meta", "-c"], "--meta cannot be combined with --count"),
+        (
+            &["-e", "a=h1", "--csv"],
+            "--extract cannot be combined with --csv",
+        ),
+        (
+            &["-m", "-a", "href"],
+            "--markdown cannot be combined with --attribute",
+        ),
+    ] {
+        let err = usage_error(args, PAGE);
+        assert!(err.contains(message), "{args:?}: {err}");
+    }
+    // The same flag twice is fine, and so are the modifiers.
+    assert_eq!(ok(&["-t", "--text", "h1"], PAGE), "Hello & welcome\n");
+    assert_eq!(ok(&["-c", "-a", "href", "a"], PAGE), "3\n");
+    assert_eq!(ok(&["-c", "-1", "li"], PAGE), "1\n");
 }
 
 #[test]
@@ -309,6 +370,43 @@ fn extract_per_scope_match() {
     assert_eq!(
         ok(&[".card:last-child", "-w", "-e", "tags=.tag[]"], CARDS),
         "[{\"tags\":[]}]\n"
+    );
+}
+
+#[test]
+fn extract_nested_scopes() {
+    // Each scope searches its own subtree, nested scopes included.
+    let html = "<div id=1><span>a</span><div id=2><span id=s> </span>\
+                <div id=3><span>c</span></div></div></div>";
+    assert_eq!(
+        ok(
+            &["div", "-e", "id=@id", "-e", "s=span", "-e", "all=span[]"],
+            html
+        ),
+        concat!(
+            r#"[{"id":"1","s":"a","all":["a","","c"]},"#,
+            r#"{"id":"2","s":"","all":["","c"]},"#,
+            r#"{"id":"3","s":"c","all":["c"]}]"#,
+            "\n"
+        )
+    );
+    assert_eq!(
+        ok(&["div", "-w", "-e", "s=span", "-e", "id=span@id"], html),
+        concat!(
+            r#"[{"s":"a","id":"s"},{"s":"c","id":"s"},{"s":"c","id":null}]"#,
+            "\n"
+        )
+    );
+    assert_eq!(
+        ok(
+            &["div", "-e", "id=span@id", "-e", "kids=:scope > span[]"],
+            html
+        ),
+        concat!(
+            r#"[{"id":"s","kids":["a"]},{"id":"s","kids":[""]},"#,
+            r#"{"id":null,"kids":["c"]}]"#,
+            "\n"
+        )
     );
 }
 
@@ -477,6 +575,27 @@ fn links_output() {
 }
 
 #[test]
+fn links_ignore_whitespace_skips_links_without_text() {
+    let html = r#"<a href=a> </a><a href=b>b</a><a href=c><img alt=""></a><a href=d title=D></a>"#;
+    assert_eq!(ok(&["--links"], html).lines().count(), 4);
+    assert_eq!(ok(&["--links", "-w"], html), "b\tb\nd\tD\n");
+    assert_eq!(ok(&["--links", "-w", "-c"], html), "2\n");
+    assert_eq!(
+        ok(&["--links", "-w", "--jsonl"], html),
+        "{\"url\":\"b\",\"text\":\"b\"}\n{\"url\":\"d\",\"text\":\"D\"}\n"
+    );
+}
+
+#[test]
+fn links_in_nested_scopes() {
+    // A link is kept once, however many matches of the scope it is inside.
+    let html = "<div><div><a href=a>a</a><div><a href=b>b</a></div></div></div><a href=c>c</a>";
+    assert_eq!(ok(&["--links", "div"], html), "a\ta\nb\tb\n");
+    assert_eq!(ok(&["--links", "div div div"], html), "b\tb\n");
+    assert_eq!(ok(&["--links", "p"], html), "");
+}
+
+#[test]
 fn meta_output() {
     let html = r#"<html lang=en><head><title> A  page </title>
       <meta name=description content="About it">
@@ -551,6 +670,61 @@ fn unknown_encoding_warns() {
     let (out, err, code) = domtree_bytes(&["--encoding=klingon", "-t"], b"<p>caf\xe9</p>");
     assert_eq!((out.as_str(), code), ("caf\u{fffd}\n", 0));
     assert!(err.contains("warning") && err.contains("klingon"), "{err}");
+}
+
+// --- deep documents ----------------------------------------------------------
+
+/// `ok`, failing if it takes longer than `secs`. The bounds are generous
+/// (debug builds, slow CI machines): the quadratic versions these guard
+/// against took minutes on the same inputs.
+fn ok_within(secs: u64, args: &[&str], stdin: &str) -> String {
+    let start = std::time::Instant::now();
+    let out = ok(args, stdin);
+    let took = start.elapsed();
+    assert!(took.as_secs() < secs, "{args:?} took {took:?}");
+    out
+}
+
+const DEPTH: usize = 30_000;
+
+#[test]
+fn links_in_a_scope_are_linear() {
+    // `<a>` does not close an open `<a>`: 30,000 links, nested 30,000 deep.
+    let html = "<a href=/x>y".repeat(DEPTH);
+    assert_eq!(ok_within(10, &["--links", "-c", "p"], &html), "0\n");
+    assert_eq!(
+        ok_within(10, &["--links", "-c", "a"], &html),
+        format!("{DEPTH}\n")
+    );
+}
+
+#[test]
+fn extract_in_nested_scopes_is_linear() {
+    let html = format!("{}<span id=s>x</span>", "<div>".repeat(DEPTH));
+    let out = ok_within(
+        10,
+        &["div", "--jsonl", "-e", "x=span", "-e", "id=span@id[]"],
+        &html,
+    );
+    assert_eq!(out.lines().count(), DEPTH);
+    assert!(
+        out.lines().all(|l| l == r#"{"x":"x","id":["s"]}"#),
+        "{out:.200}"
+    );
+    // `-w` skips the same blank values in every scope only once.
+    let blank = "<div><span> </span>".repeat(DEPTH);
+    let out = ok_within(10, &["div", "--jsonl", "-w", "-e", "x=span"], &blank);
+    assert!(out.lines().all(|l| l == r#"{"x":null}"#), "{out:.200}");
+}
+
+#[test]
+fn lint_with_shared_end_positions_is_linear() {
+    // Every `<div>` ends at the end of input, after the one `</div>`.
+    let html = format!("{}{}</div>", "<div>".repeat(DEPTH), "x".repeat(100_000));
+    let start = std::time::Instant::now();
+    let (out, _, code) = domtree(&["lint"], &html);
+    assert!(start.elapsed().as_secs() < 10, "took {:?}", start.elapsed());
+    assert_eq!((code, out.lines().count()), (1, DEPTH - 1));
 }
 
 // --- misc --------------------------------------------------------------------
@@ -714,6 +888,37 @@ fn lint_usage() {
         assert!(help.contains(rule), "{rule}");
     }
     assert!(ok(&["--help"], "").contains("domtree lint"));
+}
+
+#[test]
+fn lint_accepts_end_tags_with_junk() {
+    // `</span` cut off by the end of input still closes the `<span>`.
+    let (out, _, code) = domtree(&["lint", "-q"], "<div><span>x</span");
+    assert_eq!(code, 1);
+    assert_eq!(
+        out,
+        "<stdin>:1:1: warning: <div> is never closed [unclosed-element]\n\
+         <stdin>:1:13: warning: unterminated tag [unterminated-tag]\n"
+    );
+    // Attributes, a `/` or any amount of whitespace in an end tag: valid.
+    let spaces = " ".repeat(64);
+    for end_tag in [
+        "</span foo>",
+        "</span/>",
+        "</Span\n>",
+        &format!("</span{spaces}>"),
+    ] {
+        let html = format!("<ul><li><span>x{end_tag}<li>y</ul>");
+        let (out, _, code) = domtree(&["lint", "-q"], &html);
+        assert_eq!((out.as_str(), code), ("", 0), "{html}");
+    }
+    // `<div><div>x</div>`: the `</div>` closes the inner one only.
+    let (out, _, code) = domtree(&["lint"], "<div><div>x</div>");
+    assert_eq!(code, 1);
+    assert_eq!(
+        out,
+        "<stdin>:1:1: warning: <div> is never closed [unclosed-element]\n"
+    );
 }
 
 #[test]

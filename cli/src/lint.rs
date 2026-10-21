@@ -12,6 +12,7 @@
 
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
+use std::ops::Range;
 
 use domtree::{Dom, ErrorKind, NodeRef, ParseError};
 
@@ -354,8 +355,20 @@ fn check_parse_errors(src: &str, dom: &Dom, order: &[NodeRef<'_>], out: &mut Vec
             continue;
         };
         let end = range.end;
-        if closing.contains(&end) && left_open(src, *node, range, tag) {
+        if closing.contains(&end) && can_be_open(src, *node, range, tag) {
             closed.entry(end).or_default().push(*node);
+        }
+    }
+    // The elements ending at one position are nested, so only the innermost
+    // (last in document order) can end with an end tag of its own: in
+    // `<div><div>x</div>` at the end of input, the `</div>` is the inner one's.
+    let opens = end_tag_opens(src);
+    for elements in closed.values_mut() {
+        let innermost = elements
+            .last()
+            .and_then(|n| Some((n.tag_name()?, n.source_range()?)));
+        if innermost.is_some_and(|(tag, range)| ends_with_end_tag(src, &opens, range, tag)) {
+            elements.pop();
         }
     }
 
@@ -488,14 +501,13 @@ fn optional_end_tag(tag: &str) -> bool {
     )
 }
 
-/// Whether an element was still open when recovery closed it: not void,
-/// not self-closing (`<path/>`: no children, and its source ends in `/>`),
-/// and without its own end tag.
-fn left_open(src: &str, node: NodeRef<'_>, range: std::ops::Range<usize>, tag: &str) -> bool {
-    let self_closing = || {
-        node.first_child().is_none() && src.get(range.clone()).is_some_and(|s| s.ends_with("/>"))
-    };
-    !is_void(tag) && !self_closing() && !ends_with_end_tag(src, range.clone(), tag)
+/// Whether an element can have been left open (it still needs an end tag of
+/// its own to be closed): not void, and not self-closing (`<path/>`: no
+/// children, and its source ends in `/>`).
+fn can_be_open(src: &str, node: NodeRef<'_>, range: Range<usize>, tag: &str) -> bool {
+    let self_closing =
+        || node.first_child().is_none() && src.get(range).is_some_and(|s| s.ends_with("/>"));
+    !is_void(tag) && !self_closing()
 }
 
 /// Elements that never have content or an end tag.
@@ -519,23 +531,61 @@ fn is_void(tag: &str) -> bool {
     )
 }
 
-/// Whether the source of an element ends with its own end tag (`</p>`,
-/// `</P >`). Only a short tail is looked at, so this is O(1) per element.
-fn ends_with_end_tag(src: &str, range: std::ops::Range<usize>, tag: &str) -> bool {
-    let Some(body) = src.get(range).and_then(|s| s.strip_suffix('>')) else {
+/// The byte offset of every `</` in `src`, in order.
+fn end_tag_opens(src: &str) -> Vec<usize> {
+    src.as_bytes()
+        .windows(2)
+        .enumerate()
+        .filter(|(_, pair)| pair == b"</")
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// Whether the source of an element (`range`) ends with its own end tag:
+/// its last `</` (from `opens`, see [`end_tag_opens`]) is followed by `tag`
+/// (ASCII case-insensitive), then by anything up to a `>` that ends the
+/// range — whitespace, attributes, a `/` — or by the end of the input. So
+/// `</p>`, `</P\n\n  >`, `</p class=x>`, `</p/>` and `</p` at the very end
+/// all count. A binary search, so O(log n) per element.
+fn ends_with_end_tag(src: &str, opens: &[usize], range: Range<usize>, tag: &str) -> bool {
+    let last = opens.partition_point(|&at| at + 2 <= range.end);
+    let Some(&at) = last.checked_sub(1).and_then(|i| opens.get(i)) else {
         return false;
     };
-    let mut from = body.len().saturating_sub(tag.len() + 2 + 16);
-    while !body.is_char_boundary(from) {
-        from += 1;
+    let Some(tail) = src.get(at + 2..range.end).filter(|_| at >= range.start) else {
+        return false;
+    };
+    let name_len = tail
+        .find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>')
+        .unwrap_or(tail.len());
+    let (Some(name), Some(rest)) = (tail.get(..name_len), tail.get(name_len..)) else {
+        return false;
+    };
+    name.eq_ignore_ascii_case(tag)
+        && match tag_end(rest) {
+            Some(gt) => gt + 1 == rest.len(),
+            None => range.end >= src.len(),
+        }
+}
+
+/// The offset of the `>` that ends a tag, in `rest` (what follows the tag
+/// name), skipping quoted attribute values; `None` if the tag never ends.
+fn tag_end(rest: &str) -> Option<usize> {
+    let (mut quote, mut after_eq) = (None, false);
+    for (i, c) in rest.char_indices() {
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(_) => {}
+            None => match c {
+                '>' => return Some(i),
+                '"' | '\'' if after_eq => quote = Some(c),
+                '=' => after_eq = true,
+                c if c.is_ascii_whitespace() => {}
+                _ => after_eq = false,
+            },
+        }
     }
-    let tail = body.get(from..).unwrap_or("").trim_end();
-    let Some(name_at) = tail.len().checked_sub(tag.len()) else {
-        return false;
-    };
-    tail.get(name_at..)
-        .is_some_and(|n| n.eq_ignore_ascii_case(tag))
-        && tail.get(..name_at).is_some_and(|t| t.ends_with("</"))
+    None
 }
 
 /// Any other recovered parse error.
@@ -877,12 +927,93 @@ mod tests {
 
     #[test]
     fn end_tag_detection() {
+        let ends = |src: &str, range: Range<usize>, tag: &str| {
+            ends_with_end_tag(src, &end_tag_opens(src), range, tag)
+        };
         let src = "<p>x</P ><div>y</div>é<b>z";
-        assert!(ends_with_end_tag(src, 0..9, "p"));
-        assert!(ends_with_end_tag(src, 9..21, "div"));
-        assert!(!ends_with_end_tag(src, 23..src.len(), "b"));
-        assert!(!ends_with_end_tag(src, 3..4, "p"));
-        assert!(!ends_with_end_tag(src, 0..500, "p"));
+        assert!(ends(src, 0..9, "p"));
+        assert!(ends(src, 9..21, "div"));
+        assert!(!ends(src, 23..src.len(), "b"));
+        assert!(!ends(src, 3..4, "p"));
+        assert!(!ends(src, 0..500, "p"));
+        // The `</` must be inside the range.
+        assert!(!ends(src, 5..9, "p"));
+        // Any amount of whitespace, attributes, a `/`, quoted `>`s.
+        let spaced = format!("<p>x</p{}>", " \n\t".repeat(20));
+        assert!(ends(&spaced, 0..spaced.len(), "p"));
+        for src in [
+            "<p>x</p class=a>",
+            "<p>x</p/>",
+            "<p>x</p title=\"a>b\" x='>'>",
+            "<p>x</p foo's>",
+        ] {
+            assert!(ends(src, 0..src.len(), "p"), "{src}");
+        }
+        // A `>` missing at the end of input, but not elsewhere.
+        assert!(ends("<p>x</p", 0..7, "p"));
+        assert!(ends("<p>x</p  ", 0..9, "p"));
+        assert!(!ends("<p>x</p<b>", 0..7, "p"));
+        // Another name, or text after the end tag.
+        for src in [
+            "<p>x</pre>",
+            "<p>x</px>",
+            "<p>x</ p>",
+            "<p>x</p><br>",
+            "<p>x</p>y",
+        ] {
+            assert!(!ends(src, 0..src.len(), "p"), "{src}");
+        }
+    }
+
+    #[test]
+    fn end_tags_with_junk_close_their_element() {
+        // An end tag cut off by the end of input still closes its element.
+        assert_eq!(
+            report("<div><span>x</span"),
+            [
+                (
+                    1,
+                    1,
+                    Level::Warning,
+                    "unclosed-element",
+                    "<div> is never closed".to_string()
+                ),
+                (
+                    1,
+                    13,
+                    Level::Warning,
+                    "unterminated-tag",
+                    "unterminated tag".to_string()
+                ),
+            ]
+        );
+        // Attributes, a `/` or lots of whitespace in an end tag.
+        let spaces = " ".repeat(40);
+        for end_tag in [
+            "</span foo>",
+            "</span/>",
+            "</SPAN\n>",
+            &format!("</span{spaces}>"),
+        ] {
+            let html = format!("<ul><li><span>x{end_tag}<li>y</ul>");
+            let got = report(&html);
+            assert!(got.iter().all(|f| f.2 == Level::Note), "{html}: {got:?}");
+        }
+        // Of nested elements ending together, the end tag is the inner one's.
+        assert_eq!(
+            report("<div><div>x</div>"),
+            [(
+                1,
+                1,
+                Level::Warning,
+                "unclosed-element",
+                "<div> is never closed".to_string()
+            )]
+        );
+        assert_eq!(
+            rules("<div><div>x</div"),
+            [(1, 1, "unclosed-element"), (1, 12, "unterminated-tag")]
+        );
     }
 
     #[test]

@@ -40,6 +40,13 @@
 //! `<html>`/`<head>`/`<body>` insertion, no foster parenting. Anything it has
 //! to recover from is recorded in [`Dom::errors`].
 //!
+//! No unbounded search for the element an end tag closes: it must be among
+//! the 256 innermost open elements or the 8 outermost (where `</body>` and
+//! `</html>` find theirs). An end tag for an element open only in between is
+//! ignored as stray ([`ErrorKind::StrayEndTag`]) and the element stays open.
+//! Real documents almost never nest that deep, and the bound keeps every end
+//! tag O(1) on hostile input.
+//!
 //! ## Getting content out
 //!
 //! - [`Dom::to_text`] — readable plain text: no `<script>`/`<style>`/`<head>`,

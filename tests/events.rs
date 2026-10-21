@@ -534,6 +534,23 @@ fn deep_nesting_streams_without_recursion() {
 }
 
 #[test]
+fn bounded_end_tag_search_agrees_with_parse() {
+    // End tags reach the 256 innermost and 8 outermost open elements; both
+    // sides of each bound, plus unknown entities (reported at their `&`).
+    let wrap = "<div>".repeat(8);
+    for k in [254, 255, 256, 257, 1000] {
+        let b = "<b>".repeat(k);
+        for html in [
+            format!("{wrap}<main>{b}</main><p>x&bogus;</p>"),
+            format!("<html><body>{wrap}{b}</div></body></html>tail"),
+            format!("<body>{b}<a title='&copy'>&ampx</a></body>&nosuch;"),
+        ] {
+            check(&html).unwrap();
+        }
+    }
+}
+
+#[test]
 fn the_empty_document_has_no_events() {
     assert!(collect("").is_empty());
     let mut events = domtree::events("");

@@ -244,7 +244,7 @@ fn deeply_nested_does_not_overflow() {
 fn stray_end_tags_on_a_deep_stack_are_linear() {
     // Each `</x>` has no open match. Scanning the whole open-element stack for
     // every one of them used to make this quadratic (~400 s at n = 100k, ~35 s
-    // at this n); linear, it is a few hundredths of a second.
+    // at this n); with the search bounded, it is a few hundredths of a second.
     let n = 30_000;
     let mut html = "<div>".repeat(n);
     html.push_str(&"</x>".repeat(n));
@@ -273,6 +273,193 @@ fn stray_end_tags_on_a_deep_stack_are_linear() {
     );
     // Every span closed properly, so the trailing <p> is top-level.
     assert_eq!(dom.roots().count(), 2);
+}
+
+/// `n` distinct tag names whose FNV-1a hashes agree in their low 20 bits, so
+/// they all land in one slot of a hash table of up to 2^20 slots indexed by
+/// them. Found by meeting in the middle: FNV-1a's step `h = (h ^ b) * P` is
+/// invertible (P is odd), and the low bits only depend on the low bits.
+fn fnv_colliding_names(n: usize) -> Vec<String> {
+    const P: u32 = 0x0100_0193;
+    const MASK: u32 = (1 << 20) - 1;
+    const TARGET: u32 = 0xb_eef5;
+    let alnum = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut triples = Vec::new();
+    for &a in alnum {
+        for &b in alnum {
+            for &c in alnum {
+                triples.push([a, b, c]);
+            }
+        }
+    }
+    let step = |h: u32, b: &u8| (h ^ u32::from(*b)).wrapping_mul(P);
+    // P's inverse modulo 2^32, by Newton's iteration.
+    let p_inv = (0..5).fold(P, |x, _| {
+        x.wrapping_mul(2u32.wrapping_sub(P.wrapping_mul(x)))
+    });
+    // The state each suffix takes to TARGET (modulo 2^20).
+    let mut suffix_from = vec![usize::MAX; 1 << 20];
+    for (i, s) in triples.iter().enumerate() {
+        let h = s
+            .iter()
+            .rev()
+            .fold(TARGET, |h, &b| h.wrapping_mul(p_inv) ^ u32::from(b));
+        suffix_from[(h & MASK) as usize] = i;
+    }
+    let mut names = Vec::with_capacity(n);
+    for k in 0.. {
+        let prefix = format!("x{k}q");
+        let h0 = prefix.bytes().fold(0x811c_9dc5, |h, b| step(h, &b));
+        for middle in &triples {
+            let h = middle.iter().fold(h0, step) & MASK;
+            if let Some(suffix) = triples.get(suffix_from[h as usize]) {
+                let mut name = prefix.clone();
+                name.extend(middle.iter().chain(suffix).map(|&b| char::from(b)));
+                names.push(name);
+                if names.len() == n {
+                    return names;
+                }
+            }
+        }
+    }
+    names
+}
+
+#[test]
+fn colliding_names_on_a_deep_stack_are_linear() {
+    // Names that collide in a power-of-two hash table indexed by FNV-1a: open
+    // and close each, then end it again (stray), on a stack deeper than the
+    // end-tag search reaches. The parser used to keep per-name counts on deep
+    // stacks in such a table, which this made quadratic (40,000 names: 6 s);
+    // it keeps no per-name state now, so names cannot matter.
+    let n = 20_000;
+    let names = fnv_colliding_names(n);
+    let fnv = |s: &str| {
+        s.bytes().fold(0x811c_9dc5u32, |h, b| {
+            (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+        })
+    };
+    assert!(
+        names
+            .iter()
+            .all(|s| fnv(s) & 0xf_ffff == fnv(&names[0]) & 0xf_ffff)
+    );
+    assert_eq!(
+        names.iter().collect::<std::collections::HashSet<_>>().len(),
+        n
+    );
+
+    let mut html = "<div>".repeat(300);
+    for name in &names {
+        html.push_str(&format!("<{name}></{name}></{name}>"));
+    }
+    for (label, events) in [("parse", false), ("events", true)] {
+        let start = std::time::Instant::now();
+        let count = if events {
+            domtree::events(&html).count()
+        } else {
+            parse(&html).len()
+        };
+        assert!(
+            start.elapsed().as_millis() < 1000,
+            "{label} took {:?}",
+            start.elapsed()
+        );
+        assert!(count >= 300 + n);
+    }
+    let dom = parse(&html);
+    let innermost = dom.find_by_tag("div").last().unwrap();
+    assert_eq!(innermost.children().count(), n); // every name closed
+    let stray = dom
+        .errors()
+        .iter()
+        .filter(|e| e.kind == domtree::ErrorKind::StrayEndTag)
+        .count();
+    assert_eq!(stray, n); // every second end tag
+}
+
+/// The tag names of `el` and its ancestors, innermost first.
+fn path(el: domtree::NodeRef<'_>) -> Vec<String> {
+    std::iter::once(el)
+        .chain(el.ancestors())
+        .filter_map(|n| n.tag_name().map(str::to_owned))
+        .collect()
+}
+
+#[test]
+fn end_tags_reach_the_256_innermost_and_8_outermost_open_elements() {
+    use domtree::ErrorKind::{MismatchedEndTag, StrayEndTag};
+    // `<main>` sits under 8 wrappers (out of the outer reach) with `k` open
+    // `<b>`s above it.
+    let doc = |k: usize| {
+        format!(
+            "{}<main>{}</main><p>after</p>",
+            "<div>".repeat(8),
+            "<b>".repeat(k)
+        )
+    };
+
+    // 255 above it: `<main>` is the 256th from the top and in reach, so
+    // `</main>` closes it (and the `<b>`s, mis-nested) and `<p>` follows it.
+    let dom = parse(&doc(255));
+    assert!(kinds(&doc(255)).contains(&MismatchedEndTag));
+    assert!(!kinds(&doc(255)).contains(&StrayEndTag));
+    let p = dom.find_by_tag("p").next().unwrap();
+    assert_eq!(
+        path(p),
+        ["p", "div", "div", "div", "div", "div", "div", "div", "div"]
+    );
+    let main = dom.find_by_tag("main").next().unwrap();
+    assert_eq!(
+        main.source_range().unwrap().end,
+        doc(255).find("<p>").unwrap()
+    );
+
+    // 256 above it: out of reach. `</main>` is stray, everything stays open,
+    // and `<p>` lands in the innermost `<b>`.
+    let dom = parse(&doc(256));
+    let stray: Vec<_> = dom
+        .errors()
+        .iter()
+        .filter(|e| e.kind == StrayEndTag)
+        .map(|e| e.position)
+        .collect();
+    assert_eq!(stray, [doc(256).find("</main>").unwrap()]);
+    assert!(!kinds(&doc(256)).contains(&MismatchedEndTag));
+    let p = dom.find_by_tag("p").next().unwrap();
+    assert_eq!(p.parent().unwrap().tag_name(), Some("b"));
+    assert_eq!(path(p).len(), 1 + 256 + 1 + 8);
+
+    // The 8 outermost are always in reach: `</body>` and `</html>` close
+    // everything above them however deep the stack.
+    let html = format!(
+        "<html>{}<body>{}x</body></html><p>after</p>",
+        "<div>".repeat(6),
+        "<b>".repeat(10_000)
+    );
+    let dom = parse(&html);
+    assert!(!kinds(&html).contains(&StrayEndTag));
+    assert_eq!(dom.roots().count(), 2);
+    let body = dom.find_by_tag("body").next().unwrap();
+    assert_eq!(
+        body.source_range().unwrap().end,
+        html.find("</html>").unwrap()
+    );
+    // ...but only those: one level further down is out of reach.
+    let html = format!(
+        "<html>{}<body>{}x</body>",
+        "<div>".repeat(7),
+        "<b>".repeat(300)
+    );
+    assert_eq!(
+        parse(&html)
+            .errors()
+            .iter()
+            .filter(|e| e.kind == StrayEndTag)
+            .map(|e| e.position)
+            .collect::<Vec<_>>(),
+        [html.find("</body>").unwrap()]
+    );
 }
 
 // --- implicit closes (WHATWG optional tags) ------------------------------

@@ -5,6 +5,18 @@
 //! tags, stray end tags — recording each as a [`ParseError`] rather than
 //! bailing out. See the crate docs for the exact recovery rules we implement.
 //!
+//! An end tag looks for the element it closes among the
+//! [`MAX_END_TAG_SEARCH`] (256) innermost open elements, then among the
+//! [`OUTER_END_TAG_SEARCH`] (8) outermost ones — where `</body>`, `</html>` or
+//! a page wrapper's end tag finds its element under a pile of unclosed tags.
+//! An element open only in between is out of reach: its end tag is treated as
+//! stray ([`ErrorKind::StrayEndTag`]) and the element stays open until an end
+//! tag that does reach it, or the end of the input. That makes every end tag
+//! O(1) however deep the stack — an unbounded scan is quadratic on
+//! `<div>`×N then `</x>`×N — with no per-name bookkeeping (which an attacker
+//! could make collide), so the event stream's memory stays proportional to
+//! the nesting depth.
+//!
 //! The builder does not know what it builds: it drives a [`Sink`]. The
 //! [`DomSink`] turns what it hears into the [`Dom`] arena, and the streaming
 //! API ([`crate::events`]) turns it into events — so both apply exactly the
@@ -17,7 +29,6 @@
 //! off the open-element stack.
 
 use alloc::borrow::Cow;
-use alloc::string::String;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
@@ -160,7 +171,7 @@ impl<'a, S: Sink<'a>> TreeBuilder<'a, S> {
     /// Pop the current node: it ends at `start..end` (see [`Sink::end`]).
     #[inline]
     fn pop(&mut self, start: usize, end: usize, implied: bool) {
-        if let Some(open) = self.open.pop(&self.sink) {
+        if let Some(open) = self.open.pop() {
             self.sink.end(open, start, end, implied);
         }
     }
@@ -198,7 +209,7 @@ impl<'a, S: Sink<'a>> TreeBuilder<'a, S> {
         if void {
             self.sink.end(open, end, end, true);
         } else {
-            self.open.push(&self.sink, open);
+            self.open.push(open);
         }
     }
 
@@ -374,31 +385,30 @@ impl<'a> Sink<'a> for DomSink {
     }
 }
 
-/// Above this many open elements the stack starts counting them per name (and
-/// stops again below half of it).
-const DEEP: usize = 64;
+/// How many of the innermost open elements an end tag searches for the one it
+/// closes (see the module docs).
+const MAX_END_TAG_SEARCH: usize = 256;
+
+/// How many of the outermost open elements an end tag searches next (see the
+/// module docs).
+const OUTER_END_TAG_SEARCH: usize = 8;
 
 /// The open-elements stack.
 ///
 /// Finding the element an end tag closes scans down from the top. A match pops
 /// everything it scanned past, so those scans are paid for by the pushes; an
 /// end tag with *no* open match pops nothing, so on a deep stack
-/// (`<div>`×N then `</x>`×N) the scans would be quadratic. Once the stack is
-/// deeper than [`DEEP`] it therefore keeps an exact count of open elements per
-/// tag name and rejects such end tags in O(1). Shallow stacks — nearly every
-/// real document — skip the bookkeeping, since their scans are short anyway.
+/// (`<div>`×N then `</x>`×N) unbounded scans would be quadratic. The scan is
+/// therefore bounded: [`MAX_END_TAG_SEARCH`] elements from the top, then the
+/// bottom [`OUTER_END_TAG_SEARCH`] — O(1) per end tag, whatever the names.
 struct OpenElements<O> {
     /// Open elements, innermost last; their names come from the sink.
     stack: Vec<O>,
-    counts: Option<NameCounts>,
 }
 
 impl<O> Default for OpenElements<O> {
     fn default() -> Self {
-        OpenElements {
-            stack: Vec::new(),
-            counts: None,
-        }
+        OpenElements { stack: Vec::new() }
     }
 }
 
@@ -414,54 +424,18 @@ impl<O> OpenElements<O> {
     }
 
     #[inline]
-    fn push<'a, S: Sink<'a, Open = O>>(&mut self, sink: &S, open: O) {
+    fn push(&mut self, open: O) {
         self.stack.push(open);
-        if self.counts.is_some() || self.stack.len() > DEEP {
-            self.count_push(sink);
-        }
     }
 
     #[inline]
-    fn pop<'a, S: Sink<'a, Open = O>>(&mut self, sink: &S) -> Option<O> {
-        let open = self.stack.pop()?;
-        if self.counts.is_some() {
-            self.count_pop(sink, &open);
-        }
-        Some(open)
+    fn pop(&mut self) -> Option<O> {
+        self.stack.pop()
     }
 
-    /// The deep-stack bookkeeping behind `push` (the new element is already
-    /// on the stack): start counting, or count.
-    #[cold]
-    fn count_push<'a, S: Sink<'a, Open = O>>(&mut self, sink: &S) {
-        match &mut self.counts {
-            Some(counts) => {
-                if let Some(top) = self.stack.last() {
-                    counts.up(sink.name(top));
-                }
-            }
-            None => {
-                let mut counts = NameCounts::default();
-                for open in &self.stack {
-                    counts.up(sink.name(open));
-                }
-                self.counts = Some(counts);
-            }
-        }
-    }
-
-    /// The deep-stack bookkeeping behind `pop`: uncount, or stop counting.
-    #[cold]
-    fn count_pop<'a, S: Sink<'a, Open = O>>(&mut self, sink: &S, popped: &O) {
-        if self.stack.len() < DEEP / 2 {
-            self.counts = None;
-        } else if let Some(counts) = &mut self.counts {
-            counts.down(sink.name(popped));
-        }
-    }
-
-    /// The stack index of the innermost open element named `name`.
     /// Whether every element above stack index `idx` has an optional end tag.
+    /// Only asked about a match, whose end tag pops all of them: the scan is
+    /// paid for by their pushes.
     fn only_optional_above<'a, S: Sink<'a, Open = O>>(&self, sink: &S, idx: usize) -> bool {
         self.stack
             .get(idx + 1..)
@@ -470,97 +444,23 @@ impl<O> OpenElements<O> {
             .all(|open| tags::end_tag_optional(sink.name(open)))
     }
 
+    /// The stack index of the open element named `name` that an end tag
+    /// closes: the innermost among the [`MAX_END_TAG_SEARCH`] innermost, else
+    /// the innermost among the [`OUTER_END_TAG_SEARCH`] outermost. `None`
+    /// makes the end tag stray.
     fn find<'a, S: Sink<'a, Open = O>>(&self, sink: &S, name: &str) -> Option<usize> {
-        if self.counts.as_ref().is_some_and(|c| !c.contains(name)) {
-            return None;
+        let named = |open: &O| sink.name(open) == name;
+        let inner = self.stack.len().saturating_sub(MAX_END_TAG_SEARCH);
+        if let Some(i) = self
+            .stack
+            .get(inner..)
+            .and_then(|s| s.iter().rposition(named))
+        {
+            return Some(inner + i);
         }
-        self.stack.iter().rposition(|open| sink.name(open) == name)
+        let outer = inner.min(OUTER_END_TAG_SEARCH);
+        self.stack.get(..outer)?.iter().rposition(named)
     }
-}
-
-/// Open-element counts per tag name: a minimal open-addressing hash table
-/// (FNV-1a, linear probing, at most half full). Hand-rolled rather than a
-/// `BTreeMap` because the generic tree code alone cost ~3 KB of wasm. Names
-/// are never removed — a count just drops to zero — so no tombstones needed.
-/// It keeps its own copy of each name (only while deep, so off the hot path):
-/// a sink's names need not outlive their elements.
-#[derive(Default)]
-struct NameCounts {
-    /// `(hash, name in keys, count)`; `None` is an empty slot. Length is 0 or
-    /// a power of two.
-    slots: Vec<Option<(u32, Span, u32)>>,
-    keys: String,
-    used: usize,
-}
-
-impl NameCounts {
-    fn key(&self, span: Span) -> &str {
-        self.keys.get(span.range()).unwrap_or("")
-    }
-
-    /// The slot holding `name`, or the empty slot where it would go.
-    fn slot(&self, hash: u32, name: &str) -> usize {
-        let mask = self.slots.len().wrapping_sub(1);
-        let mut i = hash as usize & mask;
-        // Terminates: the table is never more than half full.
-        while let Some(Some((h, span, _))) = self.slots.get(i) {
-            if *h == hash && self.key(*span) == name {
-                break;
-            }
-            i = (i + 1) & mask;
-        }
-        i
-    }
-
-    fn up(&mut self, name: &str) {
-        if (self.used + 1) * 2 > self.slots.len() {
-            self.grow();
-        }
-        let hash = fnv1a(name);
-        let i = self.slot(hash, name);
-        let new_key = Span {
-            start: self.keys.len() as u32,
-            len: name.len() as u32,
-        };
-        match self.slots.get_mut(i) {
-            Some(Some((_, _, count))) => *count = count.saturating_add(1),
-            Some(empty) => {
-                *empty = Some((hash, new_key, 1));
-                self.keys.push_str(name);
-                self.used += 1;
-            }
-            None => {}
-        }
-    }
-
-    fn down(&mut self, name: &str) {
-        let i = self.slot(fnv1a(name), name);
-        if let Some(Some((_, _, count))) = self.slots.get_mut(i) {
-            *count = count.saturating_sub(1);
-        }
-    }
-
-    fn contains(&self, name: &str) -> bool {
-        let i = self.slot(fnv1a(name), name);
-        matches!(self.slots.get(i), Some(Some((_, _, count))) if *count > 0)
-    }
-
-    fn grow(&mut self) {
-        let cap = (self.slots.len() * 2).max(16);
-        let old = core::mem::replace(&mut self.slots, alloc::vec![None; cap]);
-        for (hash, span, count) in old.into_iter().flatten() {
-            let i = self.slot(hash, self.key(span));
-            if let Some(slot) = self.slots.get_mut(i) {
-                *slot = Some((hash, span, count));
-            }
-        }
-    }
-}
-
-fn fnv1a(s: &str) -> u32 {
-    s.bytes().fold(0x811c_9dc5, |h, b| {
-        (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
-    })
 }
 
 /// Lower-case `name`, but borrow it unchanged when it's already lower-case

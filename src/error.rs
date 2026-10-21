@@ -44,7 +44,12 @@ pub enum ErrorKind {
     UnterminatedCdata,
     /// A tag was opened with `<` but never closed with `>`.
     UnterminatedTag,
-    /// An end tag (`</x>`) had no matching open element and was ignored.
+    /// An end tag (`</x>`) had no matching open element in reach and was
+    /// ignored. An end tag reaches the 256 innermost open elements and the 8
+    /// outermost (so `</body>` still closes a deep pile of unclosed tags);
+    /// one whose element is open only in between is stray too, and that
+    /// element stays open — closed by a later end tag in reach or at the end
+    /// of the input. This keeps every end tag O(1) on any input.
     StrayEndTag,
     /// An end tag closed elements other than the current one (mis-nesting).
     /// Closing elements whose end tag is optional (`</ul>` over an open

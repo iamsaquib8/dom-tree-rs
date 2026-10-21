@@ -118,6 +118,16 @@ fn base_inside_template_or_foreign_content_is_ignored() {
 }
 
 #[test]
+fn base_url_reads_backslashes_as_slashes() {
+    let dom = parse(r"<base href='https:\\cdn.example\a\'><a href=b>b</a>");
+    assert_eq!(
+        dom.base_url(None).as_deref(),
+        Some("https://cdn.example/a/")
+    );
+    assert_eq!(dom.links(None)[0].url, "https://cdn.example/a/b");
+}
+
+#[test]
 fn hidden_content_is_not_link_text() {
     let html = "<a href=/1><span hidden>secret</span><span style='display:none'>css</span>\
                 <span style='color: red; DISPLAY : None !important'>loud</span>\

@@ -110,6 +110,61 @@ fn other_schemes_pass_through() {
 }
 
 #[test]
+fn backslashes_are_slashes_in_special_schemes() {
+    // Browsers read `\` as `/` in http(s), ftp, ws(s) and file URLs, so these
+    // leave the page's host.
+    let base = "https://a.example/b/c";
+    let cases = [
+        (r"\\evil.example\x", "https://evil.example/x"),
+        (r"/\evil.example/x", "https://evil.example/x"),
+        (r"\/evil.example/x", "https://evil.example/x"),
+        (r"\x\y", "https://a.example/x/y"),
+        (r"a\b", "https://a.example/b/a/b"),
+        (r"a\..\b", "https://a.example/b/b"),
+        // Ends the authority, so this is evil.example, not a user name.
+        (
+            r"https://evil.example\@good.example/",
+            "https://evil.example/@good.example/",
+        ),
+        (r"HTTPS:\\X.example\p", "HTTPS://X.example/p"),
+        (r"ws:\\h\p", "ws://h/p"),
+        (r"file:\\server\share", "file://server/share"),
+        // Not in the query or fragment.
+        (r"p\q?x\y#z\w", r"https://a.example/b/p/q?x\y#z\w"),
+        (r"#f\g", r"https://a.example/b/c#f\g"),
+        (r"?\x", r"https://a.example/b/c?\x"),
+        // Not in other schemes, whatever the base.
+        (r"mailto:a\b", r"mailto:a\b"),
+        (r"foo://h/a\b", r"foo://h/a\b"),
+        // Not a scheme: `\` before the colon.
+        (r"a\b:c", "https://a.example/b/a/b:c"),
+    ];
+    for (reference, want) in cases {
+        assert_eq!(
+            resolve_url(base, reference),
+            want,
+            "resolving {reference:?}"
+        );
+    }
+    for base in ["http://a/b", "ftp://a/b", "wss://a/b", "file:///a/b"] {
+        let host = resolve_url(base, r"\\evil\x");
+        assert!(host.ends_with("://evil/x"), "{base}: {host}");
+    }
+    // A special-scheme base with backslashes is read the same way.
+    assert_eq!(
+        resolve_url(r"https:\\a.example\b\c", "d"),
+        "https://a.example/b/d"
+    );
+    // Relative references against other schemes keep them.
+    assert_eq!(resolve_url("foo://h/p/q", r"a\b"), r"foo://h/p/a\b");
+    assert_eq!(resolve_url(r"foo://h\p", "x"), r"foo://h\p/x");
+    // Without a base scheme, only a reference with a special scheme of its own
+    // can be told apart.
+    assert_eq!(resolve_url("", r"\\evil\x"), r"\\evil\x");
+    assert_eq!(resolve_url("/docs/", r"http:\\evil\x"), "http://evil/x");
+}
+
+#[test]
 fn never_panics_on_odd_input() {
     for s in [
         "",

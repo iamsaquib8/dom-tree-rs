@@ -9,7 +9,7 @@ use crate::node::{NodeId, NodeKind};
 use crate::serialize::{is_space, walk};
 use crate::tags::{self, Display};
 use crate::tree::{Dom, NodeRef};
-use crate::url::{clean, is_javascript, resolve_url, srcset_candidates};
+use crate::url::{is_javascript, normalize, resolve_url, srcset_candidates};
 
 /// A hyperlink — an `<a href>` or `<area href>` — found by [`Dom::links`].
 #[non_exhaustive]
@@ -19,9 +19,9 @@ pub struct Link<'a> {
     pub node: NodeRef<'a>,
     /// The `href` attribute exactly as written.
     pub href: &'a str,
-    /// `href` resolved against the base URL (see [`Dom::base_url`]). Without
-    /// an absolute base this is `href` with surrounding whitespace removed,
-    /// and may be relative.
+    /// `href` resolved against the base URL (see [`Dom::base_url`]) with
+    /// [`resolve_url`]. Without an absolute base this is `href` cleaned up the
+    /// same way (surrounding whitespace removed), and may be relative.
     pub url: String,
     /// The readable link text, on one line: the element's visible text with
     /// whitespace collapsed. When that is empty (an icon link), the first of
@@ -95,8 +95,8 @@ impl Dom {
         }
         match (tag, base) {
             (Some(href), Some(base)) => Some(resolve_url(base, href)),
-            (Some(href), None) => Some(clean(href)).filter(|h| !h.is_empty()),
-            (None, Some(base)) => Some(clean(base)),
+            (Some(href), None) => Some(normalize(href)).filter(|h| !h.is_empty()),
+            (None, Some(base)) => Some(normalize(base)),
             (None, None) => None,
         }
     }

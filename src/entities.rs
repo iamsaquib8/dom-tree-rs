@@ -84,6 +84,10 @@ pub(crate) fn decode_into(input: &str, out: &mut String, in_attr: bool) -> bool 
     unknown
 }
 
+/// Longest WHATWG character reference that may appear without its `;`
+/// (`&middot`, `&frac12`, …).
+const LEGACY_MAX_LEN: usize = 6;
+
 /// Whether the text after an undecodable `&` was meant as a reference, by the
 /// rules described on [`decode_into`].
 fn looks_like_reference(after: &str, in_attr: bool) -> bool {
@@ -106,8 +110,9 @@ fn looks_like_reference(after: &str, in_attr: bool) -> bool {
         // `&amp` followed by `=` or an alphanumeric is valid in attributes.
         return named(run).is_some() && !matches!(bytes.get(n), Some(b'='));
     }
-    // In text, any known name at the start of the run is a missing `;`.
-    (2..=n).any(|len| run.get(..len).and_then(named).is_some())
+    // In text, a known legacy name at the start of the run is a missing `;`.
+    // WHATWG's no-semicolon legacy names are 2–6 characters long.
+    (2..=n.min(LEGACY_MAX_LEN)).any(|len| run.get(..len).and_then(named).is_some())
 }
 
 /// Try to decode a single reference whose text begins right after the `&`.

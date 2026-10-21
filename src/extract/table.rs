@@ -333,11 +333,17 @@ fn copy_without_tables(dom: &mut Dom, cell: NodeRef<'_>) -> Option<NodeId> {
                     open.push(Vec::new());
                     return true;
                 }
-                dom.create_element(tag)
+                match element(dom, tag) {
+                    Some(copy) => copy,
+                    None => return false,
+                }
             }
             NodeKind::Element { tag } => {
-                let copy = dom.create_element(tag);
-                for child in open.pop().unwrap_or_default() {
+                let children = open.pop().unwrap_or_default();
+                let Some(copy) = element(dom, tag) else {
+                    return false;
+                };
+                for child in children {
                     dom.append_child(copy, child);
                 }
                 copy
@@ -351,6 +357,13 @@ fn copy_without_tables(dom: &mut Dom, cell: NodeRef<'_>) -> Option<NodeId> {
         false
     });
     root
+}
+
+/// A detached copy of an element named `tag`. Parsed names the editing API
+/// refuses (`<a"b>`) become a `<span>`, which reads the same as text.
+fn element(dom: &mut Dom, tag: &str) -> Option<NodeId> {
+    dom.create_element(tag)
+        .or_else(|| dom.create_element("span"))
 }
 
 /// Fill `line` from the `rowspan`s covering its next columns.

@@ -386,7 +386,7 @@ fn nothing_moved_into_a_raw_text_element_closes_it_early() {
     // Nested: only the outermost element's end tag can end the text.
     let mut dom = parse("<style></style>");
     let st = dom.root().unwrap().id();
-    let inner = dom.create_element("script");
+    let inner = dom.create_element("script").unwrap();
     dom.set_text(inner, "</script></style><img src=x onerror=alert(1)>");
     dom.append_child(st, inner);
     assert_eq!(
@@ -488,21 +488,10 @@ fn a_name_that_is_not_a_tag_cannot_expose_attribute_values() {
 #[test]
 fn create_element_and_wrap_refuse_invalid_names() {
     let mut dom = parse("<p>hi</p>");
-    let p = dom.root().unwrap().id();
     let text = dom.root().unwrap().first_child().unwrap().id();
     let len = dom.len();
     for name in BAD_NAMES.iter().chain(&["1x", "!x"]) {
-        let id = dom.create_element(name);
-        assert!(dom.get(id).is_none(), "{name:?}");
-        // The id refers to no node, so every edit ignores it.
-        assert!(!dom.append_child(p, id));
-        assert!(!dom.insert_before(text, id));
-        assert!(dom.append_html(id, "<b>x</b>").is_empty());
-        assert!(dom.wrap(id, "div").is_none());
-        dom.set_attr(id, "a", "b");
-        dom.set_text(id, "x");
-        dom.remove(id);
-
+        assert!(dom.create_element(name).is_none(), "{name:?}");
         assert!(dom.wrap(text, name).is_none(), "{name:?}");
     }
     assert_eq!(dom.len(), len, "nothing was allocated");
@@ -533,7 +522,7 @@ fn append_html_cost_does_not_grow_with_the_parents_depth() {
     assert!(ids.iter().all(|&id| !dom.get(id).unwrap().is_detached()));
 
     // Into a detached parent: linked, but left detached.
-    let card = dom.create_element("section");
+    let card = dom.create_element("section").unwrap();
     let ids = dom.append_html(card, "<i>a</i>b");
     assert!(ids.iter().all(|&id| dom.get(id).unwrap().is_detached()));
     assert_eq!(
@@ -629,7 +618,7 @@ fn fragment_insertion_refuses_impossible_targets() {
     assert!(dom.append_html(text, "<b>x</b>").is_empty());
     assert!(dom.prepend_html(br, "<b>x</b>").is_empty());
     // A detached node with no parent has no siblings to insert next to.
-    let orphan = dom.create_element("div");
+    let orphan = dom.create_element("div").unwrap();
     assert!(dom.insert_html_before(orphan, "<b>x</b>").is_empty());
     assert!(dom.insert_html_after(orphan, "<b>x</b>").is_empty());
     assert_eq!(dom.len(), before + 1); // only the orphan was allocated
@@ -655,7 +644,7 @@ fn fragment_insertion_at_the_top_level() {
 fn fragment_into_a_detached_subtree_stays_detached() {
     let mut dom = parse("<main></main>");
     let main = dom.root().unwrap().id();
-    let card = dom.create_element("section");
+    let card = dom.create_element("section").unwrap();
     let ids = dom.append_html(card, "<h2>Title</h2><p>Body</p>");
     assert!(ids.iter().all(|&id| dom.get(id).unwrap().is_detached()));
     assert_eq!(dom.nodes().count(), 1);
@@ -677,7 +666,7 @@ fn fragment_into_a_detached_subtree_stays_detached() {
 fn created_nodes_are_detached_until_attached() {
     let mut dom = parse("<p>a</p>");
     let before = dom.nodes().count();
-    let em = dom.create_element("EM");
+    let em = dom.create_element("EM").unwrap();
     let t = dom.create_text("hi");
     assert!(dom.get(em).unwrap().is_detached());
     assert_eq!(dom.get(em).unwrap().tag_name(), Some("em"));
@@ -757,7 +746,7 @@ fn append_child_refuses_non_containers() {
     let mut dom = parse("<p>t<img><!--c--></p>");
     let p = dom.root().unwrap().id();
     let kids: Vec<_> = dom.root().unwrap().children().map(|n| n.id()).collect();
-    let x = dom.create_element("x");
+    let x = dom.create_element("x").unwrap();
     for &k in &kids {
         assert!(!dom.append_child(k, x));
     }
@@ -770,10 +759,10 @@ fn append_child_refuses_non_containers() {
 fn insert_before_a_detached_orphan_is_refused() {
     let mut dom = parse("<p>a</p>");
     let p = dom.root().unwrap().id();
-    let orphan = dom.create_element("div");
+    let orphan = dom.create_element("div").unwrap();
     assert!(!dom.insert_before(orphan, p));
     dom.remove(p);
-    let q = dom.create_element("q");
+    let q = dom.create_element("q").unwrap();
     assert!(!dom.insert_before(p, q)); // removed root: no longer top-level
     assert_eq!(dom.roots().count(), 0);
 }

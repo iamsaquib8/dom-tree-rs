@@ -489,29 +489,23 @@ impl Dom {
     /// with [`Dom::append_child`] or [`Dom::insert_before`]. Created nodes have
     /// no [`source_range`](crate::NodeRef::source_range).
     ///
-    /// If `tag` is not a valid tag name (see [`Dom::rename`]), nothing is
-    /// created and the returned id refers to no node: [`Dom::get`] returns
-    /// `None` for it and every edit ignores it.
+    /// Returns `None` (and creates nothing) if `tag` is not a valid tag name
+    /// (see [`Dom::rename`]).
     ///
     /// ```
     /// let mut dom = domtree::parse("<ul><li>a</li></ul>");
     /// let ul = dom.root().unwrap().id();
-    /// let li = dom.create_element("li");
+    /// let li = dom.create_element("li").unwrap();
     /// let text = dom.create_text("b");
     /// dom.append_child(li, text);
     /// dom.set_attr(li, "class", "new");
     /// dom.append_child(ul, li);
     /// assert_eq!(dom.to_html(), r#"<ul><li>a</li><li class="new">b</li></ul>"#);
     ///
-    /// let bad = dom.create_element("li><img");
-    /// assert!(dom.get(bad).is_none());
-    /// assert!(!dom.append_child(ul, bad));
+    /// assert!(dom.create_element("li><img").is_none());
     /// ```
-    pub fn create_element(&mut self, tag: &str) -> NodeId {
-        // Past the end of any arena that fits in memory (`from_index`
-        // saturates there), so no node has this id.
+    pub fn create_element(&mut self, tag: &str) -> Option<NodeId> {
         self.new_element(tag)
-            .unwrap_or_else(|| NodeId::from_index(usize::MAX))
     }
 
     /// A new detached element, or `None` if `tag` is not a valid tag name.

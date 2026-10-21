@@ -148,7 +148,7 @@ fn edited_and_inserted_nodes_have_no_range() {
     let b = dom.get(ids[0]).unwrap();
     assert!(b.source_range().is_none());
     assert!(b.first_child().unwrap().source_range().is_none());
-    let created = dom.create_element("i");
+    let created = dom.create_element("i").unwrap();
     assert!(dom.get(created).unwrap().source_range().is_none());
     // Edits don't move a parsed node's range.
     dom.rename(p, "div");

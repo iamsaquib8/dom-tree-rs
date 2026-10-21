@@ -219,9 +219,9 @@ fn apply(dom: &mut Dom, known: &mut Vec<NodeId>, op: &Op) {
     let new: Vec<NodeId> = match *op {
         Op::CreateElement(t) => {
             let id = dom.create_element(t);
-            // An invalid name creates nothing: the id refers to no node.
-            assert_eq!(dom.get(id).is_some(), valid_tag_name(t), "{t:?}");
-            dom.get(id).map(|n| n.id()).into_iter().collect()
+            // An invalid name creates nothing.
+            assert_eq!(id.is_some(), valid_tag_name(t), "{t:?}");
+            id.into_iter().collect()
         }
         Op::CreateText(ref s) => vec![dom.create_text(s)],
         _ if known.is_empty() => vec![],

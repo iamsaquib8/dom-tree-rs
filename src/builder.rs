@@ -40,6 +40,7 @@ pub(crate) fn parse_document(src: &str) -> Dom {
     builder.finish(src.len(), &mut tk.errors);
     let mut dom = builder.sink.dom;
     dom.errors = builder.errors;
+    dom.release_spare_capacity();
     dom
 }
 

@@ -55,6 +55,23 @@ impl Dom {
         }
     }
 
+    /// Give back arena capacity that `with_capacity` reserved for dense markup
+    /// but the document did not use (text-heavy pages have far fewer nodes and
+    /// attributes per byte), so a parsed `Dom` does not hold on to several
+    /// times its size. Only when more than half is unused: shrinking costs at
+    /// most a copy of what is kept.
+    pub(crate) fn release_spare_capacity(&mut self) {
+        if self.nodes.capacity() / 2 > self.nodes.len() + 64 {
+            self.nodes.shrink_to_fit();
+        }
+        if self.attrs.capacity() / 2 > self.attrs.len() + 64 {
+            self.attrs.shrink_to_fit();
+        }
+        if self.strings.capacity() / 2 > self.strings.len() + 1024 {
+            self.strings.shrink_to_fit();
+        }
+    }
+
     /// Append a string to the arena and return its [`Span`].
     pub(crate) fn intern(&mut self, s: &str) -> Span {
         if s.is_empty() {

@@ -28,12 +28,11 @@ fn domtree_bytes(args: &[&str], stdin: &[u8]) -> (String, String, i32) {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn domtree");
-    child
-        .stdin
-        .take()
-        .expect("stdin")
-        .write_all(stdin)
-        .expect("write stdin");
+    // The binary may exit before reading stdin (usage errors do), closing the
+    // pipe under us; that's fine.
+    if let Err(e) = child.stdin.take().expect("stdin").write_all(stdin) {
+        assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "write stdin: {e}");
+    }
     let out = child.wait_with_output().expect("wait");
     (
         String::from_utf8(out.stdout).expect("utf8 stdout"),

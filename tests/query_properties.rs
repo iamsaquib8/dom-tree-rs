@@ -411,6 +411,27 @@ proptest! {
     ) {
         agrees_with_naive(&parts, &html)?;
     }
+
+    #[test]
+    fn agrees_with_a_naive_backtracking_matcher_in_a_long_list(
+        parts in proptest::collection::vec(part(&["div", "p", "span", "i"], &[' ', '>', '+', '~']), 1..5),
+        html in proptest::collection::vec(prop_oneof![soup(TREE_ATOMS, 48), siblings()], 1..6),
+    ) {
+        // A complex that never matches but takes up the memo slots that get
+        // dense tables, then copies of the selector: every memo entry goes
+        // through the hash maps, enough of them that the maps drop their
+        // oldest entries along the way.
+        let s = render(&parts);
+        let list = format!("{}b, {}", "b ".repeat(16), [s.as_str(); 8].join(", "));
+        let dom = parse(&html.concat());
+        let sel = Selector::parse(&list).unwrap();
+        let expected = node_ids(dom.nodes().filter(|n| naive(&parts, *n)));
+        prop_assert_eq!(node_ids(dom.select(&sel)), expected.clone(), "{}", s);
+        for root in dom.roots() {
+            let scoped = node_ids(root.descendants().filter(|d| expected.contains(&d.id())));
+            prop_assert_eq!(node_ids(root.select(&sel)), scoped, "{}", s);
+        }
+    }
 }
 
 fn agrees_with_naive(parts: &[Part], html: &str) -> Result<(), TestCaseError> {

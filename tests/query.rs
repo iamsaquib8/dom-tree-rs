@@ -677,6 +677,69 @@ fn deep_descendant_searches_are_memoized() {
 }
 
 #[test]
+fn per_row_queries_cost_what_they_walk() {
+    // A scoped or single-node query memoizes only what it walks, so a loop
+    // over every row of a big table stays linear. (Each call used to clear a
+    // table the size of the document: 5-50 s here in a debug build.)
+    let n = 20_000;
+    let mut html = String::from("<table>");
+    for i in 0..n {
+        html.push_str(&format!("<tr><td>{i}</td><td><a href=/{i}>x</a></td></tr>"));
+    }
+    html.push_str("</table>");
+    let dom = parse(&html);
+    let rows: Vec<_> = dom.find_by_tag("tr").collect();
+    let cells: Vec<_> = dom.find_by_tag("td").collect();
+    fast("tr.select(..) per row", || {
+        let hits: usize = rows
+            .iter()
+            .map(|tr| tr.select("td:nth-child(2)").count())
+            .sum();
+        assert_eq!(hits, n);
+        let links = rows.iter().filter(|tr| tr.select_first("td a").is_some());
+        assert_eq!(links.count(), n);
+    });
+    fast("td.matches(..) / td.closest(..) per cell", || {
+        assert_eq!(cells.iter().filter(|td| td.matches("tr td")).count(), 2 * n);
+        let last = cells
+            .iter()
+            .filter_map(|td| td.closest("tr > td:last-child"));
+        assert_eq!(last.count(), n);
+    });
+    let sel = Selector::parse("table tr > td:nth-child(2):has(a)").unwrap();
+    fast("Selector::matches per cell", || {
+        assert_eq!(cells.iter().filter(|td| sel.matches(**td)).count(), n);
+    });
+}
+
+#[test]
+fn long_selector_lists_stay_linear() {
+    // Every `:nth-child()` shares one table of positions, whatever its An+B.
+    let list = parse(&format!("<ul>{}</ul>", "<li>x</li>".repeat(4_000)));
+    let nth: Vec<String> = (1..=200)
+        .map(|k| format!("li:nth-child(200n+{k})"))
+        .collect();
+    let nth = Selector::parse(&nth.join(", ")).unwrap();
+    fast("200 :nth-child()s over 4k siblings", || {
+        assert_eq!(list.select(&nth).count(), 4_000);
+        assert_eq!(list.root().unwrap().select(&nth).count(), 4_000);
+    });
+    // A hundred combinators over deep nesting: the memo keeps what the query
+    // is about to reuse even when it can't keep everything it walked.
+    let deep = parse(&format!(
+        "{}{}",
+        "<div>".repeat(2_000),
+        "</div>".repeat(2_000)
+    ));
+    let comb: Vec<String> = (1..=100).map(|k| format!(".a{k} div")).collect();
+    let comb = Selector::parse(&comb.join(", ")).unwrap();
+    fast("100 descendant combinators over 2k-deep nesting", || {
+        assert_eq!(deep.select(&comb).count(), 0);
+        assert_eq!(deep.root().unwrap().select(&comb).count(), 0);
+    });
+}
+
+#[test]
 fn has_arguments_depend_on_their_subject() {
     // Each `:has()` subject is matched on its own, even though both subjects
     // share siblings (or ancestors) with each other.

@@ -85,7 +85,7 @@ Without a bundler, import it from a CDN:
 
 ```html
 <script type="module">
-  import init, { toText } from "https://cdn.jsdelivr.net/npm/domq@0.3/domq_wasm.js";
+  import init, { toText } from "https://cdn.jsdelivr.net/npm/domq-wasm@0.4/domq_wasm.js";
   await init();
   console.log(toText("<p>Hello <b>world</b>"));
 </script>

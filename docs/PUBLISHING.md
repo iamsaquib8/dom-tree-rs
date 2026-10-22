@@ -19,7 +19,7 @@ Bump the version in `Cargo.toml` and move the `CHANGELOG.md` "unreleased"
 section under the new version. Commit, then tag:
 
 ```sh
-git tag v0.3.0 && git push origin main --tags
+git tag v0.4.0 && git push origin main --tags
 ```
 
 ## 1. crates.io

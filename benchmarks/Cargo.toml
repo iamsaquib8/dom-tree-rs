@@ -21,7 +21,7 @@ domq = { path = "..", features = ["json", "query"] }
 criterion = "0.8"
 tl = "0.7"
 scraper = "0.29"
-html5ever = "0.39"
+html5ever = "0.40"
 markup5ever_rcdom = "0.39"
 
 [[bench]]

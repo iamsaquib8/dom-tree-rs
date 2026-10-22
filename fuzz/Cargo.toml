@@ -14,7 +14,7 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 domq = { path = "..", features = ["json", "query", "markdown"] }
 # The reference parser for the `differential` target.
-html5ever = "0.39"
+html5ever = "0.40"
 markup5ever_rcdom = "0.39"
 
 [[bin]]

@@ -16,9 +16,9 @@ copyFileSync(new URL("node.js", here), resolve(pkgDir, "node.js"));
 
 const types = "./domq_wasm.d.ts";
 const ordered = {};
-// The crate is `domq-wasm` (it can't share the core crate's name); the npm
-// package is plain `domq`.
-manifest.name = "domq";
+// The npm package is `domq-wasm`, like the crate (npm reserves plain `domq`
+// as too similar to an existing package).
+manifest.name = "domq-wasm";
 // npm normalises this on publish (and warns); write it in its canonical form.
 if (typeof manifest.repository?.url === "string" && manifest.repository.url.startsWith("https://")) {
   manifest.repository.url = `git+${manifest.repository.url.replace(/\.git$/, "")}.git`;

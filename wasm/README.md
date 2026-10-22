@@ -10,7 +10,7 @@ dependencies.
 any HTML and query it live.
 
 ```js
-import { select, toMarkdown } from "domq";
+import { select, toMarkdown } from "domq-wasm";
 
 const html = `<ul id=links><li><a href="/a">One</a><li><a href="/b">Two</a></ul>`;
 
@@ -33,7 +33,7 @@ render.
 ## Install
 
 ```sh
-npm install domq
+npm install domq-wasm
 ```
 
 ## Use it
@@ -43,10 +43,10 @@ runtime:
 
 | Runtime | Setup | Status |
 |---|---|---|
-| Node.js 22+ (supported LTS lines) | nothing: `import { select } from "domq"` | tested in CI on the current LTS |
+| Node.js 22+ (supported LTS lines) | nothing: `import { select } from "domq-wasm"` | tested in CI on the current LTS |
 | Browsers, bundlers (Vite, webpack 5, …) | `await init()` once | tested (the playground uses this build) |
 | Bun | nothing (uses the Node entry point) | expected to work, not tested |
-| Deno | nothing with `npm:domq` (Node entry point) | expected to work, not tested |
+| Deno | nothing with `npm:domq-wasm` (Node entry point) | expected to work, not tested |
 | Cloudflare Workers | `initSync({ module })` with the imported `.wasm` | expected to work, not tested |
 
 ### Node.js
@@ -55,7 +55,7 @@ Import and call. The Node entry point loads the module synchronously at import
 time, so there is no `init()` to await (calling it anyway is harmless).
 
 ```js
-import { select, toText } from "domq";
+import { select, toText } from "domq-wasm";
 
 const res = await fetch("https://news.ycombinator.com");
 const html = await res.text();
@@ -64,9 +64,9 @@ for (const link of select(html, ".titleline > a")) {
 }
 ```
 
-From CommonJS, `require("domq")` works on Node versions that can
+From CommonJS, `require("domq-wasm")` works on Node versions that can
 `require()` ES modules (20.19+ and 22.12+). On older versions, use
-`const { select } = await import("domq")`.
+`const { select } = await import("domq-wasm")`.
 
 ### Browsers and bundlers
 
@@ -75,7 +75,7 @@ Call the default export once before anything else. It fetches
 and webpack 5 handle as an asset.
 
 ```js
-import init, { select, toMarkdown } from "domq";
+import init, { select, toMarkdown } from "domq-wasm";
 
 await init();
 const md = toMarkdown(document.documentElement.outerHTML, "article");
@@ -94,7 +94,7 @@ Without a bundler, import it from a CDN:
 ### Deno and Bun
 
 ```js
-import { select } from "npm:domq@0.3"; // Deno; in Bun: "domq"
+import { select } from "npm:domq-wasm@0.4"; // Deno; in Bun: "domq-wasm"
 ```
 
 Both resolve the package's Node entry point, which reads the `.wasm` with
@@ -106,8 +106,8 @@ Wrangler imports `.wasm` files as compiled `WebAssembly.Module`s; hand it to
 `initSync`:
 
 ```js
-import { initSync, toMarkdown } from "domq";
-import wasm from "domq/domq_wasm_bg.wasm";
+import { initSync, toMarkdown } from "domq-wasm";
+import wasm from "domq-wasm/domq_wasm_bg.wasm";
 
 initSync({ module: wasm });
 
@@ -142,7 +142,7 @@ Each function above parses the HTML again. To run several queries on one
 document, parse it once:
 
 ```js
-import { Document } from "domq";
+import { Document } from "domq-wasm";
 
 const doc = new Document(html); // or Document.parse(html)
 const title = doc.selectFirst("h1")?.text;
@@ -159,7 +159,7 @@ management is available, `using doc = new Document(html)` frees it
 automatically.
 
 If you also use the DOM's `Document` type in the same file, rename the import:
-`import { Document as HtmlDocument } from "domq"`.
+`import { Document as HtmlDocument } from "domq-wasm"`.
 
 ### Types
 

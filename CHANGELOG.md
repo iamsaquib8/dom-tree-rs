@@ -11,7 +11,7 @@ All notable changes to this project are documented here. The format is based on
 ### Changed
 - **Renamed to `domq`.** The crate is `domq` (was `dom-tree-rs`, imported as
   `domtree`), the CLI crate `domq-cli` with the binary `domq` (was
-  `domtree-cli` / `domtree`), the npm package `domq` (was `dom-tree-wasm`), the
+  `domtree-cli` / `domtree`), the npm package `domq-wasm` (was `dom-tree-wasm`; npm reserves plain `domq`), the
   PyPI package and Python import `domq` (was `dom-tree-rs` / `domtree`), and
   the Homebrew formula `iamsaquib8/tap/domq`. The repository moves to
   `github.com/iamsaquib8/domq`; the old packages get a final release pointing

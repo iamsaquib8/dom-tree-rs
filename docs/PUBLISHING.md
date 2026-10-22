@@ -66,9 +66,9 @@ npm login
 npm publish --access public
 ```
 
-The npm package is `domq`: the crate is `domq-wasm` (it can't share the core
-crate's name), and `npm/finish.mjs` renames the package. Up to 0.3.0 it was
-published as `dom-tree-wasm`, which is now deprecated in favour of `domq`.
+The npm package is `domq-wasm`, like the crate. npm refuses plain `domq` as too
+similar to an existing package (`dom-q`). Up to 0.3.0 it was published as
+`dom-tree-wasm`, which is now deprecated in favour of `domq-wasm`.
 
 The playground (<https://iamsaquib8.github.io/domq/>) redeploys by
 itself on pushes to `main` that touch `src/`, `wasm/` or `playground/`

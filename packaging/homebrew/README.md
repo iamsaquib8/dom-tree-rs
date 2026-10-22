@@ -25,7 +25,7 @@ The Linux binaries are statically linked (musl), so they run on any distro.
   placeholders (all zeros); do not publish it as is.
 - [`fill-formula.sh`](fill-formula.sh) — prints the template with a real
   version and the checksums of a directory of release archives:
-  `packaging/homebrew/fill-formula.sh 0.3.0 path/to/assets > domq.rb`.
+  `packaging/homebrew/fill-formula.sh 0.4.0 path/to/assets > domq.rb`.
 
 ## One-time setup: the tap
 
@@ -49,17 +49,24 @@ A tap is just a GitHub repository named `homebrew-<something>`; `brew` maps
    ```sh
    cd homebrew-tap
    cp ~/Downloads/domq.rb Formula/domq.rb   # from the artifact
-   git commit -am "domq 0.3.0" && git push
+   git commit -am "domq 0.4.0" && git push
    ```
 
 4. Check it:
 
    ```sh
    brew update
-   brew install iamsaquib8/tap/domq   # or: brew upgrade domq
-   brew test domq
+   brew install iamsaquib8/tap/domq   # or: brew upgrade iamsaquib8/tap/domq
+   brew test iamsaquib8/tap/domq
    brew audit --strict --online iamsaquib8/tap/domq
    ```
+
+   Homebrew 7 loads formulae from third-party taps by short name (`domq`) only
+   once the tap is trusted (`brew trust iamsaquib8/tap`). The fully qualified
+   name `iamsaquib8/tap/domq` works without that, so the docs use it.
+
+The tap's `formula_renames.json` maps the pre-0.4 name `domtree` to `domq`, so
+`brew upgrade` moves existing installs over to the new formula.
 
 Pushing the formula to the tap automatically (a bot commit from `release.yml`)
 would need a token with write access to `homebrew-tap` stored as a secret here;

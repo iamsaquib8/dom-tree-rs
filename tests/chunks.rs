@@ -1,7 +1,7 @@
 //! RAG chunking: `Dom::to_markdown_chunks` / `NodeRef::to_markdown_chunks`.
 #![cfg(feature = "markdown")]
 
-use domtree::{Chunk, parse};
+use domq::{Chunk, parse};
 
 fn chunks(html: &str, max: usize) -> Vec<Chunk> {
     parse(html).to_markdown_chunks(max)

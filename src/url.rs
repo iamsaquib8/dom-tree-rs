@@ -29,7 +29,7 @@ use alloc::vec::Vec;
 /// a special-scheme base — becomes `/` here, even when `base` is schemeless.
 ///
 /// ```
-/// use domtree::resolve_url;
+/// use domq::resolve_url;
 ///
 /// let base = "https://example.com/blog/post.html?x=1";
 /// assert_eq!(resolve_url(base, "../img/a.png"), "https://example.com/img/a.png");
@@ -94,7 +94,7 @@ pub fn resolve_url(base: &str, reference: &str) -> String {
 /// `"url descriptor, url descriptor"`.
 ///
 /// ```
-/// use domtree::resolve_srcset;
+/// use domq::resolve_srcset;
 ///
 /// assert_eq!(
 ///     resolve_srcset("https://x.dev/p/", "a.png 1x, /b.png 2x"),

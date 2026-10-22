@@ -11,7 +11,7 @@ fuzz_target!(|data: &[u8]| {
         // Bound iterations defensively; the tokenizer should always terminate
         // because every token consumes at least one byte.
         let mut count = 0usize;
-        for _ in domtree::tokenize(s) {
+        for _ in domq::tokenize(s) {
             count += 1;
             assert!(count <= s.len() + 1, "tokenizer must make progress");
         }

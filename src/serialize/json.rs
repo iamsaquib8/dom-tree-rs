@@ -20,7 +20,7 @@ impl Dom {
     /// wrapped in `{ "type": "document", "errors": N, "children": [...] }`.
     ///
     /// ```
-    /// let dom = domtree::parse("<a href=\"/x\">hi</a>");
+    /// let dom = domq::parse("<a href=\"/x\">hi</a>");
     /// let json = dom.to_json();
     /// assert!(json.contains("\"tag\":\"a\""));
     /// assert!(json.contains("\"href\":\"/x\""));
@@ -42,7 +42,7 @@ impl<'a> NodeRef<'a> {
     /// using the same shape as [`Dom::to_json`].
     ///
     /// ```
-    /// let dom = domtree::parse("<div><b>hi</b></div>");
+    /// let dom = domq::parse("<div><b>hi</b></div>");
     /// let b = dom.find_by_tag("b").next().unwrap();
     /// assert_eq!(b.to_json(), r#"{"type":"element","tag":"b","attrs":{},"children":[{"type":"text","value":"hi"}]}"#);
     /// ```

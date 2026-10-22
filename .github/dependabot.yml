@@ -13,12 +13,19 @@ updates:
       # tags select a Rust toolchain, so bumping them would change the MSRV.
       - dependency-name: dtolnay/rust-toolchain
 
-  # Dev-dependencies of the core crate (insta, proptest, serde_json) and the
-  # optional serde dependency. The default build has no dependencies.
+  # Rust: the core crate's optional/dev dependencies, the derive crate (syn,
+  # quote), and the separate crates for wasm, Python, benchmarks and fuzzing.
+  # The default build of the core has no dependencies.
   - package-ecosystem: cargo
-    directory: /
+    directories: ["/", "/wasm", "/python", "/benchmarks", "/fuzz"]
     schedule:
       interval: monthly
     groups:
       cargo:
         patterns: ["*"]
+
+  # Python build requirements (maturin) in python/pyproject.toml.
+  - package-ecosystem: pip
+    directory: /python
+    schedule:
+      interval: monthly

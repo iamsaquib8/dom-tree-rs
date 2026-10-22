@@ -1,28 +1,29 @@
 [package]
-name = "dom-tree-py"
+name = "domq-py"
 # The Python package version. Keep it in step with the core crate: the PyPI
 # publish job refuses a `v*` tag that doesn't match it.
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
-description = "Python bindings for dom-tree-rs: parse messy HTML, query it with CSS selectors, and get readable text or Markdown."
-repository = "https://github.com/iamsaquib8/dom-tree-rs"
+description = "Python bindings for domq: parse messy HTML, query it with CSS selectors, and get readable text or Markdown."
+repository = "https://github.com/iamsaquib8/domq"
 license = "MIT"
-# Published to PyPI (as `dom-tree-rs`) by maturin, never to crates.io.
+# Published to PyPI (as `domq`) by maturin, never to crates.io.
 publish = false
 
 [lib]
-# Builds the `domtree._domtree` extension (see pyproject.toml / `#[pymodule]`),
-# re-exported by domtree/__init__.py. The Rust lib name differs from `domtree`
+# Builds the `domq._domq` extension (see pyproject.toml / `#[pymodule]`),
+# re-exported by domq/__init__.py. The Rust lib name differs from `domq`
 # so it doesn't clash with the core crate's lib name.
-name = "domtree_py"
+name = "domq_py"
 crate-type = ["cdylib"]
 
 [dependencies]
-# abi3: one wheel per platform works on every CPython >= 3.9.
-pyo3 = { version = "0.30", features = ["abi3-py39"] }
-dom-tree-rs = { path = "..", version = "0.3", default-features = false, features = ["json", "query", "markdown", "std"] }
+# abi3: one wheel per platform works on every CPython >= 3.11 (the oldest
+# version still supported upstream; 3.9 and 3.10 are end of life).
+pyo3 = { version = "0.30", features = ["abi3-py311"] }
+domq = { path = "..", version = "0.4", default-features = false, features = ["json", "query", "markdown", "std"] }
 
 # Its own workspace root: excluded from the core crate's workspace (see the root
 # Cargo.toml) so PyO3 never enters the core's dependency graph or lockfile.

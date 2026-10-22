@@ -168,7 +168,7 @@ impl Dom {
     /// removed.
     ///
     /// ```
-    /// let dom = domtree::parse(r#"<body>
+    /// let dom = domq::parse(r#"<body>
     ///   <nav><a href="/">Home</a> <a href="/blog">Blog</a></nav>
     ///   <div class="post">
     ///     <h1>Arena trees</h1>
@@ -185,7 +185,7 @@ impl Dom {
     /// # #[cfg(feature = "markdown")]
     /// assert!(main.to_markdown().starts_with("# Arena trees"));
     /// assert!(!main.to_text().contains("Great post"));
-    /// assert!(domtree::parse("<nav><a href=/>Home</a></nav>").main_content().is_none());
+    /// assert!(domq::parse("<nav><a href=/>Home</a></nav>").main_content().is_none());
     /// ```
     pub fn main_content(&self) -> Option<NodeRef<'_>> {
         let order: Vec<NodeRef<'_>> = document_order(self).collect();

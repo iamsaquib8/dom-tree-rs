@@ -1,7 +1,7 @@
 """Declarative extraction: fill dataclasses from HTML with CSS selectors.
 
 Pure Python on top of the native ``Document``/``Element`` bindings; the Python
-counterpart of the Rust ``#[derive(FromHtml)]`` (``dom-tree-derive``), with the
+counterpart of the Rust ``#[derive(FromHtml)]`` (``domq-derive``), with the
 same semantics and error messages::
 
     @dataclass
@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence,
 if TYPE_CHECKING:
     from . import Document, Element, parse
 else:
-    from ._domtree import Document, Element, parse
+    from ._domq import Document, Element, parse
 
 # `Optional[X]` / `Union[X, None]`, and `X | None` (a `types.UnionType` before
 # Python 3.14; that type does not exist on 3.9).
@@ -629,5 +629,5 @@ def extract_all(cls: "type[_T]", source: Union[str, Document, Element]) -> "list
 
 
 for _cls in (Select, Attr, Html, OuterHtml, Markdown, ExtractError):
-    _cls.__module__ = "domtree"
+    _cls.__module__ = "domq"
 del _cls

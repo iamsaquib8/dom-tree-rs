@@ -4,7 +4,7 @@
 //! `INSTA_UPDATE=always cargo test --test markdown_output` and review the diff.
 #![cfg(feature = "markdown")]
 
-use domtree::parse;
+use domq::parse;
 
 fn md(html: &str) -> String {
     parse(html).to_markdown()

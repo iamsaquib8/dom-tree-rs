@@ -12,7 +12,7 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
 
-    let dom = domtree::parse(s);
+    let dom = domq::parse(s);
 
     let md = dom.to_markdown();
     assert_eq!(md, md.trim_end(), "to_markdown output is trimmed");

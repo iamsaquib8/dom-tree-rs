@@ -1,12 +1,12 @@
 //! The generated code names nothing from `std` (or from `alloc`, which this
-//! crate doesn't declare): only `::domtree::__private` re-exports.
+//! crate doesn't declare): only `::domq::__private` re-exports.
 #![no_std]
 
 // A host `std` for the panic handler and `main`, under another name so that
 // `::std` paths would not resolve.
 extern crate std as host;
 
-use domtree::FromHtml;
+use domq::FromHtml;
 use host::string::String;
 use host::vec::Vec;
 use host::{assert_eq, format};
@@ -46,7 +46,7 @@ struct Shop<T> {
 }
 
 fn main() {
-    let dom = domtree::parse(
+    let dom = domq::parse(
         "<h1>Shop</h1><div class=item data-sku=a1><h2>Pen</h2><b class=price>$1.50</b>\
          <i class=tag>x</i><p>A <em>fine</em> pen</p></div>",
     );

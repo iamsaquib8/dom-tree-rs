@@ -1,13 +1,13 @@
 [package]
-name = "dom-tree-derive"
+name = "domq-derive"
 version = "0.4.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
-description = "#[derive(FromHtml)] for dom-tree-rs: declarative extraction of structs from HTML with CSS selectors. Use it through dom-tree-rs's `derive` feature."
-repository = "https://github.com/iamsaquib8/dom-tree-rs"
-homepage = "https://github.com/iamsaquib8/dom-tree-rs/tree/main/derive"
-documentation = "https://docs.rs/dom-tree-rs"
+description = "#[derive(FromHtml)] for domq: declarative extraction of structs from HTML with CSS selectors. Use it through domq's `derive` feature."
+repository = "https://github.com/iamsaquib8/domq"
+homepage = "https://github.com/iamsaquib8/domq/tree/main/derive"
+documentation = "https://docs.rs/domq"
 readme = "README.md"
 license = "MIT"
 keywords = ["html", "scraping", "derive", "css-selector", "extract"]
@@ -19,11 +19,11 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0.80"
 quote = "1.0.35"
-syn = { version = "2.0.60", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
+syn = { version = "3.0", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
 
 [dev-dependencies]
 # The compile-fail tests (tests/ui) build against the core crate. A
 # dev-dependency only: the macro itself never depends on the core (that would
 # be a cycle), and path-only dev-dependencies are dropped on publish.
-dom-tree-rs = { path = "..", features = ["derive"] }
+domq = { path = "..", features = ["derive"] }
 trybuild = "1.0.90"

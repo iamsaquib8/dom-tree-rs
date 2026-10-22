@@ -1,4 +1,4 @@
-//! `domtree lint`: fast HTML checks with `file:line:col` positions.
+//! `domq lint`: fast HTML checks with `file:line:col` positions.
 //!
 //! One parse and a few linear passes per file: element checks walk the tree
 //! once in document order (accessible names are computed bottom-up, so nested
@@ -14,7 +14,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
-use domtree::{Dom, ErrorKind, NodeRef, ParseError};
+use domq::{Dom, ErrorKind, NodeRef, ParseError};
 
 use crate::args::LintOptions;
 use crate::json;
@@ -94,7 +94,7 @@ pub fn run(opts: &LintOptions) -> (String, u8) {
         let html = match crate::read_input(Some(file), opts.encoding.as_deref()) {
             Ok(html) => html,
             Err(e) => {
-                eprintln!("domtree: {e}");
+                eprintln!("domq: {e}");
                 unreadable = true;
                 continue;
             }
@@ -140,7 +140,7 @@ pub fn run(opts: &LintOptions) -> (String, u8) {
 
 /// Every finding in `src`, in document order.
 pub fn check(src: &str) -> Vec<Finding> {
-    let dom = domtree::parse(src);
+    let dom = domq::parse(src);
     let order: Vec<NodeRef<'_>> = dom
         .roots()
         .flat_map(|root| std::iter::once(root).chain(root.descendants()))
@@ -203,10 +203,11 @@ fn check_elements(dom: &Dom, order: &[NodeRef<'_>], out: &mut Vec<Raw>) {
         if let Some(slot) = named.get_mut(i) {
             *slot = has;
         }
-        if has && !is_hidden(*node) {
-            if let Some(slot) = node.parent().and_then(|p| named.get_mut(p.id().index())) {
-                *slot = true;
-            }
+        if has
+            && !is_hidden(*node)
+            && let Some(slot) = node.parent().and_then(|p| named.get_mut(p.id().index()))
+        {
+            *slot = true;
         }
     }
 
@@ -624,7 +625,7 @@ fn tag_at(src: &str, at: usize) -> Option<String> {
 }
 
 /// The 1-based `(line, column)` of each of the sorted byte `offsets`, as
-/// [`domtree::line_col`] computes them (lines end at `\n`, `\r\n` or a lone
+/// [`domq::line_col`] computes them (lines end at `\n`, `\r\n` or a lone
 /// `\r`; columns count `char`s), in one forward scan over `src`.
 fn positions(src: &str, offsets: &[usize]) -> Vec<(usize, usize)> {
     let bytes = src.as_bytes();
@@ -675,7 +676,7 @@ mod tests {
         let offsets: Vec<usize> = (0..=src.len() + 2).collect();
         let fast = positions(src, &offsets);
         for (&offset, &got) in offsets.iter().zip(&fast) {
-            assert_eq!(got, domtree::line_col(src, offset), "offset {offset}");
+            assert_eq!(got, domq::line_col(src, offset), "offset {offset}");
         }
         assert_eq!(positions("", &[0, 5]), [(1, 1), (1, 1)]);
     }

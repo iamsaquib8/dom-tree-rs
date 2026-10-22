@@ -14,7 +14,7 @@ fn main() {
         </article>
     "#;
 
-    let dom = domtree::parse(html);
+    let dom = domq::parse(html);
 
     println!(
         "title: {:?}",

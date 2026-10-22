@@ -14,15 +14,18 @@ const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 
 copyFileSync(new URL("node.js", here), resolve(pkgDir, "node.js"));
 
-const types = "./dom_tree_wasm.d.ts";
+const types = "./domq_wasm.d.ts";
 const ordered = {};
+// The crate is `domq-wasm` (it can't share the core crate's name); the npm
+// package is plain `domq`.
+manifest.name = "domq";
 for (const [key, value] of Object.entries(manifest)) {
   ordered[key] = value;
   if (key === "types") {
     ordered.exports = {
-      ".": { types, node: "./node.js", default: "./dom_tree_wasm.js" },
-      "./dom_tree_wasm.js": { types, default: "./dom_tree_wasm.js" },
-      "./dom_tree_wasm_bg.wasm": "./dom_tree_wasm_bg.wasm",
+      ".": { types, node: "./node.js", default: "./domq_wasm.js" },
+      "./domq_wasm.js": { types, default: "./domq_wasm.js" },
+      "./domq_wasm_bg.wasm": "./domq_wasm_bg.wasm",
       "./package.json": "./package.json",
     };
   }

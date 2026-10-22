@@ -114,9 +114,9 @@ const MAX_DEPTH: u32 = 32;
 /// fragment like `<li>a</li><li>b</li>`; each top-level element is `:root`.
 ///
 /// ```
-/// use domtree::Selector;
+/// use domq::Selector;
 ///
-/// let dom = domtree::parse("<ul><li class='on'>a</li><li>b</li></ul>");
+/// let dom = domq::parse("<ul><li class='on'>a</li><li>b</li></ul>");
 /// let sel = Selector::parse("li:not(.on)").unwrap();
 /// let hits: Vec<_> = dom.select(&sel).map(|n| n.text_content()).collect();
 /// assert_eq!(hits, ["b"]);
@@ -139,7 +139,7 @@ impl Selector {
     /// which are rejected rather than silently ignored.
     ///
     /// ```
-    /// use domtree::Selector;
+    /// use domq::Selector;
     ///
     /// assert!(Selector::parse("div > p:first-child").is_ok());
     ///
@@ -169,9 +169,9 @@ impl Selector {
     /// the whole document `node` belongs to.
     ///
     /// ```
-    /// use domtree::Selector;
+    /// use domq::Selector;
     ///
-    /// let dom = domtree::parse("<div class='card'><h2>Title</h2></div>");
+    /// let dom = domq::parse("<div class='card'><h2>Title</h2></div>");
     /// let h2 = dom.find_by_tag("h2").next().unwrap();
     /// assert!(Selector::parse(".card > h2").unwrap().matches(h2));
     /// assert!(!Selector::parse("h2:empty").unwrap().matches(h2));
@@ -209,7 +209,7 @@ impl fmt::Debug for Selector {
 /// Why [`Selector::parse`] rejected a selector, and where.
 ///
 /// ```
-/// let err = domtree::Selector::parse("a:hover").unwrap_err();
+/// let err = domq::Selector::parse("a:hover").unwrap_err();
 /// assert_eq!(err.position(), 1);
 /// assert_eq!(err.message(), "unsupported pseudo-class ':hover'");
 /// assert_eq!(err.to_string(), "unsupported pseudo-class ':hover' at byte 1");
@@ -224,7 +224,7 @@ impl SelectorError {
     /// Byte offset into the selector string where the problem was found.
     ///
     /// ```
-    /// let err = domtree::Selector::parse("ul >").unwrap_err();
+    /// let err = domq::Selector::parse("ul >").unwrap_err();
     /// assert_eq!(err.position(), 4);
     /// ```
     pub fn position(&self) -> usize {
@@ -234,7 +234,7 @@ impl SelectorError {
     /// A short, human-readable description of the problem.
     ///
     /// ```
-    /// let err = domtree::Selector::parse("p::before").unwrap_err();
+    /// let err = domq::Selector::parse("p::before").unwrap_err();
     /// assert_eq!(err.message(), "pseudo-elements are not supported");
     /// ```
     pub fn message(&self) -> &str {
@@ -258,9 +258,9 @@ impl std::error::Error for SelectorError {}
 /// you want the error.
 ///
 /// ```
-/// use domtree::{AsSelector, Selector};
+/// use domq::{AsSelector, Selector};
 ///
-/// let dom = domtree::parse("<p class='x'>hi</p>");
+/// let dom = domq::parse("<p class='x'>hi</p>");
 /// let owned = String::from("p.x");
 /// let parsed = Selector::parse("p.x").unwrap();
 /// assert_eq!(dom.select("p.x").count(), 1);
@@ -301,7 +301,7 @@ impl Dom {
     /// string matches nothing (use [`Selector::parse`] to see the error).
     ///
     /// ```
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     "<div><ul><li class='x'>a</li><li>b</li></ul><ol><li>c</li></ol></div>",
     /// );
     /// assert_eq!(dom.select("ul li.x").count(), 1); // descendant + class
@@ -326,7 +326,7 @@ impl Dom {
     /// The first element (in document order) matching a CSS selector.
     ///
     /// ```
-    /// let dom = domtree::parse("<p>a</p><p class='x'>b</p><p class='x'>c</p>");
+    /// let dom = domq::parse("<p>a</p><p class='x'>b</p><p class='x'>c</p>");
     /// let p = dom.select_first("p.x").unwrap();
     /// assert_eq!(p.text_content(), "b");
     /// assert!(dom.select_first("table").is_none());
@@ -347,7 +347,7 @@ impl<'a> NodeRef<'a> {
     /// children.
     ///
     /// ```
-    /// let dom = domtree::parse("<div><ul><li>a<ul><li>b</li></ul></li></ul></div>");
+    /// let dom = domq::parse("<div><ul><li>a<ul><li>b</li></ul></li></ul></div>");
     /// let ul = dom.select_first("ul").unwrap();
     /// assert_eq!(ul.select("li").count(), 2);
     /// assert_eq!(ul.select(":scope > li").count(), 1);
@@ -367,7 +367,7 @@ impl<'a> NodeRef<'a> {
     /// [`NodeRef::select`].
     ///
     /// ```
-    /// let dom = domtree::parse("<table><tr><td>1</td><td>2</td></tr></table>");
+    /// let dom = domq::parse("<table><tr><td>1</td><td>2</td></tr></table>");
     /// let row = dom.select_first("tr").unwrap();
     /// assert_eq!(row.select_first("td:last-child").unwrap().text_content(), "2");
     /// ```
@@ -379,7 +379,7 @@ impl<'a> NodeRef<'a> {
     /// `Element.matches`). An invalid selector matches nothing.
     ///
     /// ```
-    /// let dom = domtree::parse("<ul><li class='a'>x</li></ul>");
+    /// let dom = domq::parse("<ul><li class='a'>x</li></ul>");
     /// let li = dom.select_first("li").unwrap();
     /// assert!(li.matches("ul > li.a"));
     /// assert!(!li.matches("ol li"));
@@ -394,7 +394,7 @@ impl<'a> NodeRef<'a> {
     /// and walking up its ancestors (DOM `Element.closest`).
     ///
     /// ```
-    /// let dom = domtree::parse("<div class='card'><p><b>hi</b></p></div>");
+    /// let dom = domq::parse("<div class='card'><p><b>hi</b></p></div>");
     /// let b = dom.select_first("b").unwrap();
     /// assert_eq!(b.closest(".card").unwrap().tag_name(), Some("div"));
     /// assert_eq!(b.closest("b").unwrap().id(), b.id()); // self-inclusive

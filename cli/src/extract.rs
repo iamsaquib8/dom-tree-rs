@@ -10,7 +10,7 @@
 
 use std::ops::Range;
 
-use domtree::{Dom, NodeRef, Selector};
+use domq::{Dom, NodeRef, Selector};
 
 use crate::json;
 
@@ -522,7 +522,7 @@ mod tests {
             "x=:scope span",
         ];
         for doc in &docs {
-            let mut dom = domtree::parse(doc);
+            let mut dom = domq::parse(doc);
             // Detached nodes have no position: remove some.
             let removed: Vec<_> = dom.select("b").map(|n| n.id()).collect();
             for id in removed {

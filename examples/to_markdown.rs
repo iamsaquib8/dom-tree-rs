@@ -16,7 +16,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    let mut dom = domtree::parse(&html);
+    let mut dom = domq::parse(&html);
     let chrome: Vec<_> = dom.select("nav, footer, script").map(|n| n.id()).collect();
     for id in chrome {
         dom.remove(id);

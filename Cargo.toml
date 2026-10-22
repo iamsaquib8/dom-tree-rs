@@ -1,21 +1,21 @@
 [package]
-name = "dom-tree-rs"
-version = "0.3.0"
+name = "domq"
+version = "0.4.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
 description = "Tiny, zero-dependency, forgiving HTML parser: turn messy real-world HTML into a clean DOM tree (and JSON). WASM-first, no_std-friendly."
-repository = "https://github.com/iamsaquib8/dom-tree-rs"
-homepage = "https://github.com/iamsaquib8/dom-tree-rs"
-documentation = "https://docs.rs/dom-tree-rs"
+repository = "https://github.com/iamsaquib8/domq"
+homepage = "https://github.com/iamsaquib8/domq"
+documentation = "https://docs.rs/domq"
 readme = "README.md"
 license = "MIT"
 keywords = ["html", "parser", "css-selector", "markdown", "wasm"]
 categories = ["parser-implementations", "wasm", "web-programming", "no-std"]
-exclude = ["/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/cli", "/derive", "/python", "/packaging", "/playground", "/docs/launch"]
+exclude = ["/.github", "/benchmarks", "/fuzz", "/wasm", "/cli", "/derive", "/python", "/packaging", "/playground", "/docs/launch"]
 
 [lib]
-name = "domtree"
+name = "domq"
 
 [features]
 default = ["json", "query", "markdown"]
@@ -38,10 +38,10 @@ std = []
 # zero-dependency and produces exactly the same tokens.
 simd = ["dep:memchr"]
 # `#[derive(FromHtml)]`: declarative extraction into structs. Re-exports the
-# proc-macro from the `dom-tree-derive` companion crate (which pulls in `syn`,
+# proc-macro from the `domq-derive` companion crate (which pulls in `syn`,
 # `quote` and `proc-macro2` at compile time only). The traits it implements
 # (`FromHtml`, `Dom::extract`, …) come with `query` and need no extra crates.
-derive = ["query", "dep:dom-tree-derive"]
+derive = ["query", "dep:domq-derive"]
 
 [[example]]
 name = "to_markdown"
@@ -58,7 +58,7 @@ required-features = ["derive"]
 [dependencies]
 serde = { version = "1", default-features = false, features = ["alloc"], optional = true }
 memchr = { version = "2.7", default-features = false, optional = true }
-dom-tree-derive = { path = "derive", version = "0.4.0", optional = true }
+domq-derive = { path = "derive", version = "0.4.0", optional = true }
 
 [dev-dependencies]
 # Snapshot testing for the corpus suite (dev-only; not a runtime dependency).
@@ -79,11 +79,11 @@ lto = true
 
 [workspace]
 resolver = "2"
-# The `domtree` command-line tool and the `#[derive(FromHtml)]` proc-macro
+# The `domq` command-line tool and the `#[derive(FromHtml)]` proc-macro
 # crate. They share this crate's lockfile and target dir.
 members = ["cli", "derive"]
 # The WASM bindings, the Python bindings, the comparison benchmarks, and the
 # fuzz harness are independent crates with their own (heavier) dependency
 # graphs and release profiles, so they are kept out of this crate's pristine,
 # minimal-dep graph.
-exclude = ["dom-tree-wasm", "python", "benchmarks", "fuzz"]
+exclude = ["wasm", "python", "benchmarks", "fuzz"]

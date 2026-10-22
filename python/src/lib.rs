@@ -1,5 +1,5 @@
-//! Python bindings for [dom-tree-rs](https://github.com/iamsaquib8/dom-tree-rs):
-//! `import domtree`.
+//! Python bindings for [domq](https://github.com/iamsaquib8/domq):
+//! `import domq`.
 //!
 //! A thin layer over the core crate. Every `Element` holds a strong reference
 //! to its `Document` plus a node id, so elements stay valid for as long as
@@ -12,7 +12,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use domtree::{Dom, NodeId, NodeRef, Selector};
+use domq::{Dom, NodeId, NodeRef, Selector};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::marker::Ungil;
 use pyo3::prelude::*;
@@ -41,12 +41,12 @@ fn compile(selector: &str) -> PyResult<Selector> {
 /// listed in `Document.errors`. Large inputs are parsed with the GIL released.
 #[pyfunction]
 fn parse(py: Python<'_>, html: PyBackedStr) -> Document {
-    let dom = maybe_detach(py, html.len() >= DETACH_BYTES, || domtree::parse(&html));
+    let dom = maybe_detach(py, html.len() >= DETACH_BYTES, || domq::parse(&html));
     Document { dom }
 }
 
-/// A parsed HTML document. Create one with `domtree.parse(html)`.
-#[pyclass(frozen, module = "domtree")]
+/// A parsed HTML document. Create one with `domq.parse(html)`.
+#[pyclass(frozen, module = "domq")]
 struct Document {
     dom: Dom,
 }
@@ -158,7 +158,7 @@ impl Document {
 }
 
 /// An HTML element inside a `Document`. Keeps its document alive.
-#[pyclass(frozen, module = "domtree")]
+#[pyclass(frozen, module = "domq")]
 struct Element {
     doc: Py<Document>,
     id: NodeId,
@@ -350,10 +350,10 @@ impl Element {
     }
 }
 
-/// The native half of the `domtree` package; import `domtree` instead (its
+/// The native half of the `domq` package; import `domq` instead (its
 /// `__init__.py` re-exports everything here, next to the type stubs).
-#[pymodule(name = "_domtree")]
-mod py_domtree {
+#[pymodule(name = "_domq")]
+mod py_domq {
     #[pymodule_export]
     use super::{Document, Element, parse};
 

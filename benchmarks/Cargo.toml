@@ -1,5 +1,5 @@
 [package]
-name = "dom-tree-rs-benchmarks"
+name = "domq-benchmarks"
 version = "0.0.0"
 publish = false
 edition = "2024"
@@ -12,15 +12,15 @@ edition = "2024"
 
 [features]
 # Measure the optional memchr-backed scanning: `cargo bench --features simd`.
-simd = ["dom-tree-rs/simd"]
+simd = ["domq/simd"]
 
 [dependencies]
-dom-tree-rs = { path = "..", features = ["json", "query"] }
+domq = { path = "..", features = ["json", "query"] }
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.8"
 tl = "0.7"
-scraper = "0.27"
+scraper = "0.29"
 html5ever = "0.39"
 markup5ever_rcdom = "0.39"
 

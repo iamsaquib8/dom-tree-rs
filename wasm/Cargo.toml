@@ -1,13 +1,13 @@
 [package]
-name = "dom-tree-wasm"
-version = "0.3.0"
+name = "domq-wasm"
+version = "0.4.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 authors = ["iamsaquib8 <saquibulhassan6@gmail.com>"]
 description = "Tiny, forgiving HTML parser for JavaScript (WebAssembly): CSS selectors, readable text, Markdown and JSON from messy HTML. Zero JS dependencies."
-repository = "https://github.com/iamsaquib8/dom-tree-rs"
-homepage = "https://iamsaquib8.github.io/dom-tree-rs/"
-documentation = "https://github.com/iamsaquib8/dom-tree-rs/tree/main/dom-tree-wasm#readme"
+repository = "https://github.com/iamsaquib8/domq"
+homepage = "https://iamsaquib8.github.io/domq/"
+documentation = "https://github.com/iamsaquib8/domq/tree/main/wasm#readme"
 readme = "README.md"
 license = "MIT"
 # wasm-pack copies these into the npm package.json (npm allows any number).
@@ -30,7 +30,7 @@ wasm-bindgen = { version = "0.2.100", default-features = false }
 dlmalloc = { version = "0.2", features = ["global"] }
 # The core parser with exactly the features the JS API exposes — no serde,
 # zero transitive dependencies.
-dom-tree-rs = { path = "..", default-features = false, features = ["json", "query", "markdown"] }
+domq = { path = "..", default-features = false, features = ["json", "query", "markdown"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

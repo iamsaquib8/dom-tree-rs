@@ -1,4 +1,4 @@
-//! # dom-tree-rs
+//! # domq
 //!
 //! A tiny, **zero-dependency**, forgiving HTML parser. It turns messy
 //! real-world HTML into a clean DOM tree (and JSON) and **never panics** on bad
@@ -13,7 +13,7 @@
 //! ## Quick start
 //!
 //! ```
-//! let dom = domtree::parse(r#"<ul id="list"><li class="item">Item 1</li></ul>"#);
+//! let dom = domq::parse(r#"<ul id="list"><li class="item">Item 1</li></ul>"#);
 //!
 //! let li = dom.find_by_tag("li").next().unwrap();
 //! assert_eq!(li.attr("class"), Some("item"));
@@ -58,7 +58,7 @@
 //!   chunks under a size budget, each with its heading path: for RAG indexes.
 //!
 //! ```
-//! let dom = domtree::parse(
+//! let dom = domq::parse(
 //!     "<article><h2>News</h2><p>It <em>works</em>!</p><script>track()</script></article>",
 //! );
 //! assert_eq!(dom.to_text(), "News\n\nIt works!");
@@ -77,10 +77,10 @@
 //!
 //! ```
 //! let src = "<p>Hello <b>world</b></p>";
-//! let mut dom = domtree::parse(src);
+//! let mut dom = domq::parse(src);
 //! let b = dom.find_by_tag("b").next().unwrap();
 //! assert_eq!(b.source_range(), Some(9..21));
-//! assert_eq!(domtree::line_col(src, 9), (1, 10));
+//! assert_eq!(domq::line_col(src, 9), (1, 10));
 //!
 //! let b = b.id();
 //! dom.rename(b, "strong");
@@ -101,7 +101,7 @@
 //!   `colspan`/`rowspan` expanded; [`to_csv`] formats them.
 //!
 //! ```
-//! let dom = domtree::parse(r#"<html lang="en"><head><title>Release notes</title></head>
+//! let dom = domq::parse(r#"<html lang="en"><head><title>Release notes</title></head>
 //!   <body><nav><a href="/">Home</a></nav>
 //!   <article><h1>Version 2</h1>
 //!     <p>This release adds link extraction, page metadata, tables as data and a
@@ -126,7 +126,7 @@
 //!
 //! ```
 //! # #[cfg(feature = "derive")] {
-//! use domtree::FromHtml;
+//! use domq::FromHtml;
 //!
 //! #[derive(FromHtml, Debug, PartialEq)]
 //! struct Product {
@@ -160,7 +160,7 @@
 //!     text: String,
 //! }
 //!
-//! let dom = domtree::parse(r#"
+//! let dom = domq::parse(r#"
 //!   <h1>Acme Anvil</h1>
 //!   <span class="price" data-value="149.99">$149.99</span>
 //!   <ul class="tags"><li>tools</li><li>heavy</li></ul>
@@ -177,7 +177,7 @@
 //! assert_eq!(product.reviews[1], Review { stars: 1, text: "It fell on me.".into() });
 //!
 //! // Errors say which field, selector and value failed:
-//! let err = domtree::parse("<h1>Anvil</h1><span class=price data-value='$5'>")
+//! let err = domq::parse("<h1>Anvil</h1><span class=price data-value='$5'>")
 //!     .extract::<Product>()
 //!     .unwrap_err();
 //! assert_eq!(
@@ -230,9 +230,9 @@
 //! parse each page once and read everything you need from that one [`Dom`].
 //! Generic structs work: the macro adds `T: FromHtml` (or [`FromHtmlValue`],
 //! or `Default`) bounds for the fields that need them. The generated code
-//! names only `::domtree::__private` re-exports, never `std`, so it works in
+//! names only `::domq::__private` re-exports, never `std`, so it works in
 //! `no_std` crates — but it does need this crate to be reachable as
-//! `domtree` (the default; a renamed dependency is not supported). Implement
+//! `domq` (the default; a renamed dependency is not supported). Implement
 //! [`FromHtml`] by hand for anything the attributes can't express; a
 //! hand-written type nests in derived ones like any other.
 //!
@@ -248,7 +248,7 @@
 //!   ([`FromHtml`], [`Dom::extract`]).
 //! - `derive` — `#[derive(FromHtml)]` (implies `query`): declarative
 //!   extraction into structs. Re-exports the proc-macro from the companion
-//!   `dom-tree-derive` crate, which uses `syn`, `quote` and `proc-macro2` at
+//!   `domq-derive` crate, which uses `syn`, `quote` and `proc-macro2` at
 //!   compile time only; nothing is added to the compiled program.
 //! - `entities-full` — decode all 2,125 WHATWG named character references
 //!   instead of the curated ~180 (a sorted static table, about 70 KB).
@@ -319,7 +319,7 @@ pub use from_html::{ExtractError, ExtractErrorKind, FromHtml, FromHtmlValue, Sco
 /// `#[derive(FromHtml)]`: declarative extraction into structs (the `derive`
 /// feature); see [Declarative extraction](crate#declarative-extraction).
 #[cfg(feature = "derive")]
-pub use dom_tree_derive::FromHtml;
+pub use domq_derive::FromHtml;
 
 /// What `#[derive(FromHtml)]` expands to. Not public API: no semver
 /// guarantees.
@@ -335,7 +335,7 @@ pub mod __private {
     pub use crate::from_html::{Ctx, Src, all, nested, one, opt, value, with};
     pub use crate::{ExtractError, FromHtml, FromHtmlValue, Scope};
 
-    pub use crate::__dom_tree_require_markdown as require_markdown;
+    pub use crate::__domq_require_markdown as require_markdown;
 }
 
 /// Stops the build of a `#[html(markdown)]` field when the `markdown`
@@ -343,10 +343,10 @@ pub mod __private {
 #[cfg(not(feature = "markdown"))]
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __dom_tree_require_markdown {
+macro_rules! __domq_require_markdown {
     () => {
         ::core::compile_error!(
-            "`#[html(markdown)]` needs the `markdown` feature of dom-tree-rs (on by default)"
+            "`#[html(markdown)]` needs the `markdown` feature of domq (on by default)"
         );
     };
 }
@@ -356,7 +356,7 @@ macro_rules! __dom_tree_require_markdown {
 #[cfg(feature = "markdown")]
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __dom_tree_require_markdown {
+macro_rules! __domq_require_markdown {
     () => {};
 }
 
@@ -366,7 +366,7 @@ macro_rules! __dom_tree_require_markdown {
 /// [`Dom::errors`].
 ///
 /// ```
-/// let dom = domtree::parse("<p>hello<p>world");
+/// let dom = domq::parse("<p>hello<p>world");
 /// assert_eq!(dom.find_by_tag("p").count(), 2); // implicit </p>
 /// ```
 pub fn parse(html: &str) -> Dom {
@@ -384,8 +384,8 @@ pub fn parse_fragment(html: &str) -> Dom {
 /// Create a streaming [`Tokenizer`] over `html` without building a tree.
 ///
 /// ```
-/// use domtree::Token;
-/// let kinds: usize = domtree::tokenize("<b>hi</b>").count();
+/// use domq::Token;
+/// let kinds: usize = domq::tokenize("<b>hi</b>").count();
 /// assert_eq!(kinds, 3); // <b>, "hi", </b>
 /// ```
 pub fn tokenize(html: &str) -> Tokenizer<'_> {
@@ -411,12 +411,12 @@ pub fn tokenize(html: &str) -> Tokenizer<'_> {
 /// tag with attributes gets its own `Vec`, where the tree shares one arena.
 ///
 /// ```
-/// use domtree::Event;
+/// use domq::Event;
 ///
 /// let html = "<ul><li>Tom &amp; Jerry<li>Spike<br></ul>";
 /// let mut depth = 0;
 /// let mut items = Vec::new();
-/// for (event, range) in domtree::events(html) {
+/// for (event, range) in domq::events(html) {
 ///     match event {
 ///         Event::Start { name, .. } => {
 ///             depth += 1;

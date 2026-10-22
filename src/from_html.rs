@@ -3,7 +3,7 @@
 //!
 //! The traits and the runtime they need live here, always compiled with the
 //! `query` feature, so hand-written impls work without the `derive` feature;
-//! `#[derive(FromHtml)]` (the `dom-tree-derive` crate) only generates calls
+//! `#[derive(FromHtml)]` (the `domq-derive` crate) only generates calls
 //! into [`__private`](crate::__private).
 
 use alloc::borrow::Cow;
@@ -26,9 +26,9 @@ use crate::tree::{Dom, NodeRef};
 /// hand-written impls) read the scope with.
 ///
 /// ```
-/// use domtree::{Scope, Selector};
+/// use domq::{Scope, Selector};
 ///
-/// let dom = domtree::parse("<div class=card data-id=7><h2>Hi</h2></div>");
+/// let dom = domq::parse("<div class=card data-id=7><h2>Hi</h2></div>");
 /// let doc = Scope::Document(&dom);
 /// assert!(doc.node().is_none());
 /// assert_eq!(doc.attr("data-id"), None); // a document has no attributes
@@ -157,7 +157,7 @@ impl<'a> Scope<'a> {
 /// A hand-written impl reads the [`Scope`] directly:
 ///
 /// ```
-/// use domtree::{ExtractError, ExtractErrorKind, FromHtml, Scope};
+/// use domq::{ExtractError, ExtractErrorKind, FromHtml, Scope};
 ///
 /// struct Heading {
 ///     level: u8,
@@ -174,7 +174,7 @@ impl<'a> Scope<'a> {
 ///     }
 /// }
 ///
-/// let dom = domtree::parse("<h1>Intro</h1><p>…</p><h2>Usage</h2>");
+/// let dom = domq::parse("<h1>Intro</h1><p>…</p><h2>Usage</h2>");
 /// let toc: Vec<Heading> = dom.extract_all().unwrap();
 /// assert_eq!(toc[1].level, 2);
 /// assert_eq!(toc[1].text, "Usage");
@@ -206,7 +206,7 @@ pub trait FromHtml: Sized {
 /// that [`ExtractError`] reports with the value and the type name.
 ///
 /// ```
-/// use domtree::FromHtmlValue;
+/// use domq::FromHtmlValue;
 ///
 /// assert_eq!(f64::from_html_value(" 4.5 "), Ok(4.5));
 /// assert_eq!(bool::from_html_value("TRUE"), Ok(true));
@@ -329,7 +329,7 @@ impl Dom {
     ///
     /// ```
     /// # #[cfg(feature = "derive")] {
-    /// use domtree::FromHtml;
+    /// use domq::FromHtml;
     ///
     /// #[derive(FromHtml)]
     /// struct Page {
@@ -339,13 +339,13 @@ impl Dom {
     ///     next: Option<String>,
     /// }
     ///
-    /// let dom = domtree::parse("<h1>Chapter 1</h1><a class=next href=/2>Next</a>");
+    /// let dom = domq::parse("<h1>Chapter 1</h1><a class=next href=/2>Next</a>");
     /// let page: Page = dom.extract().unwrap();
     /// assert_eq!(page.title, "Chapter 1");
     /// assert_eq!(page.next.as_deref(), Some("/2"));
     /// # }
     /// // Leaf types read the readable text:
-    /// let dom = domtree::parse("<p> 42 </p>");
+    /// let dom = domq::parse("<p> 42 </p>");
     /// assert_eq!(dom.extract::<u32>(), Ok(42));
     /// ```
     pub fn extract<T: FromHtml>(&self) -> Result<T, ExtractError> {
@@ -372,7 +372,7 @@ impl Dom {
     ///
     /// ```
     /// # #[cfg(feature = "derive")] {
-    /// use domtree::FromHtml;
+    /// use domq::FromHtml;
     ///
     /// #[derive(FromHtml, Debug)]
     /// #[html(select = ".card")]
@@ -383,14 +383,14 @@ impl Dom {
     ///     cents: u32,
     /// }
     ///
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     "<div class=card><h2>Pen</h2><b class=price data-cents=150>$1.50</b></div>\
     ///      <div class=card><h2>Ink</h2><b class=price data-cents=180>$1.80</b></div>",
     /// );
     /// let cards: Vec<Card> = dom.extract_all().unwrap();
     /// assert_eq!((cards[1].title.as_str(), cards[1].cents), ("Ink", 180));
     ///
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     "<div class=card><h2>Pen</h2><b class=price data-cents=150>$1.50</b></div>\
     ///      <div class=card><h2>Ink</h2><b class=price data-cents=x>?</b></div>",
     /// );
@@ -429,7 +429,7 @@ impl NodeRef<'_> {
     /// value.
     ///
     /// ```
-    /// let dom = domtree::parse("<ul><li>3</li><li>4</li></ul>");
+    /// let dom = domq::parse("<ul><li>3</li><li>4</li></ul>");
     /// let li = dom.select_first("li:last-child").unwrap();
     /// assert_eq!(li.extract::<i64>(), Ok(4));
     /// ```
@@ -564,7 +564,7 @@ impl ExtractError {
     /// (empty for a value read directly, like `dom.extract::<f64>()`).
     ///
     /// ```
-    /// use domtree::{ExtractError, ExtractErrorKind};
+    /// use domq::{ExtractError, ExtractErrorKind};
     ///
     /// let err = ExtractError::new(ExtractErrorKind::NoMatch)
     ///     .in_field("Review", "rating")

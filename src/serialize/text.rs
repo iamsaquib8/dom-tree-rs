@@ -24,7 +24,7 @@ impl Dom {
     /// leading or trailing blank lines.
     ///
     /// ```
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     "<head><title>T</title></head><h1>Hello</h1>\
     ///      <p>Some   <b>bold</b>\n text.<br>Next line.</p><script>x()</script>",
     /// );
@@ -48,10 +48,10 @@ impl NodeRef<'_> {
     /// sheet's source as written (not collapsed).
     ///
     /// ```
-    /// let dom = domtree::parse("<ul><li>One</li><li>Two <i>too</i></li></ul>");
+    /// let dom = domq::parse("<ul><li>One</li><li>Two <i>too</i></li></ul>");
     /// assert_eq!(dom.root().unwrap().to_text(), "One\nTwo too");
     ///
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     "<head><title> My  page </title><script>\nif (a  < b) {}\n</script></head>",
     /// );
     /// assert_eq!(dom.find_by_tag("title").next().unwrap().to_text(), "My page");

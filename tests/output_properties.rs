@@ -2,7 +2,7 @@
 //! `to_markdown` and `inner_html` must never panic, keep their whitespace
 //! promises, and must not overflow the stack on deeply nested input.
 
-use domtree::{Dom, parse};
+use domq::{Dom, parse};
 use proptest::prelude::*;
 
 /// Markup soup built from fragments that exercise the serializers' structure

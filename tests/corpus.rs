@@ -8,7 +8,7 @@
 //! `INSTA_UPDATE=always cargo test --test corpus` and review the diff.
 #![cfg(feature = "json")]
 
-use domtree::parse;
+use domq::parse;
 
 macro_rules! corpus_snapshot {
     ($name:ident, $html_name:ident, $file:literal) => {

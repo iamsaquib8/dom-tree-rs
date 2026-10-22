@@ -1,7 +1,7 @@
 name: Playground
 
 # Builds the wasm module into playground/pkg and deploys playground/ to GitHub
-# Pages (https://iamsaquib8.github.io/dom-tree-rs/). One-time setup: in the repo
+# Pages (https://iamsaquib8.github.io/domq/). One-time setup: in the repo
 # settings, Pages -> Build and deployment -> Source: "GitHub Actions".
 
 on:
@@ -9,7 +9,7 @@ on:
     branches: [main]
     paths:
       - "src/**"
-      - "dom-tree-wasm/**"
+      - "wasm/**"
       - "playground/**"
       - "Cargo.toml"
       - ".github/workflows/pages.yml"
@@ -38,17 +38,17 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: dom-tree-wasm
+          workspaces: wasm
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack
       - name: Build the wasm module into playground/pkg
-        working-directory: dom-tree-wasm
+        working-directory: wasm
         run: wasm-pack build --target web --release --no-pack --out-dir ../playground/pkg
       - name: Report the module size
         run: |
-          echo "wasm: $(wc -c < playground/pkg/dom_tree_wasm_bg.wasm) bytes," \
-               "$(gzip -9 -c playground/pkg/dom_tree_wasm_bg.wasm | wc -c) gzipped"
+          echo "wasm: $(wc -c < playground/pkg/domq_wasm_bg.wasm) bytes," \
+               "$(gzip -9 -c playground/pkg/domq_wasm_bg.wasm | wc -c) gzipped"
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

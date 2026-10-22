@@ -1,4 +1,4 @@
-"""Tests for declarative extraction: `domtree.extract` / `domtree.extract_all`.
+"""Tests for declarative extraction: `domq.extract` / `domq.extract_all`.
 
 Python 3.9 compatible: `typing.Annotated` / `Optional` / `List`, no `X | None`
 outside of version-gated tests.
@@ -23,8 +23,8 @@ from typing import Annotated, Any, List, Optional
 
 import pytest
 
-import domtree
-from domtree import Attr, ExtractError, Html, Markdown, OuterHtml, Select, extract, extract_all
+import domq
+from domq import Attr, ExtractError, Html, Markdown, OuterHtml, Select, extract, extract_all
 
 # --- the README example --------------------------------------------------------
 
@@ -93,7 +93,7 @@ GADGET = Product(
 
 def test_readme_example():
     assert extract_all(Product, SHOP) == [WIDGET, GADGET]
-    doc = domtree.parse(SHOP)
+    doc = domq.parse(SHOP)
     assert extract(Product, doc.select_first(".product")) == WIDGET
     assert extract(Product, doc.select(".product")[1]) == GADGET
     # On a whole document, __select__ narrows extract() to the first match.
@@ -110,7 +110,7 @@ def test_readme_error_messages():
                 extract(Product, source)
         return str(info.value)
 
-    bad = domtree.parse(SHOP.replace('data-value="9.99"', 'data-value="$5"'))
+    bad = domq.parse(SHOP.replace('data-value="9.99"', 'data-value="$5"'))
     assert message(bad.select_first(".product")) == (
         'Product.price (".price" @data-value): cannot parse "$5" as float: '
         "could not convert string to float: '$5'"
@@ -255,7 +255,7 @@ def test_realistic_product_page():
             Card("Mug", "/p/mug", Decimal("7.5")),
         ],
     )
-    doc = domtree.parse(PAGE)
+    doc = domq.parse(PAGE)
     assert extract(KettlePage, doc) == page
     # Any part of the page can be extracted on its own.
     assert extract(PageReview, doc.select_first("#r2")) == page.reviews[1]
@@ -265,7 +265,7 @@ def test_realistic_product_page():
 
 
 def test_extract_all_over_cards():
-    doc = domtree.parse(PAGE)
+    doc = domq.parse(PAGE)
     expected = [Card("Toaster", "/p/toaster", Decimal("29")), Card("Mug", "/p/mug", Decimal("7.5"))]
     assert extract_all(Card, PAGE) == expected
     assert extract_all(Card, doc) == expected
@@ -385,7 +385,7 @@ def test_spec_path_example():
         extract_all(Product, html)
     assert info.value.path == "Product[0].reviews[2].rating"
     with pytest.raises(ExtractError) as info:
-        extract(Product, domtree.parse(html).root)
+        extract(Product, domq.parse(html).root)
     assert str(info.value) == (
         'Product.reviews[2].rating (".stars" @data-rating): '
         "cannot parse \"x\" as int: invalid literal for int() with base 10: 'x'"
@@ -408,7 +408,7 @@ def test_recursive_dataclass():
         </li>
       </ul>
     </li>"""
-    root = extract(Comment, domtree.parse(html).root)
+    root = extract(Comment, domq.parse(html).root)
     assert root == Comment("a", [Comment("b", []), Comment("c", [Comment("d", [])])])
 
 
@@ -436,7 +436,7 @@ def test_every_source_kind_on_an_element():
         md2: Annotated[str, Markdown("ul")]
         n: Annotated[int, Attr("data-n")]
 
-    box = domtree.parse(SNIPPET).root
+    box = domq.parse(SNIPPET).root
     k = extract(Kinds, box)
     assert k.text == "Hi there"
     assert k.attr == k.attr2 == "s"
@@ -459,7 +459,7 @@ def test_every_source_kind_on_a_document():
         md: Annotated[str, Markdown()]
         first_li: Annotated[str, Select("li")]
 
-    doc = domtree.parse(SNIPPET)
+    doc = domq.parse(SNIPPET)
     w = extract(Whole, doc)
     assert w == Whole(doc.to_text(), doc.to_html(), doc.to_html(), doc.to_markdown(), "a")
     assert extract(Whole, SNIPPET) == w
@@ -470,14 +470,14 @@ def test_attr_without_selector_needs_an_element():
     class Id:
         id: Annotated[Optional[str], Attr("id")]
 
-    assert extract(Id, domtree.parse(SNIPPET).root) == Id("s")
+    assert extract(Id, domq.parse(SNIPPET).root) == Id("s")
     with pytest.raises(ExtractError) as info:
         extract(Id, SNIPPET)  # even an Optional field: this is a usage error
     assert info.value.path == "Id.id"
     assert info.value.selector is None
     assert info.value.source == "@id"
     with pytest.raises(ExtractError):
-        extract(Id, domtree.parse(SNIPPET))
+        extract(Id, domq.parse(SNIPPET))
 
 
 def test_sources_str_document_element():
@@ -485,7 +485,7 @@ def test_sources_str_document_element():
     class Items:
         items: Annotated[List[str], Select("li")]
 
-    doc = domtree.parse("<ul id=a><li>1</li></ul><ul id=b><li>2</li><li>3</li></ul>")
+    doc = domq.parse("<ul id=a><li>1</li></ul><ul id=b><li>2</li><li>3</li></ul>")
     assert extract(Items, "<ul><li>1</li></ul><ol><li>2</li></ol>") == Items(["1", "2"])
     assert extract(Items, doc) == Items(["1", "2", "3"])
     assert extract(Items, doc.select_first("#b")) == Items(["2", "3"])
@@ -503,7 +503,7 @@ def test_element_scope_is_descendants_only():
         title: Annotated[Optional[str], Select("h2")]
         div: Annotated[Optional[str], Select("div")]
 
-    doc = domtree.parse("<h2>outside</h2><div><p>in</p></div>")
+    doc = domq.parse("<h2>outside</h2><div><p>in</p></div>")
     assert extract(Inner, doc.select_first("div")) == Inner(None, None)
     assert extract(Inner, doc) == Inner("outside", "in")
 
@@ -634,7 +634,7 @@ def test_list():
         own: Annotated[List[str], Select()]
 
     html = '<ul><li data-n="1">a</li><li data-n=" 2 ">b</li><li data-n="3">c</li></ul>'
-    ul = domtree.parse(html).root
+    ul = domq.parse(html).root
     assert extract(Lists, ul) == Lists(["a", "b", "c"], [1, 2, 3], [], ["a\nb\nc"])
 
     with pytest.raises(ExtractError) as info:
@@ -903,7 +903,7 @@ def test_extract_error_is_a_value_error_and_pickles():
     )
     assert str(again) == str(err)
     assert str(ExtractError("A.b", None, "text", "r")) == "A.b (text): r"
-    assert ExtractError.__module__ == "domtree"
+    assert ExtractError.__module__ == "domq"
 
 
 @pytest.mark.parametrize("bad", ["a:hover", "p)", "", "[x"])
@@ -914,7 +914,7 @@ def test_invalid_selector(bad):
         link: Annotated[Optional[str], Select(bad, attr="href")]
 
     with pytest.raises(ValueError) as native:
-        domtree.parse("").select(bad)
+        domq.parse("").select(bad)
 
     for _ in range(2):  # not cached: raised on every call
         with pytest.raises(ExtractError) as info:
@@ -960,7 +960,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Annotated, List, Optional
 
-from domtree import Attr, Select
+from domq import Attr, Select
 
 
 @dataclass
@@ -994,7 +994,7 @@ def local_classes():
 
 @pytest.fixture
 def future_models():
-    name = "_domtree_future_models"
+    name = "_domq_future_models"
     module = types.ModuleType(name)
     code = compile(
         FUTURE_MODELS, f"<{name}>", "exec", flags=__future__.annotations.compiler_flag, dont_inherit=True
@@ -1161,7 +1161,7 @@ def test_random_html_only_raises_extract_error():
 
     for _ in range(200):
         html = random_html(rng)
-        doc = domtree.parse(html)
+        doc = domq.parse(html)
         attempt(extract, Fuzz, html)
         attempt(extract, Fuzz, doc)
         attempt(extract_all, Fuzz, html)
@@ -1185,9 +1185,9 @@ class _SelCard:
 def test_extract_uses_select_on_documents_and_strings() -> None:
     page = "<ul><li class=card><h2>Ann</h2></li><li class=card><h2>Bob</h2></li></ul>"
     assert extract(_SelCard, page) == _SelCard(name="Ann")
-    assert extract(_SelCard, domtree.parse(page)) == _SelCard(name="Ann")
+    assert extract(_SelCard, domq.parse(page)) == _SelCard(name="Ann")
     # An Element is used as given: __select__ does not apply.
-    second = domtree.parse(page).select("li.card")[1]
+    second = domq.parse(page).select("li.card")[1]
     assert extract(_SelCard, second) == _SelCard(name="Bob")
 
 

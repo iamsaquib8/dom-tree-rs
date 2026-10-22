@@ -1,6 +1,6 @@
 //! Hand-rolled argument parsing (no `clap`: the CLI stays zero-dependency).
 //!
-//! Flags mirror `htmlq` where they overlap, so `domtree` works as a drop-in
+//! Flags mirror `htmlq` where they overlap, so `domq` works as a drop-in
 //! replacement in existing scripts.
 
 use std::ffi::OsString;
@@ -9,25 +9,25 @@ use std::fmt;
 use crate::extract::Field;
 
 pub const HELP: &str = "\
-domtree — query HTML with CSS selectors
+domq — query HTML with CSS selectors
 
 USAGE:
-    domtree [OPTIONS] [SELECTOR]...
-    domtree lint [OPTIONS] [FILE]...    (see 'domtree lint --help')
+    domq [OPTIONS] [SELECTOR]...
+    domq lint [OPTIONS] [FILE]...    (see 'domq lint --help')
 
     Reads HTML from stdin (or --filename) and prints every element matching
     SELECTOR. Several SELECTOR arguments are joined with spaces. With no
     selector, the whole document is used.
 
 EXAMPLES:
-    curl -s https://example.com | domtree 'a' -a href
-    domtree -f page.html -t 'article h2'
-    curl -sL https://example.com/post | domtree --main --markdown
-    domtree -e title=h1 -e price=.price -e 'tags=.tag[]' < product.html
-    domtree '.card' -e name=h2 -e url=a@href --jsonl < list.html
-    domtree --csv -1 < report.html > report.csv
-    domtree -c 'img:not([alt])' < page.html
-    domtree lint index.html docs/*.html
+    curl -s https://example.com | domq 'a' -a href
+    domq -f page.html -t 'article h2'
+    curl -sL https://example.com/post | domq --main --markdown
+    domq -e title=h1 -e price=.price -e 'tags=.tag[]' < product.html
+    domq '.card' -e name=h2 -e url=a@href --jsonl < list.html
+    domq --csv -1 < report.html > report.csv
+    domq -c 'img:not([alt])' < page.html
+    domq lint index.html docs/*.html
 
 OUTPUT (default: matching elements as HTML, one per line; -t, -m, -j, --jsonl,
 --csv and -c each pick the format, so give at most one):
@@ -87,14 +87,14 @@ for a literal @ in a selector.
 
 Exit codes: 0 success (also when nothing matches), 1 invalid selector or I/O
 error, 2 bad usage.
-Docs: https://github.com/iamsaquib8/dom-tree-rs
+Docs: https://github.com/iamsaquib8/domq
 ";
 
 pub const LINT_HELP: &str = "\
-domtree lint — check HTML for common accessibility and markup problems
+domq lint — check HTML for common accessibility and markup problems
 
 USAGE:
-    domtree lint [OPTIONS] [FILE]...
+    domq lint [OPTIONS] [FILE]...
 
     Checks each FILE (stdin when none are given, or for '-') and prints one
     line per finding, in document order:
@@ -127,7 +127,7 @@ OPTIONS:
         --format <FORMAT>       text (default) or json: one JSON array of
                                 {file, line, column, level, rule, message}
     -q, --quiet                 Do not print notes
-        --encoding <LABEL>      Decode the input as LABEL (see 'domtree --help')
+        --encoding <LABEL>      Decode the input as LABEL (see 'domq --help')
     -h, --help                  Print this help
 
 EXIT CODES:
@@ -182,7 +182,7 @@ pub struct Options {
     pub encoding: Option<String>,
 }
 
-/// `domtree lint` options.
+/// `domq lint` options.
 #[derive(Debug, Default)]
 pub struct LintOptions {
     /// Files to check; empty = stdin.
@@ -213,14 +213,14 @@ impl ArgError {
     fn new(message: String) -> ArgError {
         ArgError {
             message,
-            help: "domtree --help",
+            help: "domq --help",
         }
     }
 
     fn lint(message: String) -> ArgError {
         ArgError {
             message,
-            help: "domtree lint --help",
+            help: "domq lint --help",
         }
     }
 }
@@ -664,7 +664,7 @@ mod tests {
         ] {
             assert_eq!(
                 try_run(bad).map(|_| ()).map_err(|e| e.help),
-                Err("domtree lint --help")
+                Err("domq lint --help")
             );
         }
         // Only the first argument names the subcommand.

@@ -231,7 +231,7 @@ impl Dom {
     /// every serializer skip it. Removing an already-removed node is a no-op.
     ///
     /// ```
-    /// let mut dom = domtree::parse("<p>Hi <script>track()</script>there</p>");
+    /// let mut dom = domq::parse("<p>Hi <script>track()</script>there</p>");
     /// let script = dom.find_by_tag("script").next().unwrap().id();
     /// dom.remove(script);
     /// assert_eq!(dom.to_html(), "<p>Hi there</p>");
@@ -255,7 +255,7 @@ impl Dom {
     /// written out as they are, so these would change the markup around them.
     ///
     /// ```
-    /// let mut dom = domtree::parse("<a href=/x>x</a>");
+    /// let mut dom = domq::parse("<a href=/x>x</a>");
     /// let a = dom.find_by_tag("a").next().unwrap().id();
     /// dom.set_attr(a, "href", "https://example.com/x");
     /// dom.set_attr(a, "rel", "nofollow");
@@ -312,7 +312,7 @@ impl Dom {
     /// present.
     ///
     /// ```
-    /// let mut dom = domtree::parse(r#"<p style="color:red" class=x>hi</p>"#);
+    /// let mut dom = domq::parse(r#"<p style="color:red" class=x>hi</p>"#);
     /// let p = dom.find_by_tag("p").next().unwrap().id();
     /// dom.remove_attr(p, "style");
     /// assert_eq!(dom.to_html(), r#"<p class="x">hi</p>"#);
@@ -415,7 +415,7 @@ impl Dom {
     /// parses back to a single element.
     ///
     /// ```
-    /// let mut dom = domtree::parse("<h1>Old <em>title</em></h1><p>x</p>");
+    /// let mut dom = domq::parse("<h1>Old <em>title</em></h1><p>x</p>");
     /// let h1 = dom.find_by_tag("h1").next().unwrap().id();
     /// dom.set_text(h1, "New & <improved>");
     /// assert_eq!(dom.to_html(), "<h1>New &amp; &lt;improved&gt;</h1><p>x</p>");
@@ -424,7 +424,7 @@ impl Dom {
     /// dom.set_text(x, "y");
     /// assert_eq!(dom.to_html(), "<h1>New &amp; &lt;improved&gt;</h1><p>y</p>");
     ///
-    /// let mut dom = domtree::parse("<script>old()</script>");
+    /// let mut dom = domq::parse("<script>old()</script>");
     /// let script = dom.root().unwrap().id();
     /// dom.set_text(script, r#"if (a < b) log("</script>")"#);
     /// assert_eq!(dom.to_html(), r#"<script>if (a < b) log("<\/script>")</script>"#);
@@ -459,7 +459,7 @@ impl Dom {
     /// tree, but [`Dom::to_html`] — like the HTML syntax — cannot express them.
     ///
     /// ```
-    /// let mut dom = domtree::parse("<b class=x>bold</b>");
+    /// let mut dom = domq::parse("<b class=x>bold</b>");
     /// let b = dom.root().unwrap().id();
     /// dom.rename(b, "STRONG");
     /// dom.rename(b, "b><img src=x onerror=alert(1)"); // refused
@@ -493,7 +493,7 @@ impl Dom {
     /// (see [`Dom::rename`]).
     ///
     /// ```
-    /// let mut dom = domtree::parse("<ul><li>a</li></ul>");
+    /// let mut dom = domq::parse("<ul><li>a</li></ul>");
     /// let ul = dom.root().unwrap().id();
     /// let li = dom.create_element("li").unwrap();
     /// let text = dom.create_text("b");
@@ -527,7 +527,7 @@ impl Dom {
     /// [`Dom::create_element`] for how detached nodes behave).
     ///
     /// ```
-    /// let mut dom = domtree::parse("<p></p>");
+    /// let mut dom = domq::parse("<p></p>");
     /// let p = dom.root().unwrap().id();
     /// let t = dom.create_text("1 < 2");
     /// dom.append_child(p, t);
@@ -548,7 +548,7 @@ impl Dom {
     /// node into its own subtree would make a cycle.
     ///
     /// ```
-    /// let mut dom = domtree::parse("<div id=a><b>x</b></div><div id=c></div>");
+    /// let mut dom = domq::parse("<div id=a><b>x</b></div><div id=c></div>");
     /// let b = dom.find_by_tag("b").next().unwrap().id();
     /// let c = dom.find_by_id("c").unwrap().id();
     /// assert!(dom.append_child(c, b)); // moves <b> from #a to #c
@@ -571,7 +571,7 @@ impl Dom {
     /// contains `reference` (a cycle).
     ///
     /// ```
-    /// let mut dom = domtree::parse("<li>b</li><li>c</li><li>a</li>");
+    /// let mut dom = domq::parse("<li>b</li><li>c</li><li>a</li>");
     /// let items: Vec<_> = dom.find_by_tag("li").map(|n| n.id()).collect();
     /// assert!(dom.insert_before(items[0], items[2]));
     /// assert_eq!(dom.to_html(), "<li>a</li><li>b</li><li>c</li>");
@@ -592,7 +592,7 @@ impl Dom {
     /// [`Dom::rename`]). Wrapping a detached node gives a detached wrapper.
     ///
     /// ```
-    /// let mut dom = domtree::parse("<p>Hello <b>world</b></p>");
+    /// let mut dom = domq::parse("<p>Hello <b>world</b></p>");
     /// let b = dom.find_by_tag("b").next().unwrap().id();
     /// let a = dom.wrap(b, "a").unwrap();
     /// dom.set_attr(a, "href", "/world");
@@ -618,7 +618,7 @@ impl Dom {
     /// elements with no parent (there is no place to move the children to).
     ///
     /// ```
-    /// let mut dom = domtree::parse(r#"<p>a <span class="x">b <i>c</i></span> d</p>"#);
+    /// let mut dom = domq::parse(r#"<p>a <span class="x">b <i>c</i></span> d</p>"#);
     /// let span = dom.find_by_tag("span").next().unwrap().id();
     /// assert!(dom.unwrap(span));
     /// assert_eq!(dom.to_html(), "<p>a b <i>c</i> d</p>");
@@ -656,7 +656,7 @@ impl Dom {
     /// [`source_range`](crate::NodeRef::source_range).
     ///
     /// ```
-    /// let mut dom = domtree::parse("<ul><li>a</li></ul>");
+    /// let mut dom = domq::parse("<ul><li>a</li></ul>");
     /// let ul = dom.root().unwrap().id();
     /// let ids = dom.append_html(ul, "<li>b<li>c");
     /// assert_eq!(ids.len(), 2);
@@ -674,7 +674,7 @@ impl Dom {
     /// returned.
     ///
     /// ```
-    /// let mut dom = domtree::parse("<p>world</p>");
+    /// let mut dom = domq::parse("<p>world</p>");
     /// let p = dom.root().unwrap().id();
     /// dom.prepend_html(p, "<b>Hello</b>, ");
     /// assert_eq!(dom.to_html(), "<p><b>Hello</b>, world</p>");
@@ -693,7 +693,7 @@ impl Dom {
     /// fragment is parsed.
     ///
     /// ```
-    /// let mut dom = domtree::parse("<h1>Title</h1><p>Body</p>");
+    /// let mut dom = domq::parse("<h1>Title</h1><p>Body</p>");
     /// let h1 = dom.root().unwrap().id();
     /// dom.insert_html_before(h1, "<!doctype html>");
     /// assert_eq!(dom.to_html(), "<!doctype html><h1>Title</h1><p>Body</p>");
@@ -709,7 +709,7 @@ impl Dom {
     /// [`Dom::insert_html_before`].
     ///
     /// ```
-    /// let mut dom = domtree::parse("<p>See <a href=/docs>docs</a>.</p>");
+    /// let mut dom = domq::parse("<p>See <a href=/docs>docs</a>.</p>");
     /// let a = dom.find_by_tag("a").next().unwrap().id();
     /// dom.insert_html_after(a, " <sup>[1]</sup>");
     /// assert_eq!(dom.to_html(), r#"<p>See <a href="/docs">docs</a> <sup>[1]</sup>.</p>"#);

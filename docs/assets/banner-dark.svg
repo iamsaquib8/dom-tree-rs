@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-label="dom-tree-rs — messy HTML in, clean tree, text, Markdown or JSON out">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-label="domq — messy HTML in, clean tree, text, Markdown or JSON out">
 <defs>
   <linearGradient id="acc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fb923c"/><stop offset="1" stop-color="#ea580c"/></linearGradient>
   <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0d1117"/><stop offset="1" stop-color="#161b22"/></linearGradient>
 </defs>
 <style>
-  .title { font: 800 64px system-ui, -apple-system, "Segoe UI", Inter, sans-serif; fill: #f0f6fc; letter-spacing: -1.5px; }
-  .rs { fill: url(#acc); }
+  .title { font: 800 78px system-ui, -apple-system, "Segoe UI", Inter, sans-serif; fill: #f0f6fc; letter-spacing: -2px; }
+  .acc { fill: url(#acc); }
   .tag { font: 500 24px system-ui, -apple-system, "Segoe UI", Inter, sans-serif; fill: #9198a1; }
   .chip { font: 600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #d1d7e0; }
   .url { font: 500 24px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #9198a1; }
@@ -44,8 +44,8 @@
   <circle cx="46" cy="66" r="7" fill="#f8fafc"/><circle cx="82" cy="66" r="7" fill="#f8fafc"/>
   <circle cx="72" cy="92" r="6" fill="#94a3b8"/><circle cx="92" cy="92" r="6" fill="#94a3b8"/>
 </g>
-<text x="260" y="132" class="title">dom-tree<tspan class="rs">-rs</tspan></text>
+<text x="260" y="138" class="title">dom<tspan class="acc">q</tspan></text>
 <text x="260" y="180" class="tag">Messy HTML in. Clean tree, text, Markdown, or JSON out.</text>
-<rect x="260" y="222" width="162" height="34" rx="17.0" fill="#21262d"/><text x="341.0" y="244.4" text-anchor="middle" class="chip">0 dependencies</text><rect x="432" y="222" width="143" height="34" rx="17.0" fill="#21262d"/><text x="503.5" y="244.4" text-anchor="middle" class="chip">never panics</text><rect x="585" y="222" width="152" height="34" rx="17.0" fill="#21262d"/><text x="661.0" y="244.4" text-anchor="middle" class="chip">CSS selectors</text><rect x="747" y="222" width="124" height="34" rx="17.0" fill="#21262d"/><text x="809.0" y="244.4" text-anchor="middle" class="chip">→ Markdown</text><rect x="881" y="222" width="191" height="34" rx="17.0" fill="#21262d"/><text x="976.5" y="244.4" text-anchor="middle" class="chip">Rust · CLI · WASM</text>
+<rect x="260" y="222" width="162" height="34" rx="17.0" fill="#21262d"/><text x="341.0" y="244.4" text-anchor="middle" class="chip">0 dependencies</text><rect x="432" y="222" width="143" height="34" rx="17.0" fill="#21262d"/><text x="503.5" y="244.4" text-anchor="middle" class="chip">never panics</text><rect x="585" y="222" width="152" height="34" rx="17.0" fill="#21262d"/><text x="661.0" y="244.4" text-anchor="middle" class="chip">CSS selectors</text><rect x="747" y="222" width="124" height="34" rx="17.0" fill="#21262d"/><text x="809.0" y="244.4" text-anchor="middle" class="chip">→ Markdown</text><rect x="881" y="222" width="258" height="34" rx="17.0" fill="#21262d"/><text x="1010.0" y="244.4" text-anchor="middle" class="chip">Rust · CLI · JS · Python</text>
 
 </svg>

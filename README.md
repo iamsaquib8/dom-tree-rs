@@ -2,36 +2,36 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
-  <img src="docs/assets/banner-light.svg" width="100%" alt="dom-tree-rs — messy HTML in, clean tree, text, Markdown, or JSON out">
+  <img src="docs/assets/banner-light.svg" width="100%" alt="domq — messy HTML in, clean tree, text, Markdown, or JSON out">
 </picture>
 
 A tiny, zero-dependency, never-panicking HTML parser with CSS selectors —
 for Rust, your shell, and JavaScript (via a ~41 KB gzipped WebAssembly module).
 
-[![crates.io](https://img.shields.io/crates/v/dom-tree-rs.svg?logo=rust)](https://crates.io/crates/dom-tree-rs)
-[![npm](https://img.shields.io/npm/v/dom-tree-wasm.svg?logo=npm)](https://www.npmjs.com/package/dom-tree-wasm)
-[![docs.rs](https://img.shields.io/docsrs/dom-tree-rs?logo=docs.rs)](https://docs.rs/dom-tree-rs)
-[![CI](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/iamsaquib8/dom-tree-rs/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/domq.svg?logo=rust)](https://crates.io/crates/domq)
+[![npm](https://img.shields.io/npm/v/domq.svg?logo=npm)](https://www.npmjs.com/package/domq)
+[![docs.rs](https://img.shields.io/docsrs/domq?logo=docs.rs)](https://docs.rs/domq)
+[![CI](https://github.com/iamsaquib8/domq/actions/workflows/ci.yml/badge.svg)](https://github.com/iamsaquib8/domq/actions/workflows/ci.yml)
 ![dependencies](https://img.shields.io/badge/dependencies-0-success)
 ![no_std](https://img.shields.io/badge/no__std-yes-success)
 ![unsafe](https://img.shields.io/badge/unsafe-forbidden-success)
-[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](#msrv)
-[![license](https://img.shields.io/github/license/iamsaquib8/dom-tree-rs)](./LICENSE)
+[![MSRV](https://img.shields.io/badge/MSRV-1.88-blue)](#msrv)
+[![license](https://img.shields.io/github/license/iamsaquib8/domq)](./LICENSE)
 
-[**▶ Try it in your browser**](https://iamsaquib8.github.io/dom-tree-rs/) ·
-[Rust docs](https://docs.rs/dom-tree-rs) ·
+[**▶ Try it in your browser**](https://iamsaquib8.github.io/domq/) ·
+[Rust docs](https://docs.rs/domq) ·
 [CLI](./cli) ·
-[JavaScript](./dom-tree-wasm) ·
+[JavaScript](./wasm) ·
 [Roadmap](./ROADMAP.md)
 
-<img src="docs/assets/demo.svg" width="760" alt="Terminal demo: domtree lists the navigation links of rust-lang.org, converts its first section to Markdown, counts images without alt text, and pretty-prints a fragment with unclosed list items.">
+<img src="docs/assets/demo.svg" width="760" alt="Terminal demo: domq lists the navigation links of rust-lang.org, converts its first section to Markdown, counts images without alt text, and pretty-prints a fragment with unclosed list items.">
 
 </div>
 
 ---
 
 ```rust
-let dom = domtree::parse(r#"<ul id=links><li><a href="/a">One</a><li><a href="/b">Two</a></ul>"#);
+let dom = domq::parse(r#"<ul id=links><li><a href="/a">One</a><li><a href="/b">Two</a></ul>"#);
 
 for a in dom.select("#links a[href]") {
     println!("{} -> {}", a.text_content(), a.attr("href").unwrap_or_default());
@@ -39,7 +39,7 @@ for a in dom.select("#links a[href]") {
 // One -> /a
 // Two -> /b        (the missing </li>s were recovered)
 
-let md = domtree::parse("<h2>Notes</h2><p>Some <b>bold</b> text</p>").to_markdown();
+let md = domq::parse("<h2>Notes</h2><p>Some <b>bold</b> text</p>").to_markdown();
 assert_eq!(md, "## Notes\n\nSome **bold** text");
 ```
 
@@ -56,11 +56,11 @@ assert_eq!(md, "## Notes\n\nSome **bold** text");
 
 ```toml
 [dependencies]
-dom-tree-rs = "0.3"
+domq = "0.3"
 ```
 
 ```rust
-let dom = domtree::parse(html);
+let dom = domq::parse(html);
 dom.select_first("h1")
    .map(|h| h.to_text());
 ```
@@ -69,24 +69,24 @@ dom.select_first("h1")
 <td>
 
 ```sh
-cargo install domtree-cli
+cargo install domq-cli
 ```
 
 ```sh
 curl -sL rust-lang.org \
-  | domtree -t h1
+  | domq -t h1
 ```
 
 </td>
 <td>
 
 ```sh
-npm install dom-tree-wasm
+npm install domq
 ```
 
 ```js
 import init, { select }
-  from "dom-tree-wasm";
+  from "domq";
 await init();
 select(html, "a[href]");
 ```
@@ -95,11 +95,11 @@ select(html, "a[href]");
 </tr>
 </table>
 
-Also: 🐍 **Python** — `pip install dom-tree-rs` ([docs](./python)) · 🍺 **Homebrew** —
-`brew install iamsaquib8/tap/domtree` · ⚡ **WASI** — `domtree.wasm` on every
-[release](https://github.com/iamsaquib8/dom-tree-rs/releases).
+Also: 🐍 **Python** — `pip install domq` ([docs](./python)) · 🍺 **Homebrew** —
+`brew install iamsaquib8/tap/domq` · ⚡ **WASI** — `domq.wasm` on every
+[release](https://github.com/iamsaquib8/domq/releases).
 
-## Why dom-tree-rs?
+## Why domq?
 
 - **Zero dependencies.** One crate in your `cargo tree`. A clean build takes
   **0.6 s** — `scraper` pulls in 42 crates and takes 5.3 s.¹
@@ -116,11 +116,11 @@ Also: 🐍 **Python** — `pip install dom-tree-rs` ([docs](./python)) · 🍺 *
   single static binary for your shell.
 - **Fast.** ~500 MB/s on markup — about 8× `scraper`, level with or ahead of
   [`tl`][tl] — with ~20 allocations per parse (see [Performance](#performance)).
-- **Streams, too.** `domtree::events` yields start/end/text events with the
+- **Streams, too.** `domq::events` yields start/end/text events with the
   same recovery as the tree builder, for documents you don't want to keep.
 
 <sub>¹ Clean debug `cargo build` of an empty crate depending only on the parser (default
-features), Apple M4 Pro, 14 cores: dom-tree-rs 0.6 s · tl 0.4 s · html5ever 2.9 s ·
+features), Apple M4 Pro, 14 cores: domq 0.6 s · tl 0.4 s · html5ever 2.9 s ·
 scraper 5.3 s · lol_html 6.9 s. Fewer cores widens the gap.</sub>
 
 ## Cookbook
@@ -129,7 +129,7 @@ scraper 5.3 s · lol_html 6.9 s. Fewer cores widens the gap.</sub>
 <summary><b>Scrape links, titles, and attributes</b></summary>
 
 ```rust
-let dom = domtree::parse(html);
+let dom = domq::parse(html);
 
 let title = dom.select_first("title").map(|t| t.to_text());
 let links: Vec<&str> = dom.select("a[href^='https://']").filter_map(|a| a.attr("href")).collect();
@@ -141,14 +141,14 @@ let price = dom.select_first(".product:has(.in-stock) .price").map(|p| p.to_text
 <summary><b>Turn a web page into Markdown for an LLM</b></summary>
 
 ```rust
-let dom = domtree::parse(html);
+let dom = domq::parse(html);
 let article = dom.select_first("article, main").map(|n| n.to_markdown());
 ```
 
 Or from the shell, stripping the chrome first:
 
 ```sh
-curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer, script' --markdown body
+curl -sL https://blog.rust-lang.org | domq -r 'nav, footer, script' --markdown body
 ```
 </details>
 
@@ -156,7 +156,7 @@ curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer, script' --markdow
 <summary><b>Keep just the article, chunked for RAG</b></summary>
 
 ```rust
-let dom = domtree::parse(html);
+let dom = domq::parse(html);
 let article = dom.main_content();                   // reader mode: drops nav, ads, comments…
 let chunks = match article {
     Some(node) => node.to_markdown_chunks(1500),
@@ -172,7 +172,7 @@ for chunk in &chunks {
 <summary><b>Links, page metadata, and tables as data</b></summary>
 
 ```rust
-let dom = domtree::parse(html);
+let dom = domq::parse(html);
 
 for link in dom.links(Some("https://example.com/blog/")) {
     println!("{} -> {}", link.text, link.url);       // resolved, honours <base href>
@@ -183,7 +183,7 @@ println!("{:?} {:?}", meta.title, meta.canonical);
 
 if let Some(table) = dom.select_first("table#prices") {
     let rows = table.table_rows();                  // colspan/rowspan expanded
-    print!("{}", domtree::to_csv(&rows));
+    print!("{}", domq::to_csv(&rows));
 }
 ```
 </details>
@@ -192,11 +192,11 @@ if let Some(table) = dom.select_first("table#prices") {
 <summary><b>Compile a selector once, reuse it, and get real errors</b></summary>
 
 ```rust
-use domtree::Selector;
+use domq::Selector;
 
 let sel = Selector::parse("li:nth-child(odd) > a").expect("valid selector");
 for page in pages {
-    let dom = domtree::parse(page);
+    let dom = domq::parse(page);
     let count = dom.select(&sel).count();
 }
 
@@ -222,7 +222,7 @@ for node in dom.root().unwrap().descendants() { /* … */ }
 <summary><b>Edit and re-serialize</b></summary>
 
 ```rust
-let mut dom = domtree::parse("<p>Hi <script>track()</script><a href=/x>x</a></p>");
+let mut dom = domq::parse("<p>Hi <script>track()</script><a href=/x>x</a></p>");
 let scripts: Vec<_> = dom.select("script").map(|n| n.id()).collect();
 for id in scripts {
     dom.remove(id);
@@ -248,40 +248,40 @@ assert_eq!(
 
 ```rust
 let src = "<ul>\n  <li>one\n  <li>two</ul>";
-let dom = domtree::parse(src);
+let dom = domq::parse(src);
 let li = dom.select("li").nth(1).unwrap();
 let range = li.source_range().unwrap();              // byte range in `src`
 assert_eq!(&src[range.clone()], "<li>two");
-assert_eq!(domtree::line_col(src, range.start), (3, 3)); // 1-based line, column
+assert_eq!(domq::line_col(src, range.start), (3, 3)); // 1-based line, column
 ```
 </details>
 
 ## Command line
 
-`domtree` is a maintained, zero-dependency, drop-in replacement for
+`domq` is a maintained, zero-dependency, drop-in replacement for
 [`htmlq`](https://github.com/mgdm/htmlq) — same flags, plus Markdown, JSON/JSON
 Lines and CSV output, structured extraction, reader mode, encoding detection,
 a linter, and modern selectors. [Full CLI docs →](./cli)
 
 ```sh
-curl -s https://news.ycombinator.com | domtree -t '.titleline > a'           # headlines
-curl -sL https://www.rust-lang.org | domtree -b https://www.rust-lang.org -a href 'nav a'
-curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer' --markdown body # page → Markdown
-domtree -c 'img:not([alt])' < page.html                                       # a11y check
-echo '<ul><li>a<li>b</ul>' | domtree -p                                       # pretty-print
+curl -s https://news.ycombinator.com | domq -t '.titleline > a'           # headlines
+curl -sL https://www.rust-lang.org | domq -b https://www.rust-lang.org -a href 'nav a'
+curl -sL https://blog.rust-lang.org | domq -r 'nav, footer' --markdown body # page → Markdown
+domq -c 'img:not([alt])' < page.html                                       # a11y check
+echo '<ul><li>a<li>b</ul>' | domq -p                                       # pretty-print
 
 # Structured extraction: one JSON object per post
-curl -sL https://blog.rust-lang.org | domtree --jsonl -b https://blog.rust-lang.org/ \
+curl -sL https://blog.rust-lang.org | domq --jsonl -b https://blog.rust-lang.org/ \
   -e title=a -e url=a@href 'tr:has(a)'
 # {"title":"Announcing Rust 1.99.1","url":"https://blog.rust-lang.org/2026/10/15/Rust-1.99.1/"}
 
 # Reader mode → Markdown, tables → CSV, page metadata → JSON
-curl -sL https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/ | domtree --main --markdown
-domtree --csv 'table#prices' < report.html
-domtree --meta < page.html
+curl -sL https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/ | domq --main --markdown
+domq --csv 'table#prices' < report.html
+domq --meta < page.html
 
 # Lint HTML in CI (file:line:col, exit 1 on findings)
-domtree lint public/**/*.html
+domq lint public/**/*.html
 ```
 
 ## JavaScript & WebAssembly
@@ -289,10 +289,10 @@ domtree lint public/**/*.html
 The same parser — selectors, text, Markdown and all — in a ~41 KB (gzipped) wasm
 module with zero JS dependencies and full TypeScript types. Works in the browser,
 Cloudflare Workers, Deno, Bun, and Node (no setup needed in Node).
-[Package docs →](./dom-tree-wasm) · [**Playground →**](https://iamsaquib8.github.io/dom-tree-rs/)
+[Package docs →](./wasm) · [**Playground →**](https://iamsaquib8.github.io/domq/)
 
 ```js
-import init, { parse, select, toMarkdown, Document } from "dom-tree-wasm";
+import init, { parse, select, toMarkdown, Document } from "domq";
 await init(); // browsers and Workers; harmless in Node
 
 const tree = parse("<ul><li>a<li>b</ul>");   // typed tree: { type: "document", children: [...] }
@@ -306,13 +306,13 @@ page.free();
 
 ## Python
 
-Same engine, Pythonic API, abi3 wheels for Linux, macOS and Windows (Python ≥ 3.9).
+Same engine, Pythonic API, abi3 wheels for Linux, macOS and Windows (Python ≥ 3.11).
 The GIL is released while parsing large documents. [Package docs →](./python)
 
 ```python
-import domtree
+import domq
 
-doc = domtree.parse(html)
+doc = domq.parse(html)
 links = [a.attr("href") for a in doc.select("a[href]")]
 price = doc.select_first(".product:has(.in-stock) .price").text
 markdown = doc.select_first("article").to_markdown()   # ready for an LLM prompt
@@ -320,7 +320,7 @@ markdown = doc.select_first("article").to_markdown()   # ready for an LLM prompt
 
 ## How it compares
 
-| | dom-tree-rs | [tl] | [scraper] | [html5ever] | [lol_html] |
+| | domq | [tl] | [scraper] | [html5ever] | [lol_html] |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Transitive dependencies | **0** | 0 | 42 | 19 | 41 |
 | CSS selectors | **✅** | limited | ✅ | ❌ | ✅ |
@@ -350,7 +350,7 @@ Fast *for an owned tree* — full recovery, entity decoding, source spans and
 all. Apple M4 Pro, `cargo bench` (generated inputs; see
 [benchmarks/](./benchmarks) for method and caveats):
 
-| input | dom-tree-rs | [tl] | [scraper] | [html5ever]¹ |
+| input | domq | [tl] | [scraper] | [html5ever]¹ |
 |---|---:|---:|---:|---:|
 | small (0.5 KiB) | **400 MB/s** | 395 MB/s | 53 MB/s | 48 MB/s |
 | medium (21 KiB) | **491 MB/s** | 462 MB/s | 60 MB/s | 53 MB/s |
@@ -374,7 +374,7 @@ unquoted attributes, hyphenated/namespaced/custom tags, named + numeric entities
 (with browser-style Windows-1252 remapping), and implicit closing for the everyday
 cases (`<li>`, `<p>`, table cells/rows, `<dt>`/`<dd>`, `<option>`). Everything it
 recovers from is recorded in
-[`Dom::errors`](https://docs.rs/dom-tree-rs/latest/domtree/struct.Dom.html#method.errors).
+[`Dom::errors`](https://docs.rs/domq/latest/domq/struct.Dom.html#method.errors).
 
 **Deliberately not done:** full WHATWG tree construction (adoption agency, automatic
 `<html>`/`<head>`/`<body>`, foster parenting). See the [non-goals](./ROADMAP.md#non-goals).
@@ -393,7 +393,7 @@ recovers from is recorded in
 
 ## MSRV
 
-Rust **1.85** (edition 2024), enforced in CI.
+Rust **1.88** (edition 2024), enforced in CI. Raised only in minor releases.
 
 ## Quality
 
@@ -409,7 +409,7 @@ issues labelled **good first issue** are a friendly way in. Please follow the
 [code of conduct](./CODE_OF_CONDUCT.md), and report security problems privately
 as described in [SECURITY.md](./SECURITY.md).
 
-If dom-tree-rs saved you some time, a ⭐ helps other people find it.
+If domq saved you some time, a ⭐ helps other people find it.
 
 ## License
 

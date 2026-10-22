@@ -1,7 +1,7 @@
-"""Type stubs for ``domtree`` (the ``dom-tree-rs`` package on PyPI).
+"""Type stubs for ``domq`` (the ``domq`` package on PyPI).
 
 Parse messy real-world HTML, query it with CSS selectors, and get readable
-text, Markdown, HTML or JSON back. Powered by the dom-tree-rs Rust crate.
+text, Markdown, HTML or JSON back. Powered by the domq Rust crate.
 """
 
 from typing import Any, Callable, Optional, TypeVar, Union, final, overload
@@ -38,7 +38,7 @@ def parse(html: str) -> Document:
 
 @final
 class Document:
-    """A parsed HTML document. Create one with :func:`domtree.parse`.
+    """A parsed HTML document. Create one with :func:`domq.parse`.
 
     Immutable and safe to share between threads.
     """

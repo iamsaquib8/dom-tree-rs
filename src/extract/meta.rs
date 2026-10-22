@@ -103,7 +103,7 @@ impl Dom {
     /// ASCII case-insensitively; empty values are ignored.
     ///
     /// ```
-    /// let dom = domtree::parse(r#"<html lang="en"><head>
+    /// let dom = domq::parse(r#"<html lang="en"><head>
     ///   <title>  Shipping a parser
     ///     | Blog </title>
     ///   <meta name="description" content="What we learned.">
@@ -199,10 +199,8 @@ impl<'a> Scan<'a> {
                     let mime = t.split(';').next().unwrap_or("").trim();
                     mime.eq_ignore_ascii_case("application/ld+json")
                 });
-                if ld {
-                    if let Some(json) = non_empty(&node.text_content()) {
-                        self.meta.json_ld.push(String::from(json));
-                    }
+                if ld && let Some(json) = non_empty(&node.text_content()) {
+                    self.meta.json_ld.push(String::from(json));
                 }
                 return false;
             }
@@ -234,10 +232,10 @@ impl<'a> Scan<'a> {
             }
             self.names.push((key, content));
         }
-        if let Some(http) = node.attr("http-equiv") {
-            if http.trim().eq_ignore_ascii_case("content-language") {
-                self.names.push((String::from("content-language"), content));
-            }
+        if let Some(http) = node.attr("http-equiv")
+            && http.trim().eq_ignore_ascii_case("content-language")
+        {
+            self.names.push((String::from("content-language"), content));
         }
         if self.item_published.is_none()
             && node

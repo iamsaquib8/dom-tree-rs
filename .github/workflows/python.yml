@@ -1,15 +1,15 @@
 name: Python
 
-# Builds and tests the Python package (`pip install dom-tree-rs`, import name
-# `domtree`; sources in python/). abi3 wheels — one per platform, for every
-# CPython >= 3.9 — are built for Linux (manylinux x86_64 + aarch64), macOS
+# Builds and tests the Python package (`pip install domq`, import name
+# `domq`; sources in python/). abi3 wheels — one per platform, for every
+# CPython >= 3.11 — are built for Linux (manylinux x86_64 + aarch64), macOS
 # (x86_64 + arm64) and Windows, plus an sdist.
 #
 # On a `v*` tag the wheels and sdist are published to PyPI with trusted
 # publishing (OIDC): no API token is stored in this repository. One-time setup:
 #   1. On PyPI (Account settings -> Publishing -> "Add a new pending
-#      publisher"): project `dom-tree-rs`, owner `iamsaquib8`, repository
-#      `dom-tree-rs`, workflow `python.yml`, environment `pypi`.
+#      publisher"): project `domq`, owner `iamsaquib8`, repository
+#      `domq`, workflow `python.yml`, environment `pypi`.
 #   2. Optional: GitHub creates the `pypi` environment on first use; under
 #      Settings -> Environments you can restrict it to `v*` tags or require a
 #      reviewer before anything is uploaded.
@@ -41,14 +41,12 @@ env:
 jobs:
   test:
     name: test (python ${{ matrix.python }})
-    # Pinned: setup-python has no 3.9 build for newer Ubuntu images, and 3.9 is
-    # the oldest version the abi3 wheels support, so it stays in the matrix.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # The abi3 floor and the newest stable CPython.
-        python: ["3.9", "3.13"]
+        # The abi3 floor (oldest CPython still supported upstream) and the newest.
+        python: ["3.11", "3.15"]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -69,16 +67,16 @@ jobs:
           python -m pip install --upgrade pip maturin pytest
           maturin build --release --manifest-path python/Cargo.toml --out python/dist
       - name: Install wheel
-        run: python -m pip install --no-index --find-links python/dist dom-tree-rs
-      # Run from the repository root so `import domtree` picks up the installed
-      # wheel, not the python/domtree/ source directory.
+        run: python -m pip install --no-index --find-links python/dist domq
+      # Run from the repository root so `import domq` picks up the installed
+      # wheel, not the python/domq/ source directory.
       - name: pytest
         run: python -m pytest -q python/tests
       - name: Check type stubs against the runtime (stubtest)
-        if: matrix.python == '3.13'
+        if: matrix.python == '3.15'
         run: |
           python -m pip install mypy
-          python -m mypy.stubtest domtree
+          python -m mypy.stubtest domq
 
   linux:
     name: wheel (linux ${{ matrix.target }})
@@ -100,7 +98,7 @@ jobs:
         run: |
           python3 -m venv .venv
           .venv/bin/pip install pytest
-          .venv/bin/pip install --no-index --find-links python/dist dom-tree-rs
+          .venv/bin/pip install --no-index --find-links python/dist domq
           .venv/bin/python -m pytest -q python/tests
       - uses: actions/upload-artifact@v7
         with:
@@ -110,7 +108,7 @@ jobs:
   macos:
     name: wheel (macos ${{ matrix.target }})
     # Apple Silicon runner; the x86_64 wheel is cross-compiled.
-    runs-on: macos-14
+    runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
@@ -119,7 +117,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.15"
       - uses: PyO3/maturin-action@v1
         with:
           working-directory: python
@@ -129,7 +127,7 @@ jobs:
         if: matrix.target == 'aarch64'
         run: |
           python -m pip install pytest
-          python -m pip install --no-index --find-links python/dist dom-tree-rs
+          python -m pip install --no-index --find-links python/dist domq
           python -m pytest -q python/tests
       - uses: actions/upload-artifact@v7
         with:
@@ -143,7 +141,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.15"
           architecture: x64
       - uses: PyO3/maturin-action@v1
         with:
@@ -153,7 +151,7 @@ jobs:
       - name: Smoke-test the wheel
         run: |
           python -m pip install pytest
-          python -m pip install --no-index --find-links python/dist dom-tree-rs
+          python -m pip install --no-index --find-links python/dist domq
           python -m pytest -q python/tests
       - uses: actions/upload-artifact@v7
         with:
@@ -189,7 +187,7 @@ jobs:
     # Must match the environment name configured on PyPI's trusted publisher.
     environment:
       name: pypi
-      url: https://pypi.org/project/dom-tree-rs/
+      url: https://pypi.org/project/domq/
     permissions:
       # OIDC token for PyPI trusted publishing — no API token needed.
       id-token: write

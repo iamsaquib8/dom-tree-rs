@@ -12,7 +12,7 @@ fn main() {
         </ul>
     "#;
 
-    let dom = domtree::parse(html);
+    let dom = domq::parse(html);
 
     println!("--- tree ---");
     println!("{dom:#?}");

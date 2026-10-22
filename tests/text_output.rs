@@ -3,7 +3,7 @@
 //! Page snapshots live in `tests/snapshots/`. Regenerate with
 //! `INSTA_UPDATE=always cargo test --test text_output` and review the diff.
 
-use domtree::parse;
+use domq::parse;
 
 fn text(html: &str) -> String {
     parse(html).to_text()

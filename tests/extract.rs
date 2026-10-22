@@ -2,7 +2,7 @@
 //! listings through `extract_all`, nested structs, every container, source and
 //! modifier, and the exact text of every error.
 
-use domtree::{
+use domq::{
     Dom, ExtractError, ExtractErrorKind, FromHtml, FromHtmlValue, Scope, ValueSource, parse,
 };
 
@@ -500,7 +500,7 @@ struct ItemCount(usize);
 
 impl FromHtml for ItemCount {
     fn from_html(scope: Scope<'_>) -> Result<Self, ExtractError> {
-        let li = domtree::Selector::parse("li").unwrap();
+        let li = domq::Selector::parse("li").unwrap();
         Ok(ItemCount(scope.select(&li).count()))
     }
 }
@@ -741,7 +741,7 @@ fn invalid_selectors() {
         _title: Option<String>,
     }
     let err = parse("<h1>x</h1>").extract::<BadField>().unwrap_err();
-    let selector_error = domtree::Selector::parse("h1[").unwrap_err();
+    let selector_error = domq::Selector::parse("h1[").unwrap_err();
     assert_eq!(
         err.to_string(),
         format!(r#"BadField._title ("h1["): invalid selector: {selector_error}"#)

@@ -5,7 +5,7 @@
 //! The cases only cover errors the macro itself reports, whose text does not
 //! change between compiler versions. After an intentional change to a
 //! message, regenerate the `.stderr` files with
-//! `TRYBUILD=overwrite cargo test -p dom-tree-derive` and review the diff.
+//! `TRYBUILD=overwrite cargo test -p domq-derive` and review the diff.
 
 #[test]
 fn ui() {

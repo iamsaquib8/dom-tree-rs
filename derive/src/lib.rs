@@ -1,4 +1,4 @@
-//! `#[derive(FromHtml)]` for [dom-tree-rs](https://docs.rs/dom-tree-rs):
+//! `#[derive(FromHtml)]` for [domq](https://docs.rs/domq):
 //! declarative extraction of structs from HTML with CSS selectors.
 //!
 //! Use it through the core crate's `derive` feature, which re-exports this
@@ -6,11 +6,11 @@
 //!
 //! ```toml
 //! [dependencies]
-//! dom-tree-rs = { version = "0.4", features = ["derive"] }
+//! domq = { version = "0.4", features = ["derive"] }
 //! ```
 //!
 //! ```ignore
-//! use domtree::FromHtml;
+//! use domq::FromHtml;
 //!
 //! #[derive(FromHtml)]
 //! struct Product {
@@ -22,14 +22,14 @@
 //!     tags: Vec<String>,
 //! }
 //!
-//! let product: Product = domtree::parse(html).extract()?;
+//! let product: Product = domq::parse(html).extract()?;
 //! ```
 //!
 //! The attribute grammar, the container rules (`Option`, `Vec`, nested
 //! structs) and the errors are documented in the core crate under
-//! [Declarative extraction](https://docs.rs/dom-tree-rs/latest/domtree/#declarative-extraction).
+//! [Declarative extraction](https://docs.rs/domq/latest/domq/#declarative-extraction).
 //!
-//! The generated code refers to everything through `::domtree::__private`
+//! The generated code refers to everything through `::domq::__private`
 //! (never `std::`), so it works in `no_std` crates.
 
 #![forbid(unsafe_code)]
@@ -47,7 +47,7 @@ use syn::{
     PathArguments, Token, Type, WherePredicate, parse_macro_input, parse_quote,
 };
 
-/// Implement `domtree::FromHtml` for a struct with named fields.
+/// Implement `domq::FromHtml` for a struct with named fields.
 ///
 /// Every field carries `#[html(...)]` saying what to select and what to read:
 ///
@@ -139,28 +139,28 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     let selector = type_selector.map(|lit| {
         quote! {
-            const SELECTOR: ::domtree::__private::Option<&'static str> =
-                ::domtree::__private::Some(#lit);
+            const SELECTOR: ::domq::__private::Option<&'static str> =
+                ::domq::__private::Some(#lit);
         }
     });
 
     let mut checks = TokenStream2::new();
     let body = match specs {
-        None => quote!(::domtree::__private::Ok(Self)),
+        None => quote!(::domq::__private::Ok(Self)),
         Some(specs) => {
             let mut inits = Vec::new();
             for spec in &specs {
                 let (init, bound, check) = spec.expand(&type_name);
                 let ident = &spec.ident;
                 inits.push(quote!(#ident: #init));
-                if let Some((ty, bound)) = bound {
-                    if mentions_any(&ty, &type_params) {
-                        bounds.push(parse_quote!(#ty: #bound));
-                    }
+                if let Some((ty, bound)) = bound
+                    && mentions_any(&ty, &type_params)
+                {
+                    bounds.push(parse_quote!(#ty: #bound));
                 }
                 checks.extend(check);
             }
-            quote!(::domtree::__private::Ok(Self { #(#inits),* }))
+            quote!(::domq::__private::Ok(Self { #(#inits),* }))
         }
     };
     if !bounds.is_empty() {
@@ -170,12 +170,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     Ok(quote! {
         #[automatically_derived]
-        impl #impl_generics ::domtree::FromHtml for #name #ty_generics #where_clause {
+        impl #impl_generics ::domq::FromHtml for #name #ty_generics #where_clause {
             #selector
 
             fn from_html(
-                __scope: ::domtree::Scope<'_>,
-            ) -> ::domtree::__private::Result<Self, ::domtree::ExtractError> {
+                __scope: ::domq::Scope<'_>,
+            ) -> ::domq::__private::Result<Self, ::domq::ExtractError> {
                 #checks
                 #body
             }
@@ -548,7 +548,7 @@ impl FieldSpec {
         &self,
         type_name: &str,
     ) -> (TokenStream2, Option<(Type, TokenStream2)>, TokenStream2) {
-        let pv = quote!(::domtree::__private);
+        let pv = quote!(::domq::__private);
         if self.skip.is_some() {
             let ty = &self.ty;
             return (
@@ -569,7 +569,7 @@ impl FieldSpec {
             (Some((Source::Html, _)), _) => Some(quote!(#pv::Src::InnerHtml)),
             (Some((Source::OuterHtml, _)), _) => Some(quote!(#pv::Src::OuterHtml)),
             (Some((Source::Markdown, span)), _) => {
-                check = quote_spanned!(*span=> ::domtree::__private::require_markdown!(););
+                check = quote_spanned!(*span=> ::domq::__private::require_markdown!(););
                 Some(quote!(#pv::Src::Markdown))
             }
             (None, Some(_)) => Some(quote!(#pv::Src::Text)),
@@ -612,7 +612,7 @@ impl FieldSpec {
                     .unwrap_or_default();
                 (
                     quote_spanned! {span=>
-                        |__s, __c| ::domtree::__private::with::<#value_ty, _>(
+                        |__s, __c| ::domq::__private::with::<#value_ty, _>(
                             __s, __c, #function, #path,
                         )
                     },
@@ -620,29 +620,29 @@ impl FieldSpec {
                 )
             }
             (None, Some(_)) => (
-                quote_spanned!(span=> ::domtree::__private::value::<#value_ty>),
+                quote_spanned!(span=> ::domq::__private::value::<#value_ty>),
                 Some((value_ty.clone(), quote!(#pv::FromHtmlValue))),
             ),
             (None, None) => (
-                quote_spanned!(span=> ::domtree::__private::nested::<#value_ty>),
+                quote_spanned!(span=> ::domq::__private::nested::<#value_ty>),
                 Some((value_ty.clone(), quote!(#pv::FromHtml))),
             ),
         };
 
         let init = match container {
             Container::Option(_) => {
-                quote_spanned!(span=> ::domtree::__private::opt(#scope, #ctx, #convert)?)
+                quote_spanned!(span=> ::domq::__private::opt(#scope, #ctx, #convert)?)
             }
             Container::Vec(_) => {
-                quote_spanned!(span=> ::domtree::__private::all(#scope, #ctx, #convert)?)
+                quote_spanned!(span=> ::domq::__private::all(#scope, #ctx, #convert)?)
             }
             Container::One if self.default.is_some() => quote_spanned! {span=>
-                ::domtree::__private::Option::unwrap_or_default(
-                    ::domtree::__private::opt(#scope, #ctx, #convert)?
+                ::domq::__private::Option::unwrap_or_default(
+                    ::domq::__private::opt(#scope, #ctx, #convert)?
                 )
             },
             Container::One => {
-                quote_spanned!(span=> ::domtree::__private::one(#scope, #ctx, #convert)?)
+                quote_spanned!(span=> ::domq::__private::one(#scope, #ctx, #convert)?)
             }
         };
         let bound = match (bound, self.default.is_some()) {

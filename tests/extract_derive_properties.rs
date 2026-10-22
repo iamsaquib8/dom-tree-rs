@@ -2,7 +2,7 @@
 //! its container promises (`Vec` = every match, `Option` = the first match if
 //! any), and stays iterative on very deep documents.
 
-use domtree::{Dom, ExtractError, FromHtml, parse};
+use domq::{Dom, ExtractError, FromHtml, parse};
 use proptest::prelude::*;
 
 fn price(value: &str) -> Result<f64, &'static str> {

@@ -1,4 +1,4 @@
-//! Parse-throughput benchmarks: `dom-tree-rs` against `tl`, `scraper` and
+//! Parse-throughput benchmarks: `domq` against `tl`, `scraper` and
 //! `html5ever` (into its reference `RcDom`).
 //!
 //! Run with: `cargo bench` (from the `benchmarks/` directory); add
@@ -11,24 +11,25 @@
 
 use std::time::Duration;
 
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use std::hint::black_box;
 use html5ever::tendril::TendrilSink;
 
 fn bench_parse(c: &mut Criterion) {
-    for (name, input) in dom_tree_rs_benchmarks::inputs() {
+    for (name, input) in domq_benchmarks::inputs() {
         let mut group = c.benchmark_group(format!("parse/{name}"));
         group.throughput(Throughput::Bytes(input.len() as u64));
         group.warm_up_time(Duration::from_secs(1));
         group.measurement_time(Duration::from_secs(4));
         let input = input.as_str();
 
-        group.bench_function("dom-tree-rs", |b| {
-            b.iter(|| black_box(domtree::parse(black_box(input))).len())
+        group.bench_function("domq", |b| {
+            b.iter(|| black_box(domq::parse(black_box(input))).len())
         });
 
         // The streaming API: the same recovery, no tree.
-        group.bench_function("dom-tree-rs/events", |b| {
-            b.iter(|| domtree::events(black_box(input)).count())
+        group.bench_function("domq/events", |b| {
+            b.iter(|| domq::events(black_box(input)).count())
         });
 
         group.bench_function("tl", |b| {

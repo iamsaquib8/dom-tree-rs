@@ -2,7 +2,7 @@
 //! as the zero-dependency `to_json` writer.
 #![cfg(all(feature = "serde", feature = "json"))]
 
-use domtree::parse;
+use domq::parse;
 
 #[test]
 fn zero_dep_json_matches_serde_json() {

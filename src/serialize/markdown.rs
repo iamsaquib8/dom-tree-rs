@@ -54,7 +54,7 @@ impl Dom {
     /// newline.
     ///
     /// ```
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     "<h1>Title</h1><p>Some <b>bold</b> and a <a href='/x'>link</a>.</p>\
     ///      <ul><li>one</li><li>two</li></ul>",
     /// );
@@ -76,7 +76,7 @@ impl NodeRef<'_> {
     /// This node's subtree as Markdown; see [`Dom::to_markdown`].
     ///
     /// ```
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     "<div><pre><code class='language-rust'>fn main() {}\n</code></pre></div>",
     /// );
     /// let pre = dom.find_by_tag("pre").next().unwrap();
@@ -88,7 +88,7 @@ impl NodeRef<'_> {
     /// element's content.
     ///
     /// ```
-    /// let dom = domtree::parse("<head><title>Tom &amp; *Jerry*</title></head>");
+    /// let dom = domq::parse("<head><title>Tom &amp; *Jerry*</title></head>");
     /// assert_eq!(dom.find_by_tag("title").next().unwrap().to_markdown(), r"Tom & \*Jerry\*");
     /// assert_eq!(dom.find_by_tag("head").next().unwrap().to_markdown(), "");
     /// ```
@@ -438,10 +438,10 @@ impl<'a> Markdown<'a> {
         if f.prefix {
             self.prefixes.pop();
         }
-        if f.list {
-            if let Some(l) = self.lists.pop() {
-                self.last_list = Some((self.prefixes.len(), self.out.len(), l.ordered, l.alt));
-            }
+        if f.list
+            && let Some(l) = self.lists.pop()
+        {
+            self.last_list = Some((self.prefixes.len(), self.out.len(), l.ordered, l.alt));
         }
         if f.block {
             self.sep(2);
@@ -568,10 +568,10 @@ impl<'a> Markdown<'a> {
             self.text(a.attr("href").unwrap_or("").trim());
             self.space |= after;
         }
-        if let Some(w) = self.wraps.pop() {
-            if w.open {
-                self.closing.push(w.mark);
-            }
+        if let Some(w) = self.wraps.pop()
+            && w.open
+        {
+            self.closing.push(w.mark);
         }
     }
 

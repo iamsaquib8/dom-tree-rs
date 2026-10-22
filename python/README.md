@@ -1,35 +1,35 @@
-# dom-tree-rs for Python
+# domq for Python
 
 Parse messy real-world HTML, query it with CSS selectors, and get **readable
 text** or **Markdown** back — fast, typed, and it never chokes on bad markup.
-Python bindings for the [dom-tree-rs](https://github.com/iamsaquib8/dom-tree-rs)
+Python bindings for the [domq](https://github.com/iamsaquib8/domq)
 Rust crate.
 
 ```sh
-pip install dom-tree-rs
+pip install domq
 ```
 
 ```python
-import domtree
+import domq
 
-doc = domtree.parse("<ul><li class='x'>a</li><li>b</li></ul>")
+doc = domq.parse("<ul><li class='x'>a</li><li>b</li></ul>")
 [li.text for li in doc.select("li")]   # ['a', 'b']
 doc.select_first("li.x").html          # '<li class="x">a</li>'
 ```
 
-The distribution is called `dom-tree-rs` (the name `domtree` was taken on
-PyPI); the import name is `domtree`. Wheels are `abi3`: one wheel per platform
-works on every CPython ≥ 3.9 (Linux x86_64/aarch64, macOS Intel/Apple Silicon,
+The distribution is called `domq` (the name `domq` was taken on
+PyPI); the import name is `domq`. Wheels are `abi3`: one wheel per platform
+works on every CPython ≥ 3.11 (Linux x86_64/aarch64, macOS Intel/Apple Silicon,
 Windows).
 
 ## Scraping
 
 ```python
-import domtree
+import domq
 import urllib.request
 
 html = urllib.request.urlopen("https://example.com/shop").read().decode()
-doc = domtree.parse(html)
+doc = domq.parse(html)
 
 products = [
     {
@@ -56,7 +56,7 @@ price.parent.children       # child elements
 ## Declarative extraction
 
 Describe the data you want as a dataclass, one CSS selector per field, and let
-`domtree.extract` fill it in. Values are converted to the field's type, lists
+`domq.extract` fill it in. Values are converted to the field's type, lists
 collect every match, nested dataclasses are extracted from each matched element,
 and an error names the field and selector that failed.
 
@@ -64,8 +64,8 @@ and an error names the field and selector that failed.
 from dataclasses import dataclass
 from typing import Annotated, Optional
 
-import domtree
-from domtree import ExtractError, Select, extract, extract_all
+import domq
+from domq import ExtractError, Select, extract, extract_all
 
 @dataclass
 class Review:
@@ -126,7 +126,7 @@ extract_all(Product, html)          # one Product per `.product`, in document or
 extract(Product, html)        # one Product: the first match of __select__
 # Product(title='Widget', price=9.99, image='/img/widget.png', tags=['tools', 'sale'], ...)
 
-doc = domtree.parse(html)
+doc = domq.parse(html)
 extract(Product, doc.select(".product")[1])   # an Element is used as given
 # Product(title='Gadget', price=19.5, image=None, tags=[], ...)
 ```
@@ -162,7 +162,7 @@ annotations` works.
 `ValueError`) naming the field path, the selector and what was read:
 
 ```python
-bad = domtree.parse(html.replace('data-value="9.99"', 'data-value="$5"'))
+bad = domq.parse(html.replace('data-value="9.99"', 'data-value="$5"'))
 try:
     extract(Product, bad.select_first(".product"))
 except ExtractError as err:
@@ -189,7 +189,7 @@ Pick the content you want and convert it to clean Markdown (CommonMark + GFM:
 headings, lists, links, images, code blocks, tables, quotes):
 
 ```python
-doc = domtree.parse(html)
+doc = domq.parse(html)
 
 article = doc.select_first("article") or doc.root
 markdown = article.to_markdown()
@@ -214,7 +214,7 @@ instead (a line per block, a blank line between paragraphs) use `.text` /
 ## API
 
 ```python
-domtree.parse(html: str) -> Document
+domq.parse(html: str) -> Document
 ```
 
 Never raises on malformed HTML — the parser recovers like a browser would
@@ -257,7 +257,7 @@ byte 1`). Supported: type, `.class`, `#id`, `*`, attribute selectors
 `:nth-child()`/`:nth-of-type()` and friends, `:first-child`, `:only-child`,
 `:empty`, `:root`, `:scope`, `:not()`, `:is()`, `:where()`, `:has()`,
 `:contains()`, `:checked`, `:disabled`, … — see the
-[main README](https://github.com/iamsaquib8/dom-tree-rs#readme) for the full list.
+[main README](https://github.com/iamsaquib8/domq#readme) for the full list.
 
 Elements keep their document alive, compare equal when they are the same node,
 and are hashable. Documents and elements are immutable, so they are safe to

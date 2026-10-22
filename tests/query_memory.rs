@@ -7,7 +7,7 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
-use domtree::{Selector, parse};
+use domq::{Selector, parse};
 
 /// Tracks the high-water mark of live heap bytes.
 struct Counting;

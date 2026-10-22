@@ -3,7 +3,7 @@
 //! chunking must never panic, keep their promises, and stay within bounded
 //! stack and work on hostile input.
 
-use domtree::{Dom, parse, resolve_srcset, resolve_url, to_csv};
+use domq::{Dom, parse, resolve_srcset, resolve_url, to_csv};
 use proptest::prelude::*;
 
 /// Markup soup biased towards what the extractors look at.

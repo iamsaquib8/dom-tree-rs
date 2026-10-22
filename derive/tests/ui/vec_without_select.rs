@@ -1,4 +1,4 @@
-use domtree::FromHtml;
+use domq::FromHtml;
 
 #[derive(FromHtml)]
 struct Links {

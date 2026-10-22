@@ -42,7 +42,7 @@ const article = `<!doctype html>
     <table>
       <tr><th>Approach</th><th>p95</th></tr>
       <tr><td>Headless browser</td><td>900 ms</td></tr>
-      <tr><td>dom-tree-wasm</td><td>40 ms</td></tr>
+      <tr><td>domq</td><td>40 ms</td></tr>
     </table>
     <blockquote><p>Delete the browser, keep the content.</p></blockquote>
     <p>Images keep their alt text: <img src="/p95.png" alt="p95 latency chart"></p>

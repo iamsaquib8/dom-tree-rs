@@ -23,7 +23,7 @@ flowchart LR
    byte-driven state machine that yields borrowed `Token`s (start/end tags,
    text, comments, doctypes). It also handles raw-text elements
    (`<script>`, `<style>`, `<title>`, `<textarea>`). Public as
-   `domtree::tokenize` for streaming use. Internally the tree builder pulls
+   `domq::tokenize` for streaming use. Internally the tree builder pulls
    tokens with `next_token`, which leaves a start tag's attributes in a buffer
    reused for every tag, so parsing allocates nothing per tag. Every search for
    the next `<`, `&`, quote, `>` or `-->` goes through `src/scan.rs`: a safe
@@ -38,7 +38,7 @@ flowchart LR
    reports elements, text, comments and ends to. `DomSink` fills the `Dom`
    arena (lower-casing names and decoding entities — `src/entities.rs` —
    straight into its string buffer); the event queue in `src/events.rs`
-   becomes `domtree::events`. So the tree and the event stream apply the same
+   becomes `domq::events`. So the tree and the event stream apply the same
    recovery by construction, and the `Dom` path monomorphizes to the same code
    as a hand-written builder.
 3. **The `Dom`** (`src/tree.rs`, `src/node.rs`) — an arena (`Vec<Node>`) of
@@ -54,7 +54,7 @@ flowchart LR
    out in document order by the parser. `NodeId` is a non-zero `u32`, so
    `Option<NodeId>` is 4 bytes and a `Node` is 52 bytes. Each parsed node also
    records its **source range** (two `u32`s; `NodeRef::source_range`,
-   `domtree::line_col` in `src/source.rs`). The arenas are reserved up front
+   `domq::line_col` in `src/source.rs`). The arenas are reserved up front
    from the input length (sized for dense markup); the node and attribute
    arenas are shrunk after parsing if more than half is unused (prose).
 4. **Editing** (`src/edit.rs`) — `remove`, attribute edits, `set_text`,
@@ -83,14 +83,14 @@ flowchart LR
 Declarative extraction (`src/from_html.rs`, `query` feature) is the
 `FromHtml` / `FromHtmlValue` traits, `Dom::extract` / `extract_all`, the
 `ExtractError` type and the small runtime (`one`, `opt`, `all`, …) that
-`#[derive(FromHtml)]` expands to through the hidden `domtree::__private`
-module. The macro itself lives in `derive/` (the `dom-tree-derive`
+`#[derive(FromHtml)]` expands to through the hidden `domq::__private`
+module. The macro itself lives in `derive/` (the `domq-derive`
 proc-macro crate, a workspace member re-exported by the `derive` feature):
 it only parses `#[html(...)]` and emits calls into that runtime, so the
 behaviour is in the core and the macro never depends on it.
 
-Around the core: `cli/` (the `domtree` binary, a workspace member),
-`dom-tree-wasm/` (wasm-bindgen bindings and npm package), `playground/` (the
+Around the core: `cli/` (the `domq` binary, a workspace member),
+`wasm/` (wasm-bindgen bindings and npm package), `playground/` (the
 GitHub Pages site), `benchmarks/` and `fuzz/` (separate crates with their own
 dependencies, excluded from the workspace).
 
@@ -106,7 +106,7 @@ dependencies, excluded from the workspace).
 | **Zero runtime dependencies by default** | CI `cargo tree` gate; new deps must be optional features |
 | **`no_std + alloc`** | `#![no_std]`; CI builds for `thumbv7em-none-eabi` |
 | **No `unsafe`** | `#![forbid(unsafe_code)]` |
-| **MSRV 1.85** | CI `msrv` job |
+| **MSRV 1.88** | CI `msrv` job |
 
 ## Where to make common changes
 
@@ -132,11 +132,11 @@ dependencies, excluded from the workspace).
   `error_messages_match_the_python_binding` in step with the Python
   binding), `tests/extract_derive_properties.rs`, and the macro's
   diagnostics in `derive/tests/ui/` (regenerate with
-  `TRYBUILD=overwrite cargo test -p dom-tree-derive` and review the
+  `TRYBUILD=overwrite cargo test -p domq-derive` and review the
   `.stderr` diff).
 - **A CLI flag** → `cli/src/args.rs` (parsing + `--help` text) and
   `cli/src/main.rs`; end-to-end tests in `cli/tests/cli.rs`.
-- **The JS API** → `dom-tree-wasm/src/lib.rs`; tests in `dom-tree-wasm/tests/`.
+- **The JS API** → `wasm/src/lib.rs`; tests in `wasm/tests/`.
 
 ## Testing at a glance
 
@@ -146,7 +146,7 @@ cargo clippy --workspace --all-features --all-targets -- -D warnings
 cargo +nightly fuzz run select          # or parse / tokenize / markdown / differential
 cargo test --features simd              # the memchr scanning path
 cargo test --features derive            # #[derive(FromHtml)] end to end
-cargo test -p dom-tree-derive           # the macro's compile errors (trybuild)
+cargo test -p domq-derive           # the macro's compile errors (trybuild)
 ```
 
 After an intentional output change, review and accept snapshots with

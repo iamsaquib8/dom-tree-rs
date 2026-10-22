@@ -1,7 +1,7 @@
 //! `NodeRef::source_range` and `line_col`: every node kind, implicit and
 //! mis-nested closes, entities, CRLF, multi-byte UTF-8.
 
-use domtree::{Dom, line_col, parse};
+use domq::{Dom, line_col, parse};
 
 /// The source text of every node, in document order.
 fn spans<'s>(dom: &Dom, src: &'s str) -> Vec<&'s str> {

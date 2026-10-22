@@ -96,10 +96,10 @@ impl<'a> Events<'a> {
     /// those found so far.
     ///
     /// ```
-    /// let mut events = domtree::events("<p>a</b>");
+    /// let mut events = domq::events("<p>a</b>");
     /// let n = events.by_ref().count();
     /// assert_eq!(n, 3); // Start p, Text, End p (implied, at the end of input)
-    /// assert_eq!(events.errors(), domtree::parse("<p>a</b>").errors());
+    /// assert_eq!(events.errors(), domq::parse("<p>a</b>").errors());
     /// ```
     pub fn errors(&self) -> &[ParseError] {
         &self.builder.errors

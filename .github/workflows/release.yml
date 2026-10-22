@@ -1,6 +1,6 @@
 name: Release
 
-# Builds prebuilt `domtree` CLI binaries (plus a WASI `domtree.wasm`) and
+# Builds prebuilt `domq` CLI binaries (plus a WASI `domq.wasm`) and
 # attaches them to a GitHub Release when a version tag (v0.3.0, …) is pushed,
 # then prints a filled-in Homebrew formula for the tap (see
 # packaging/homebrew/README.md) and publishes the wasm package to npm (the
@@ -29,9 +29,9 @@ jobs:
           - { target: x86_64-unknown-linux-musl, os: ubuntu-latest }
           # Native arm64 runner (free for public repositories).
           - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
-          - { target: aarch64-apple-darwin, os: macos-14 }
+          - { target: aarch64-apple-darwin, os: macos-latest }
           # Cross-compiled on Apple Silicon (the Intel macos-13 image is retired).
-          - { target: x86_64-apple-darwin, os: macos-14 }
+          - { target: x86_64-apple-darwin, os: macos-latest }
           - { target: x86_64-pc-windows-msvc, os: windows-latest }
     steps:
       - uses: actions/checkout@v7
@@ -42,23 +42,23 @@ jobs:
         if: contains(matrix.target, 'musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Build
-        run: cargo build --release -p domtree-cli --target ${{ matrix.target }}
+        run: cargo build --release -p domq-cli --target ${{ matrix.target }}
       - name: Package (unix)
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          NAME="domtree-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          NAME="domq-${GITHUB_REF_NAME}-${{ matrix.target }}"
           mkdir "$NAME"
-          cp "target/${{ matrix.target }}/release/domtree" cli/README.md LICENSE "$NAME/"
+          cp "target/${{ matrix.target }}/release/domq" cli/README.md LICENSE "$NAME/"
           tar czf "$NAME.tar.gz" "$NAME"
           echo "ASSET=$NAME.tar.gz" >> "$GITHUB_ENV"
       - name: Package (windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $name = "domtree-$env:GITHUB_REF_NAME-${{ matrix.target }}"
+          $name = "domq-$env:GITHUB_REF_NAME-${{ matrix.target }}"
           New-Item -ItemType Directory $name | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/domtree.exe", cli/README.md, LICENSE $name
+          Copy-Item "target/${{ matrix.target }}/release/domq.exe", cli/README.md, LICENSE $name
           Compress-Archive -Path $name -DestinationPath "$name.zip"
           "ASSET=$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
       - uses: actions/upload-artifact@v7
@@ -67,7 +67,7 @@ jobs:
           path: ${{ env.ASSET }}
 
   # The CLI for WebAssembly/WASI, built and smoke-tested under wasmtime by
-  # wasi.yml; uploads the `domtree-wasm` artifact (domtree.wasm).
+  # wasi.yml; uploads the `domq-wasm` artifact (domq.wasm).
   wasi:
     name: wasi
     uses: ./.github/workflows/wasi.yml
@@ -81,16 +81,16 @@ jobs:
         with:
           merge-multiple: true
       - name: Checksums
-        run: sha256sum domtree-* domtree.wasm > SHA256SUMS
+        run: sha256sum domq-* domq.wasm > SHA256SUMS
       - uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: |
-            domtree-*
-            domtree.wasm
+            domq-*
+            domq.wasm
             SHA256SUMS
 
-  # Fills in packaging/homebrew/domtree.rb with this release's version and the
+  # Fills in packaging/homebrew/domq.rb with this release's version and the
   # sha256 of each archive, and shows it in the job summary (also uploaded as
   # the `homebrew-formula` artifact) to paste into iamsaquib8/homebrew-tap.
   homebrew:
@@ -107,31 +107,31 @@ jobs:
           path: assets
       - name: Fill in the formula
         run: |
-          packaging/homebrew/fill-formula.sh "${GITHUB_REF_NAME#v}" assets > domtree.rb
+          packaging/homebrew/fill-formula.sh "${GITHUB_REF_NAME#v}" assets > domq.rb
           {
             echo "## Homebrew formula for ${GITHUB_REF_NAME}"
             echo
             cat <<'EOF'
-          Copy this to `Formula/domtree.rb` in [iamsaquib8/homebrew-tap](https://github.com/iamsaquib8/homebrew-tap)
+          Copy this to `Formula/domq.rb` in [iamsaquib8/homebrew-tap](https://github.com/iamsaquib8/homebrew-tap)
           (it is also attached to this run as the `homebrew-formula` artifact):
 
           ```ruby
           EOF
-            cat domtree.rb
+            cat domq.rb
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          cat domtree.rb
+          cat domq.rb
       - uses: actions/upload-artifact@v7
         with:
           name: homebrew-formula
-          path: domtree.rb
+          path: domq.rb
 
   # Publishes the wasm bindings to npm with trusted publishing (OIDC): no token
-  # is stored in the repo. One-time setup on npmjs.com → dom-tree-wasm →
-  # Settings → Trusted publishing: repository iamsaquib8/dom-tree-rs, workflow
-  # release.yml, environment npm. The tag must match dom-tree-wasm's version.
+  # is stored in the repo. One-time setup on npmjs.com → domq →
+  # Settings → Trusted publishing: repository iamsaquib8/domq, workflow
+  # release.yml, environment npm. The tag must match wasm/Cargo.toml's version.
   npm:
-    name: publish dom-tree-wasm to npm
+    name: publish domq to npm
     needs: release
     runs-on: ubuntu-latest
     environment: npm
@@ -148,21 +148,21 @@ jobs:
           tool: wasm-pack
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: lts/*
           registry-url: https://registry.npmjs.org
       - name: Check the tag matches the package version
         shell: bash
         run: |
-          VERSION=$(grep -m1 '^version' dom-tree-wasm/Cargo.toml | cut -d'"' -f2)
+          VERSION=$(grep -m1 '^version' wasm/Cargo.toml | cut -d'"' -f2)
           test "v$VERSION" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != v$VERSION"; exit 1; }
       - name: Build
-        working-directory: dom-tree-wasm
+        working-directory: wasm
         run: |
           wasm-pack build --target web --release
           node npm/finish.mjs
           sh npm/smoke-test.sh
       - name: Publish (trusted publishing, with provenance)
-        working-directory: dom-tree-wasm/pkg
+        working-directory: wasm/pkg
         run: |
           npm install -g npm@latest
           npm publish --access public --provenance

@@ -32,7 +32,7 @@ impl NodeRef<'_> {
     /// **without** the content of tables nested in it — such a table reads as
     /// a paragraph break — since a nested table has rows of its own (call
     /// `table_rows` on it). This keeps extracting every table of a page, as
-    /// `domtree --csv` does, linear in the page's size. Returns an empty list
+    /// `domq --csv` does, linear in the page's size. Returns an empty list
     /// if this node is not a `<table>`.
     ///
     /// A cell spanning several columns or rows is **repeated** in every slot
@@ -49,7 +49,7 @@ impl NodeRef<'_> {
     /// further spans count as 1.
     ///
     /// ```
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     "<table>
     ///        <thead><tr><th>Region</th><th>Q1</th><th>Q2</th></tr></thead>
     ///        <tbody>
@@ -170,15 +170,15 @@ impl NodeRef<'_> {
 /// [`NodeRef::table_rows`] of a table, by value or by reference.
 ///
 /// ```
-/// let dom = domtree::parse(
+/// let dom = domq::parse(
 ///     r#"<table><tr><th>Name<th>Note<tr><td>Ann<td>says "hi", twice</table>"#,
 /// );
 /// let rows = dom.find_by_tag("table").next().unwrap().table_rows();
 /// assert_eq!(
-///     domtree::to_csv(&rows),
+///     domq::to_csv(&rows),
 ///     "Name,Note\r\nAnn,\"says \"\"hi\"\", twice\"\r\n",
 /// );
-/// assert_eq!(domtree::to_csv([["a", "b\nc"]]), "a,\"b\nc\"\r\n");
+/// assert_eq!(domq::to_csv([["a", "b\nc"]]), "a,\"b\nc\"\r\n");
 /// ```
 pub fn to_csv<R, C, S>(rows: R) -> String
 where

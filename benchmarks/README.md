@@ -1,6 +1,6 @@
 # Benchmarks
 
-Parse throughput and memory of `dom-tree-rs` next to
+Parse throughput and memory of `domq` next to
 [`tl`](https://crates.io/crates/tl), [`scraper`](https://crates.io/crates/scraper)
 and [`html5ever`](https://crates.io/crates/html5ever) (into its reference
 `RcDom`), on the same inputs, in the same process.
@@ -8,7 +8,7 @@ and [`html5ever`](https://crates.io/crates/html5ever) (into its reference
 ```sh
 cd benchmarks
 cargo bench                                    # throughput (criterion)
-cargo bench --features simd -- 'dom-tree-rs$'  # with memchr-backed scanning
+cargo bench --features simd -- 'domq$'  # with memchr-backed scanning
 cargo run --release --example memory           # allocations, peak and retained heap
 ```
 
@@ -24,10 +24,10 @@ Every parser gets the same `&str` and builds its whole document; dropping it
 is included. They do different amounts of work, so read the numbers with that
 in mind:
 
-- **dom-tree-rs** — tokenizes, applies its recovery rules (implicit closes,
+- **domq** — tokenizes, applies its recovery rules (implicit closes,
   void elements, mis-nesting), decodes entities, lower-cases names, records
   source ranges and diagnostics, into an arena of owned strings.
-- **dom-tree-rs/events** — the same recovery streamed by `domtree::events`,
+- **domq/events** — the same recovery streamed by `domq::events`,
   without a tree.
 - **tl** — a speed specialist: no entity decoding, no implicit closes; nodes
   borrow from the input.
@@ -55,7 +55,7 @@ lower of the two runs is shown.
 
 ### Throughput
 
-| input | dom-tree-rs | dom-tree-rs/events | tl | scraper | html5ever (rcdom) |
+| input | domq | domq/events | tl | scraper | html5ever (rcdom) |
 |---|---:|---:|---:|---:|---:|
 | small | 400 MB/s (1.2 µs) | 341 MB/s (1.4 µs) | 395 MB/s (1.2 µs) | 53 MB/s (8.8 µs) | 48 MB/s (9.6 µs) |
 | medium | 491 MB/s (43.1 µs) | 411 MB/s (51.5 µs) | 462 MB/s (45.8 µs) | 60 MB/s (354 µs) | 53 MB/s (401 µs) |
@@ -63,7 +63,7 @@ lower of the two runs is shown.
 | text-heavy | 7.7 GB/s (72.8 µs) | 6.9 GB/s (81.7 µs) | 8.5 GB/s (66.3 µs) | 1.9 GB/s (302 µs) | 1.6 GB/s (355 µs) |
 | table-heavy | 422 MB/s (1.73 ms) | 329 MB/s (2.22 ms) | 326 MB/s (2.23 ms) | 58 MB/s (12.7 ms) | 51 MB/s (14.2 ms) |
 
-On markup, `dom-tree-rs` is 7–8× faster than `scraper` and 8–10× faster than
+On markup, `domq` is 7–8× faster than `scraper` and 8–10× faster than
 `html5ever`'s `RcDom` (4–5× on prose); it is level with `tl` on small
 documents, ahead of it on large markup (+30–40%), and ~10% behind it on prose.
 These are generated documents — real pages differ — and `tl` does less work.
@@ -71,7 +71,7 @@ The streaming API takes 12–28% longer than building the tree: it hands out an
 owned attribute list per start tag where the tree shares one arena. It exists
 for memory, not speed.
 
-### Before / after the 0.5 work (`dom-tree-rs` only)
+### Before / after the 0.5 work (`domq` only)
 
 | input | 0.4 (3aaba5e) | now | change |
 |---|---:|---:|---:|
@@ -95,18 +95,18 @@ live heap, and what the result still **retains** once parsing is done.
 
 | input | parser | allocations | allocated | peak | retained (× input) |
 |---|---|---:|---:|---:|---:|
-| large (420 KiB) | dom-tree-rs | 20 | 2.79 MiB | 2.52 MiB | 2.45 MiB (6.0×) |
-| | dom-tree-rs/events | 8,420 | 1.50 MiB | 204 KiB | 0 |
+| large (420 KiB) | domq | 20 | 2.79 MiB | 2.52 MiB | 2.45 MiB (6.0×) |
+| | domq/events | 8,420 | 1.50 MiB | 204 KiB | 0 |
 | | tl | 7,226 | 10.9 MiB | 5.52 MiB | 5.52 MiB (13.5×) |
 | | scraper | 22,726 | 10.2 MiB | 5.06 MiB | 5.06 MiB (12.3×) |
 | | html5ever (rcdom) | 64,733 | 6.37 MiB | 5.09 MiB | 5.09 MiB (12.4×) |
-| text-heavy (547 KiB) | dom-tree-rs | 6 | 2.92 MiB | 2.85 MiB | 624 KiB (1.1×) |
-| | dom-tree-rs/events | 243 | 369 KiB | 2 KiB | 0 |
+| text-heavy (547 KiB) | domq | 6 | 2.92 MiB | 2.85 MiB | 624 KiB (1.1×) |
+| | domq/events | 243 | 369 KiB | 2 KiB | 0 |
 | | tl | 262 | 680 KiB | 342 KiB | 342 KiB (0.6×) |
 | | scraper | 737 | 1.93 MiB | 1.26 MiB | 1.26 MiB (2.4×) |
 | | html5ever (rcdom) | 2,749 | 1.66 MiB | 1.23 MiB | 1.23 MiB (2.3×) |
-| table-heavy (712 KiB) | dom-tree-rs | 23 | 11.2 MiB | 7.65 MiB | 7.22 MiB (10.4×) |
-| | dom-tree-rs/events | 24,022 | 5.18 MiB | 950 KiB | 0 |
+| table-heavy (712 KiB) | domq | 23 | 11.2 MiB | 7.65 MiB | 7.22 MiB (10.4×) |
+| | domq/events | 24,022 | 5.18 MiB | 950 KiB | 0 |
 | | tl | 4,029 | 21.3 MiB | 10.7 MiB | 10.7 MiB (15.3×) |
 | | scraper | 60,012 | 21.9 MiB | 10.1 MiB | 10.1 MiB (14.6×) |
 | | html5ever (rcdom) | 156,045 | 14.9 MiB | 11.0 MiB | 11.0 MiB (15.8×) |
@@ -118,7 +118,7 @@ parsing, hence the low retained figure. The event stream's peak is the
 nesting depth plus the collected diagnostics (16 bytes each — table-heavy has
 ~28,000 omitted `</td>`/`</tr>`).
 
-`dom-tree-rs` before / after the 0.5 work:
+`domq` before / after the 0.5 work:
 
 | input | allocations | peak | retained |
 |---|---:|---:|---:|

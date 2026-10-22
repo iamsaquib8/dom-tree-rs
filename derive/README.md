@@ -1,6 +1,6 @@
-# dom-tree-derive
+# domq-derive
 
-`#[derive(FromHtml)]` for [dom-tree-rs](https://crates.io/crates/dom-tree-rs):
+`#[derive(FromHtml)]` for [domq](https://crates.io/crates/domq):
 declarative extraction of Rust structs from HTML with CSS selectors.
 
 Don't depend on this crate directly. Turn on the core crate's `derive`
@@ -9,11 +9,11 @@ implements (like `serde` and `serde_derive`):
 
 ```toml
 [dependencies]
-dom-tree-rs = { version = "0.4", features = ["derive"] }
+domq = { version = "0.4", features = ["derive"] }
 ```
 
 ```rust
-use domtree::FromHtml;
+use domq::FromHtml;
 
 #[derive(FromHtml)]
 struct Product {
@@ -40,8 +40,8 @@ struct Card {
     url: String,
 }
 
-let product: Product = domtree::parse(html).extract()?;
-let cards: Vec<Card> = domtree::parse(listing).extract_all()?;
+let product: Product = domq::parse(html).extract()?;
+let cards: Vec<Card> = domq::parse(listing).extract_all()?;
 ```
 
 ## Attributes
@@ -94,9 +94,9 @@ neither `FromHtml` nor `FromHtmlValue`, a `with` function of the wrong type,
 and `markdown` without the core's `markdown` feature are reported at the
 field.
 
-The generated code refers only to `::domtree::__private` re-exports (never
+The generated code refers only to `::domq::__private` re-exports (never
 `std`), so it works in `no_std` crates. Full documentation:
-[Declarative extraction](https://docs.rs/dom-tree-rs/latest/domtree/#declarative-extraction).
+[Declarative extraction](https://docs.rs/domq/latest/domq/#declarative-extraction).
 
 ## License
 

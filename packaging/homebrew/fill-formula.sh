@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Print packaging/homebrew/domtree.rb with a real version and real sha256s.
+# Print packaging/homebrew/domq.rb with a real version and real sha256s.
 #
-#   packaging/homebrew/fill-formula.sh <version> <assets-dir> > domtree.rb
+#   packaging/homebrew/fill-formula.sh <version> <assets-dir> > domq.rb
 #
 # <version> is without the leading "v" (e.g. 0.3.0); <assets-dir> holds the
 # release archives built by .github/workflows/release.yml
-# (domtree-v<version>-<target>.tar.gz). Used by the `homebrew` job in
+# (domq-v<version>-<target>.tar.gz). Used by the `homebrew` job in
 # release.yml; runs on Linux (sha256sum) and macOS (shasum).
 set -euo pipefail
 
@@ -15,7 +15,7 @@ if [ $# -ne 2 ]; then
 fi
 version="$1"
 assets="$2"
-template="$(dirname "$0")/domtree.rb"
+template="$(dirname "$0")/domq.rb"
 targets="aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl"
 
 sha256() {
@@ -32,7 +32,7 @@ formula="$(printf '%s\n' "$formula" | sed '/^# --- template notes/,/^# --- end t
 formula="$(printf '%s\n' "$formula" | sed -E "s/^(  version )\"[^\"]*\"/\1\"${version}\"/")"
 
 for target in $targets; do
-  archive="${assets}/domtree-v${version}-${target}.tar.gz"
+  archive="${assets}/domq-v${version}-${target}.tar.gz"
   if [ ! -f "$archive" ]; then
     echo "missing release asset: $archive" >&2
     exit 1

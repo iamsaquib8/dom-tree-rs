@@ -378,7 +378,13 @@ def _validate_selector(path: str, selector: str, source: str) -> None:
     try:
         _EMPTY.select_first(selector)
     except ValueError as exc:
-        raise ExtractError(path, selector, source, str(exc)) from exc
+        # The selector is already shown in the parentheses, so drop it from the
+        # native message (matching Rust: `invalid selector: <reason>`).
+        message = str(exc)
+        quoted = f"invalid selector '{selector}': "
+        if message.startswith(quoted):
+            message = "invalid selector: " + message[len(quoted):]
+        raise ExtractError(path, selector, source, message) from exc
 
 
 def _build(cls: type, pending: Dict[type, _Plan]) -> _Plan:
@@ -593,10 +599,19 @@ def _scope(source: Union[str, Document, Element], func: str) -> _Scope:
 def extract(cls: "type[_T]", source: Union[str, Document, Element]) -> _T:
     """Fill dataclass ``cls`` from ``source``: an HTML string (parsed), a
     :class:`Document` or an :class:`Element`, which is the scope selectors run
-    in. Raises :class:`ExtractError` when a field cannot be extracted and
-    :class:`TypeError` when ``cls`` is not a usable dataclass."""
+    in. For a string or a :class:`Document`, a ``cls.__select__`` narrows the
+    scope to its first match (like Rust's ``Dom::extract``); an
+    :class:`Element` is always used as given. Raises :class:`ExtractError`
+    when a field cannot be extracted and :class:`TypeError` when ``cls`` is
+    not a usable dataclass."""
     plan = _plan_for(cls)
-    result: _T = _instantiate(plan, _scope(source, "extract"), plan.name)
+    scope = _scope(source, "extract")
+    if plan.select is not None and isinstance(scope, Document):
+        first = scope.select_first(plan.select)
+        if first is None:
+            raise ExtractError(plan.name, plan.select, "element", "no element matches")
+        scope = first
+    result: _T = _instantiate(plan, scope, plan.name)
     return result
 
 

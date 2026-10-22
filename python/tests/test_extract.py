@@ -96,14 +96,9 @@ def test_readme_example():
     doc = domtree.parse(SHOP)
     assert extract(Product, doc.select_first(".product")) == WIDGET
     assert extract(Product, doc.select(".product")[1]) == GADGET
-    # Document scope: `sku` reads an attribute with no selector, which a
-    # document doesn't have.
-    with pytest.raises(ExtractError) as info:
-        extract(Product, SHOP)
-    assert str(info.value) == (
-        "Product.sku (@data-sku): a document has no attributes; "
-        "give the field a selector or extract from an Element"
-    )
+    # On a whole document, __select__ narrows extract() to the first match.
+    assert extract(Product, SHOP) == WIDGET
+    assert extract(Product, doc) == WIDGET
 
 
 def test_readme_error_messages():
@@ -136,7 +131,7 @@ def test_readme_error_messages():
     with pytest.raises(ExtractError) as info:
         extract(Typo, SHOP)
     assert str(info.value) == (
-        "Typo.title (\"h1:hover\"): invalid selector 'h1:hover': unsupported pseudo-class ':hover' at byte 2"
+        "Typo.title (\"h1:hover\"): invalid selector: unsupported pseudo-class ':hover' at byte 2"
     )
 
 
@@ -927,8 +922,10 @@ def test_invalid_selector(bad):
         err = info.value
         assert isinstance(err, ValueError)
         assert (err.path, err.selector, err.source) == ("BadSel.link", bad, "@href")
-        assert err.reason == str(native.value)
-        assert str(err) == f"BadSel.link ({json.dumps(bad)} @href): {native.value}"
+        # Same reason as the native error, minus the selector (already in the parentheses).
+        expected = str(native.value).replace(f"invalid selector '{bad}': ", "invalid selector: ", 1)
+        assert err.reason == expected
+        assert str(err) == f"BadSel.link ({json.dumps(bad)} @href): {expected}"
 
 
 def test_invalid_selector_exact_message():
@@ -939,7 +936,7 @@ def test_invalid_selector_exact_message():
     with pytest.raises(ExtractError) as info:
         extract(Hover, "<a>")
     assert str(info.value) == (
-        "Hover.link (\"a:hover\"): invalid selector 'a:hover': unsupported pseudo-class ':hover' at byte 1"
+        "Hover.link (\"a:hover\"): invalid selector: unsupported pseudo-class ':hover' at byte 1"
     )
     assert isinstance(info.value.__cause__, ValueError)
 
@@ -952,7 +949,7 @@ def test_invalid_selector_exact_message():
         extract_all(BadAll, "<div>")
     assert info.value.path == "BadAll"
     assert info.value.selector == "div >"
-    assert str(info.value).startswith("BadAll (\"div >\"): invalid selector 'div >': ")
+    assert str(info.value).startswith("BadAll (\"div >\"): invalid selector: ")
 
 
 # --- `from __future__ import annotations` -----------------------------------------
@@ -1174,3 +1171,27 @@ def test_random_html_only_raises_extract_error():
             attempt(extract, FuzzItem, el)
     # Both paths are exercised.
     assert outcomes["ok"] > 100 and outcomes["error"] > 100, outcomes
+
+
+# --- extract() honours __select__ on documents (same as Rust's Dom::extract) ---
+
+
+@dataclass
+class _SelCard:
+    __select__ = "li.card"
+    name: Annotated[str, Select("h2")]
+
+
+def test_extract_uses_select_on_documents_and_strings() -> None:
+    page = "<ul><li class=card><h2>Ann</h2></li><li class=card><h2>Bob</h2></li></ul>"
+    assert extract(_SelCard, page) == _SelCard(name="Ann")
+    assert extract(_SelCard, domtree.parse(page)) == _SelCard(name="Ann")
+    # An Element is used as given: __select__ does not apply.
+    second = domtree.parse(page).select("li.card")[1]
+    assert extract(_SelCard, second) == _SelCard(name="Bob")
+
+
+def test_extract_select_no_match_matches_rust_message() -> None:
+    with pytest.raises(ExtractError) as info:
+        extract(_SelCard, "<p>nothing</p>")
+    assert str(info.value) == 'Card ("li.card"): no element matches'.replace("Card", "_SelCard")

@@ -123,13 +123,18 @@ extract_all(Product, html)          # one Product per `.product`, in document or
 #          note='Back in stock soon',
 #          cents=1950)]
 
-doc = domtree.parse(html)
-extract(Product, doc.select_first(".product"))   # one Product, scoped to that element
+extract(Product, html)        # one Product: the first match of __select__
 # Product(title='Widget', price=9.99, image='/img/widget.png', tags=['tools', 'sale'], ...)
+
+doc = domtree.parse(html)
+extract(Product, doc.select(".product")[1])   # an Element is used as given
+# Product(title='Gadget', price=19.5, image=None, tags=[], ...)
 ```
 
 **Where values come from.** `extract(cls, source)` takes an HTML string (parsed
-first), a `Document` or an `Element`; that is the scope every selector runs in
+first), a `Document` or an `Element`. For a string or `Document`, a
+`__select__` on the class narrows the scope to its first match (an `Element`
+is used as given); that is the scope every selector runs in
 (an element's descendants, or the whole document). `extract_all(cls, source)`
 returns one `cls` per element matching `cls.__select__`, each scoped to its
 element. A field reads the first match's readable text unless it says
@@ -170,7 +175,7 @@ except ExtractError as err:
 # Product[1].title ("h1"): no element matches
 # Product[1].price (".price" @data-value): <span> has no "data-value" attribute
 # Product[0].reviews[1].rating (".stars" @data-rating): cannot parse "four" as int: invalid literal for int() with base 10: 'four'
-# Typo.title ("h1:hover"): invalid selector 'h1:hover': unsupported pseudo-class ':hover' at byte 2
+# Typo.title ("h1:hover"): invalid selector: unsupported pseudo-class ':hover' at byte 2
 ```
 
 A class that cannot be extracted at all (not a dataclass, a field with neither

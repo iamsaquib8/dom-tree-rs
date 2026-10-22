@@ -1,7 +1,7 @@
 //! Numeric character references: WHATWG Windows-1252 remapping and the
 //! U+FFFD replacement rules.
 
-use domtree::parse;
+use domq::parse;
 
 fn decode(html: &str) -> String {
     parse(html)
@@ -108,7 +108,7 @@ fn named_references_need_their_semicolon() {
     assert!(
         dom.errors()
             .iter()
-            .any(|e| e.kind == domtree::ErrorKind::UnknownEntity)
+            .any(|e| e.kind == domq::ErrorKind::UnknownEntity)
     );
     assert_eq!(decode("<p>&amp;&copy;&lt;</p>"), "&©<");
 }
@@ -158,7 +158,7 @@ mod full_table {
         assert!(
             dom.errors()
                 .iter()
-                .any(|e| e.kind == domtree::ErrorKind::UnknownEntity)
+                .any(|e| e.kind == domq::ErrorKind::UnknownEntity)
         );
     }
 

@@ -1,7 +1,7 @@
-//! `domtree` — query HTML from the command line with CSS selectors.
+//! `domq` — query HTML from the command line with CSS selectors.
 //!
-//! A thin, zero-dependency wrapper over the `dom-tree-rs` library. Flags mirror
-//! `htmlq` where they overlap; see `domtree --help`.
+//! A thin, zero-dependency wrapper over the `domq` library. Flags mirror
+//! `htmlq` where they overlap; see `domq --help`.
 
 mod args;
 mod encoding;
@@ -14,7 +14,7 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
-use domtree::{Dom, NodeRef, Selector};
+use domq::{Dom, NodeRef, Selector};
 
 use args::{Command, Mode, Options};
 
@@ -29,7 +29,7 @@ fn main() -> ExitCode {
             return match write_output(None, &report) {
                 Ok(()) => ExitCode::from(code),
                 Err(e) => {
-                    eprintln!("domtree: {e}");
+                    eprintln!("domq: {e}");
                     ExitCode::from(2)
                 }
             };
@@ -37,17 +37,17 @@ fn main() -> ExitCode {
         Ok(Command::Help) => return emit(None, args::HELP),
         Ok(Command::LintHelp) => return emit(None, args::LINT_HELP),
         Ok(Command::Version) => {
-            return emit(None, &format!("domtree {}\n", env!("CARGO_PKG_VERSION")));
+            return emit(None, &format!("domq {}\n", env!("CARGO_PKG_VERSION")));
         }
         Err(e) => {
-            eprintln!("domtree: {e}\nTry '{}' for more information.", e.help);
+            eprintln!("domq: {e}\nTry '{}' for more information.", e.help);
             return ExitCode::from(2);
         }
     };
     match run(&opts) {
         Ok(out) => emit(opts.output.as_deref(), &out),
         Err(e) => {
-            eprintln!("domtree: {e}");
+            eprintln!("domq: {e}");
             ExitCode::FAILURE
         }
     }
@@ -55,7 +55,7 @@ fn main() -> ExitCode {
 
 fn run(opts: &Options) -> Result<String, String> {
     let html = read_input(opts.input.as_deref(), opts.encoding.as_deref())?;
-    let mut dom = domtree::parse(&html);
+    let mut dom = domq::parse(&html);
 
     for remove in &opts.remove {
         let sel = compile(remove)?;
@@ -74,10 +74,10 @@ fn run(opts: &Options) -> Result<String, String> {
         // Page-level, so read before `--main` narrows the document.
         return Ok(meta_output(&dom, base.as_deref()));
     }
-    if opts.main {
-        if let Some(main) = dom.main_content().map(|m| m.to_html()) {
-            dom = domtree::parse(&main);
-        }
+    if opts.main
+        && let Some(main) = dom.main_content().map(|m| m.to_html())
+    {
+        dom = domq::parse(&main);
     }
 
     let scope = match opts.selector.as_str() {
@@ -175,7 +175,7 @@ fn csv_output(matches: &[NodeRef<'_>], first: bool) -> String {
         .map(|t| t.table_rows())
         .filter(|rows| !rows.is_empty())
         .take(if first { 1 } else { usize::MAX })
-        .map(domtree::to_csv);
+        .map(domq::to_csv);
     tables.collect::<Vec<_>>().join("\r\n")
 }
 
@@ -213,7 +213,7 @@ fn links_output(dom: &Dom, scope: Option<&Selector>, base: Option<&str>, opts: &
         .into_iter()
         .filter(|l| in_scope(l.node))
         .filter(|l| !(opts.ignore_whitespace && l.text.trim().is_empty()))
-        .map(|l| (domtree::resolve_url(base.unwrap_or(""), l.href), l.text))
+        .map(|l| (domq::resolve_url(base.unwrap_or(""), l.href), l.text))
         .collect();
     if opts.first {
         links.truncate(1);
@@ -270,7 +270,7 @@ fn one_field(s: &str) -> String {
 fn meta_output(dom: &Dom, base: Option<&str>) -> String {
     let m = dom.metadata();
     let url = |u: &str| match base {
-        Some(base) => domtree::resolve_url(base, u),
+        Some(base) => domq::resolve_url(base, u),
         None => u.to_string(),
     };
     let opt = |v: &Option<String>| json::opt_string(v.as_deref());
@@ -376,9 +376,9 @@ fn absolutize(dom: &mut Dom, base: &str, document_url: Option<&str>) {
                 continue;
             };
             let resolved = if name == "srcset" {
-                domtree::resolve_srcset(base, value)
+                domq::resolve_srcset(base, value)
             } else {
-                domtree::resolve_url(base, value)
+                domq::resolve_url(base, value)
             };
             if resolved != value {
                 edits.push((node.id(), name, resolved));
@@ -408,12 +408,12 @@ fn read_input(path: Option<&str>, encoding: Option<&str>) -> Result<String, Stri
             None | Some("-") => "<stdin>",
             Some(p) => p,
         };
-        eprintln!("domtree: warning: {name}: {warning}");
+        eprintln!("domq: warning: {name}: {warning}");
     }
     Ok(decoded.text)
 }
 
-/// Write `out` to a file or stdout. A closed pipe (`domtree … | head`) is not
+/// Write `out` to a file or stdout. A closed pipe (`domq … | head`) is not
 /// an error.
 fn write_output(path: Option<&str>, out: &str) -> Result<(), String> {
     match path {
@@ -436,7 +436,7 @@ fn emit(path: Option<&str>, out: &str) -> ExitCode {
     match write_output(path, out) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("domtree: {e}");
+            eprintln!("domq: {e}");
             ExitCode::FAILURE
         }
     }

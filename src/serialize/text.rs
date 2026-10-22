@@ -9,7 +9,7 @@
 use alloc::string::String;
 
 use super::{is_space, push_verbatim, skip_newline, walk};
-use crate::node::NodeKind;
+use crate::node::{NodeId, NodeKind};
 use crate::tags::{self, Display};
 use crate::tree::{Dom, NodeRef};
 
@@ -24,7 +24,7 @@ impl Dom {
     /// leading or trailing blank lines.
     ///
     /// ```
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     "<head><title>T</title></head><h1>Hello</h1>\
     ///      <p>Some   <b>bold</b>\n text.<br>Next line.</p><script>x()</script>",
     /// );
@@ -42,12 +42,27 @@ impl Dom {
 impl NodeRef<'_> {
     /// This node's subtree as readable plain text; see [`Dom::to_text`].
     ///
+    /// Hidden elements are left out only *inside* the node: called on a
+    /// `<title>`, `<script>`, `<style>` or `<template>` itself, it returns
+    /// that element's text — the page title, or the script's or style
+    /// sheet's source as written (not collapsed).
+    ///
     /// ```
-    /// let dom = domtree::parse("<ul><li>One</li><li>Two <i>too</i></li></ul>");
+    /// let dom = domq::parse("<ul><li>One</li><li>Two <i>too</i></li></ul>");
     /// assert_eq!(dom.root().unwrap().to_text(), "One\nTwo too");
+    ///
+    /// let dom = domq::parse(
+    ///     "<head><title> My  page </title><script>\nif (a  < b) {}\n</script></head>",
+    /// );
+    /// assert_eq!(dom.find_by_tag("title").next().unwrap().to_text(), "My page");
+    /// assert_eq!(dom.find_by_tag("script").next().unwrap().to_text(), "if (a  < b) {}");
+    /// assert_eq!(dom.find_by_tag("head").next().unwrap().to_text(), ""); // hidden inside
     /// ```
     pub fn to_text(&self) -> String {
-        let mut text = Text::default();
+        let mut text = Text {
+            root: Some(self.id()),
+            ..Text::default()
+        };
         walk(*self, |node, enter| text.visit(node, enter));
         text.finish()
     }
@@ -71,6 +86,8 @@ struct Text {
     /// At the start of a table cell, whose separator (tab or row break) is
     /// already owed: a block opening inside it adds no line break.
     cell: bool,
+    /// The node `NodeRef::to_text` was called on: shown even if hidden.
+    root: Option<NodeId>,
 }
 
 impl Text {
@@ -91,8 +108,22 @@ impl Text {
         if list && !enter {
             self.lists = self.lists.saturating_sub(1);
         }
+        let root = self.root == Some(node.id());
         match tags::display(tag) {
-            Display::Hidden => return false,
+            Display::Hidden if !root => return false,
+            // The node itself, though hidden: a block. A `<script>` or
+            // `<style>` reads verbatim, as its source.
+            Display::Hidden => {
+                self.newlines(1);
+                if matches!(tag, "script" | "style") {
+                    if enter {
+                        self.pre += 1;
+                        self.fresh = true;
+                    } else {
+                        self.pre = self.pre.saturating_sub(1);
+                    }
+                }
+            }
             Display::Paragraph if list && self.lists > 0 => self.newlines(1),
             Display::Paragraph => self.newlines(2),
             Display::Block => self.newlines(1),

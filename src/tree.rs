@@ -292,7 +292,7 @@ impl Dom {
     /// skipped.
     ///
     /// ```
-    /// let mut dom = domtree::parse("<p>a</p><p>c</p>");
+    /// let mut dom = domq::parse("<p>a</p><p>c</p>");
     /// let c = dom.find_by_tag("p").nth(1).unwrap().id();
     /// dom.insert_html_before(c, "<p>b</p>");
     /// let text: Vec<_> = dom.nodes().filter_map(|n| n.text()).collect();
@@ -420,7 +420,7 @@ impl<'a> NodeRef<'a> {
     ///
     /// ```
     /// let src = "<ul>\n  <li>Tom &amp; Jerry\n  <li>Spike</ul>";
-    /// let dom = domtree::parse(src);
+    /// let dom = domq::parse(src);
     /// let first = dom.find_by_tag("li").next().unwrap();
     /// // Closed implicitly by the second `<li>`:
     /// assert_eq!(&src[first.source_range().unwrap()], "<li>Tom &amp; Jerry\n  ");
@@ -439,7 +439,7 @@ impl<'a> NodeRef<'a> {
     /// `isConnected`.
     ///
     /// ```
-    /// let mut dom = domtree::parse("<p>a <b>b</b></p>");
+    /// let mut dom = domq::parse("<p>a <b>b</b></p>");
     /// let p = dom.root().unwrap().id();
     /// let b = dom.find_by_tag("b").next().unwrap().id();
     /// dom.remove(b);
@@ -599,7 +599,7 @@ impl<'a> NodeRef<'a> {
     /// The next sibling that is an element (skips text, comments, doctypes).
     ///
     /// ```
-    /// let dom = domtree::parse("<p><a>1</a> text <!-- c --><b>2</b></p>");
+    /// let dom = domq::parse("<p><a>1</a> text <!-- c --><b>2</b></p>");
     /// let a = dom.find_by_tag("a").next().unwrap();
     /// assert_eq!(a.next_element_sibling().unwrap().tag_name(), Some("b"));
     /// assert!(a.prev_element_sibling().is_none());
@@ -611,7 +611,7 @@ impl<'a> NodeRef<'a> {
     /// The previous sibling that is an element (skips text, comments, doctypes).
     ///
     /// ```
-    /// let dom = domtree::parse("<ul><li>a</li> <li>b</li></ul>");
+    /// let dom = domq::parse("<ul><li>a</li> <li>b</li></ul>");
     /// let b = dom.find_by_tag("li").nth(1).unwrap();
     /// assert_eq!(b.prev_element_sibling().unwrap().text_content(), "a");
     /// ```

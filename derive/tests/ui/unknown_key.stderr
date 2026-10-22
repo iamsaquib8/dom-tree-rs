@@ -1,0 +1,11 @@
+error: unknown key `selector`: did you mean `select`?
+ --> tests/ui/unknown_key.rs:5:12
+  |
+5 |     #[html(selector = "h1")]
+  |            ^^^^^^^^
+
+error: unknown key `trim`; expected one of `select`, `attr`, `html`, `outer_html`, `markdown`, `default`, `with`, `skip`
+  --> tests/ui/unknown_key.rs:11:27
+   |
+11 |     #[html(select = "h1", trim)]
+   |                           ^^^^

@@ -19,7 +19,7 @@ body:
     id: code
     attributes:
       label: Code or command
-      description: e.g. `dom.select("a[href]")`, `domtree -a href 'a'`, or the JS call.
+      description: e.g. `dom.select("a[href]")`, `domq -a href 'a'`, or the JS call.
       render: rust
   - type: textarea
     id: expected
@@ -38,4 +38,4 @@ body:
     attributes:
       label: Version
       description: crate / CLI / npm version, and where it ran (native, wasm, browser, Workers…)
-      placeholder: dom-tree-rs 0.3.0, native
+      placeholder: domq 0.3.0, native

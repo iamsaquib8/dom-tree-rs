@@ -13,16 +13,16 @@
 ///
 /// ```
 /// let src = "<ul>\r\n  <li>café\n  <li>x</ul>";
-/// let dom = domtree::parse(src);
+/// let dom = domq::parse(src);
 /// let second = dom.find_by_tag("li").nth(1).unwrap();
 /// let start = second.source_range().unwrap().start;
-/// assert_eq!(domtree::line_col(src, start), (3, 3));
-/// assert_eq!(domtree::line_col(src, 0), (1, 1));
+/// assert_eq!(domq::line_col(src, start), (3, 3));
+/// assert_eq!(domq::line_col(src, 0), (1, 1));
 ///
 /// let after_e = src.find('é').unwrap() + 'é'.len_utf8();
-/// assert_eq!(domtree::line_col(src, after_e), (2, 11)); // `é`: 2 bytes, 1 column
-/// assert_eq!(domtree::line_col(src, after_e - 1), (2, 10)); // mid-char: its start
-/// assert_eq!(domtree::line_col(src, usize::MAX), (3, 13)); // clamped to the end
+/// assert_eq!(domq::line_col(src, after_e), (2, 11)); // `é`: 2 bytes, 1 column
+/// assert_eq!(domq::line_col(src, after_e - 1), (2, 10)); // mid-char: its start
+/// assert_eq!(domq::line_col(src, usize::MAX), (3, 13)); // clamped to the end
 /// ```
 pub fn line_col(src: &str, byte: usize) -> (usize, usize) {
     let mut end = byte.min(src.len());

@@ -1,6 +1,6 @@
 //! `Dom::links`, `Dom::resources` and `Dom::base_url`.
 
-use domtree::parse;
+use domq::parse;
 
 fn urls(html: &str, base: Option<&str>) -> Vec<(String, String)> {
     parse(html)

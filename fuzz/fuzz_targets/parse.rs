@@ -11,7 +11,7 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
 
-    let dom = domtree::parse(s);
+    let dom = domq::parse(s);
 
     // Serializing must also never panic (it's iterative, so deep input is fine).
     let _ = dom.to_json();

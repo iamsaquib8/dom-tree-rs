@@ -1,7 +1,7 @@
 /target
 **/target
 Cargo.lock
-/dom-tree-wasm/pkg
+/wasm/pkg
 # wasm build output for the playground (built in CI by .github/workflows/pages.yml)
 /playground/pkg
 *.profraw

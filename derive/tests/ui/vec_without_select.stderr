@@ -1,0 +1,5 @@
+error: a `Vec` field needs `select = "…"`: the elements to read one item from
+ --> tests/ui/vec_without_select.rs:6:11
+  |
+6 |     urls: Vec<String>,
+  |           ^^^^^^^^^^^

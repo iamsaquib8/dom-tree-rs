@@ -4,7 +4,7 @@
 //! `INSTA_UPDATE=always cargo test --test markdown_output` and review the diff.
 #![cfg(feature = "markdown")]
 
-use domtree::parse;
+use domq::parse;
 
 fn md(html: &str) -> String {
     parse(html).to_markdown()
@@ -542,6 +542,26 @@ fn node_to_markdown() {
     assert_eq!(b.to_markdown(), "**b**");
     let li = parse("<ol><li>x</li></ol>");
     assert_eq!(li.find_by_tag("li").next().unwrap().to_markdown(), "- x");
+}
+
+#[test]
+fn node_to_markdown_on_a_hidden_element_shows_it() {
+    let dom = parse(
+        "<head><title>Tom &amp; *Jerry*</title><script>run()</script></head>\
+         <body><template><h2>T</h2><p>a <b>b</b></p></template>\
+         <noscript>Enable <b>JS</b></noscript><p>x<script>s()</script></p></body>",
+    );
+    let first = |tag: &'static str| dom.find_by_tag(tag).next().unwrap();
+    // Hidden only applies inside the node, never to the node itself.
+    assert_eq!(first("title").to_markdown(), r"Tom & \*Jerry\*");
+    assert_eq!(first("template").to_markdown(), "## T\n\na **b**");
+    assert_eq!(first("noscript").to_markdown(), "Enable **JS**");
+    assert_eq!(first("script").to_markdown(), "run()");
+    // Hidden descendants stay hidden, and the whole document is unchanged.
+    assert_eq!(first("head").to_markdown(), "");
+    assert_eq!(first("body").to_markdown(), "x");
+    assert_eq!(dom.to_markdown(), "x");
+    assert_eq!(md("<title>T</title><p>x</p>"), "x");
 }
 
 macro_rules! page_snapshot {

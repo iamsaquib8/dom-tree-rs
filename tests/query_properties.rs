@@ -4,7 +4,7 @@
 //! (per node, across a whole `select` query, for `closest`, and scoped).
 #![cfg(feature = "query")]
 
-use domtree::{NodeId, NodeRef, Selector, parse};
+use domq::{NodeId, NodeRef, Selector, parse};
 use proptest::prelude::*;
 use proptest::sample::select;
 

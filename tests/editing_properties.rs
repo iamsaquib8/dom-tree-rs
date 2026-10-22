@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use domtree::{Dom, NodeId, parse};
+use domq::{Dom, NodeId, parse};
 use proptest::prelude::*;
 
 /// Small HTML built from structural pieces, so documents have real nesting,

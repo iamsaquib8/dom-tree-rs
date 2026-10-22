@@ -2,7 +2,7 @@ name: Benchmarks
 
 # Throughput, memory, wasm size and compile time, tracked over time. Not part
 # of PR CI: timings depend on the runner, so numbers are only comparable
-# within one run (every run measures dom-tree-rs next to tl, scraper and
+# within one run (every run measures domq next to tl, scraper and
 # html5ever on the same machine). Weekly and on demand; each run's results
 # are uploaded as an artifact and summarised on the run page.
 
@@ -30,7 +30,7 @@ jobs:
         with:
           workspaces: |
             benchmarks
-            dom-tree-wasm
+            wasm
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack
@@ -51,12 +51,12 @@ jobs:
         working-directory: benchmarks
         run: cargo bench 2>&1 | tee bench.txt
 
-      - name: Throughput with the `simd` feature (dom-tree-rs only)
+      - name: Throughput with the `simd` feature (domq only)
         working-directory: benchmarks
         env:
           # Its own criterion directory, so it does not overwrite the run above.
           CARGO_TARGET_DIR: target-simd
-        run: cargo bench --features simd -- 'dom-tree-rs$' 2>&1 | tee bench-simd.txt
+        run: cargo bench --features simd -- 'domq$' 2>&1 | tee bench-simd.txt
 
       - name: Throughput summary
         working-directory: benchmarks
@@ -79,21 +79,21 @@ jobs:
           { echo "## Memory"; cat memory.md; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Wasm size (npm package build)
-        working-directory: dom-tree-wasm
+        working-directory: wasm
         run: |
           wasm-pack build --target web --release
-          SIZE=$(gzip -9 -c pkg/dom_tree_wasm_bg.wasm | wc -c)
-          RAW=$(wc -c < pkg/dom_tree_wasm_bg.wasm)
+          SIZE=$(gzip -9 -c pkg/domq_wasm_bg.wasm | wc -c)
+          RAW=$(wc -c < pkg/domq_wasm_bg.wasm)
           echo "wasm: $SIZE bytes gzipped, $RAW raw (budget 46080 gzipped)" | tee ../sizes.txt
           { echo "## Wasm"; cat ../sizes.txt; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Compile time (clean release build of the library)
         run: |
-          cargo clean --release -p dom-tree-rs
+          cargo clean --release -p domq
           START=$(date +%s.%N)
           cargo build --release --lib
           END=$(date +%s.%N)
-          echo "release build of dom-tree-rs (default features): $(awk "BEGIN { printf \"%.1f\", $END - $START }") s" | tee -a sizes.txt
+          echo "release build of domq (default features): $(awk "BEGIN { printf \"%.1f\", $END - $START }") s" | tee -a sizes.txt
           { echo "## Compile time"; tail -1 sizes.txt; } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v7

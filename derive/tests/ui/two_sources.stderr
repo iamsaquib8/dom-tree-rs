@@ -1,0 +1,5 @@
+error: a field reads one value, but it has both `attr` and `html`; without either it reads the text
+ --> tests/ui/two_sources.rs:5:41
+  |
+5 |     #[html(select = "a", attr = "href", html)]
+  |                                         ^^^^

@@ -40,7 +40,7 @@ fn build(tokens: &[Token]) -> Dom {
 Numbers
 
 Parser	Size (gzip)	Deps
-dom-tree-rs	19.5 KB	0
+domq	19.5 KB	0
 html5ever	~180 KB	12
 a | b	pipes are escaped
 

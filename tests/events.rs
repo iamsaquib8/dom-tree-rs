@@ -1,4 +1,4 @@
-//! The streaming API (`domtree::events`): the same recovery as the tree
+//! The streaming API (`domq::events`): the same recovery as the tree
 //! builder, without the tree. The central guarantee, checked on arbitrary
 //! input: replaying the events into a tree gives exactly the tree `parse`
 //! builds — same nodes, attributes, text, source ranges, `to_html()` and
@@ -7,7 +7,7 @@
 use std::borrow::Cow;
 use std::ops::Range;
 
-use domtree::{Event, NodeKind, NodeRef, parse};
+use domq::{Event, NodeKind, NodeRef, parse};
 use proptest::prelude::*;
 
 // --- a minimal tree, built only from events ---------------------------------
@@ -54,7 +54,7 @@ fn replay(html: &str) -> Result<Replay, TestCaseError> {
         }
         id
     };
-    for (event, range) in domtree::events(html) {
+    for (event, range) in domq::events(html) {
         prop_assert!(range.start <= range.end && range.end <= html.len());
         prop_assert!(
             html.get(range.clone()).is_some(),
@@ -248,7 +248,7 @@ fn check(html: &str) -> Result<(), TestCaseError> {
     assert_same_tree(html, &tree)?;
     let dom = parse(html);
     prop_assert_eq!(to_html(&tree), dom.to_html());
-    let mut events = domtree::events(html);
+    let mut events = domq::events(html);
     for _ in events.by_ref() {}
     prop_assert_eq!(events.errors(), dom.errors());
     Ok(())
@@ -345,7 +345,7 @@ proptest! {
 // --- focused cases ----------------------------------------------------------
 
 fn collect(html: &str) -> Vec<(Event<'_>, Range<usize>)> {
-    domtree::events(html).collect()
+    domq::events(html).collect()
 }
 
 fn start<'a>(name: &'a str, attrs: &[(&'a str, &'a str)]) -> Event<'a> {
@@ -403,14 +403,14 @@ fn mismatched_and_stray_end_tags() {
             (end("div", false), 13..19),
         ]
     );
-    let mut events = domtree::events(html);
+    let mut events = domq::events(html);
     for _ in events.by_ref() {}
     let kinds: Vec<_> = events.errors().iter().map(|e| e.kind.clone()).collect();
     assert_eq!(
         kinds,
         [
-            domtree::ErrorKind::StrayEndTag,
-            domtree::ErrorKind::MismatchedEndTag
+            domq::ErrorKind::StrayEndTag,
+            domq::ErrorKind::MismatchedEndTag
         ]
     );
 }
@@ -490,7 +490,7 @@ fn text_closes_an_open_head() {
 #[test]
 fn borrowed_where_possible() {
     // Lower-case names and entity-free text borrow from the input.
-    for (event, _) in domtree::events("<p class=x>plain</p>") {
+    for (event, _) in domq::events("<p class=x>plain</p>") {
         match event {
             Event::Start { name, attrs } => {
                 assert!(matches!(name, Cow::Borrowed(_)));
@@ -513,7 +513,7 @@ fn deep_nesting_streams_without_recursion() {
     let html = "<div>".repeat(n) + &"</x>".repeat(n) + &"</div>".repeat(n);
     let mut depth = 0usize;
     let mut max = 0usize;
-    let mut events = domtree::events(&html);
+    let mut events = domq::events(&html);
     for (event, _) in events.by_ref() {
         match event {
             Event::Start { .. } => {
@@ -553,7 +553,7 @@ fn bounded_end_tag_search_agrees_with_parse() {
 #[test]
 fn the_empty_document_has_no_events() {
     assert!(collect("").is_empty());
-    let mut events = domtree::events("");
+    let mut events = domq::events("");
     assert!(events.next().is_none());
     assert!(events.errors().is_empty());
 }

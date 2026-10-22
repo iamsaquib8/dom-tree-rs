@@ -3,7 +3,7 @@
 //! Page snapshots live in `tests/snapshots/`. Regenerate with
 //! `INSTA_UPDATE=always cargo test --test text_output` and review the diff.
 
-use domtree::parse;
+use domq::parse;
 
 fn text(html: &str) -> String {
     parse(html).to_text()
@@ -182,6 +182,33 @@ fn node_to_text() {
     assert_eq!(b.to_text(), "2");
     let text_node = b.first_child().unwrap();
     assert_eq!(text_node.to_text(), "2");
+}
+
+#[test]
+fn node_to_text_on_a_hidden_element_shows_it() {
+    let dom = parse(
+        "<head><title>  My \n page &amp; co </title>\
+         <script type=application/ld+json>\n{\"a\":  \"b\n c\"}\n</script>\
+         <style>p {  color: red }</style></head>\
+         <body><template><p>t1</p><p>t2</p></template>\
+         <p>x<script>inner()</script>y</p><noscript>Enable <b>JS</b></noscript></body>",
+    );
+    let first = |tag: &'static str| dom.find_by_tag(tag).next().unwrap();
+    // Hidden only applies inside the node, never to the node itself.
+    assert_eq!(first("title").to_text(), "My page & co");
+    assert_eq!(first("noscript").to_text(), "Enable JS");
+    assert_eq!(first("template").to_text(), "t1\n\nt2");
+    // Scripts and style sheets read as their source, verbatim.
+    assert_eq!(first("script").to_text(), "{\"a\":  \"b\n c\"}");
+    assert_eq!(first("style").to_text(), "p {  color: red }");
+    // Hidden descendants stay hidden.
+    assert_eq!(first("head").to_text(), "");
+    let p = dom.find_by_tag("p").nth(2).unwrap();
+    assert_eq!(p.to_text(), "xy");
+    // The whole document is unchanged.
+    assert_eq!(dom.to_text(), "xy");
+    // A top-level hidden element is still hidden in the document's text.
+    assert_eq!(text("<title>T</title><script>s()</script>"), "");
 }
 
 #[test]

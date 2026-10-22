@@ -11,6 +11,6 @@ trap 'rm -rf "$work"' EXIT
 (cd "$crate/pkg" && npm pack --silent --pack-destination "$work" >/dev/null)
 cd "$work"
 npm init -y >/dev/null
-npm install --silent --no-audit --no-fund ./dom-tree-wasm-*.tgz
+npm install --silent --no-audit --no-fund ./domq-*.tgz
 cp "$crate/tests/node.mjs" .
 node node.mjs

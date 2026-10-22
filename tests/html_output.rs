@@ -1,6 +1,6 @@
 //! Tests for HTML re-serialization (`to_html`).
 
-use domtree::parse;
+use domq::parse;
 
 #[test]
 fn roundtrip_is_idempotent() {

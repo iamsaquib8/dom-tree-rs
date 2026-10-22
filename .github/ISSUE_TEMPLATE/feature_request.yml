@@ -1,17 +1,17 @@
 name: Feature request
-description: Something that would make dom-tree-rs more useful to you.
+description: Something that would make domq more useful to you.
 labels: [enhancement]
 body:
   - type: markdown
     attributes:
       value: |
-        Please read the [roadmap](https://github.com/iamsaquib8/dom-tree-rs/blob/main/ROADMAP.md) first —
+        Please read the [roadmap](https://github.com/iamsaquib8/domq/blob/main/ROADMAP.md) first —
         especially the **non-goals**. The bar for new features is "does it keep the crate tiny,
         zero-dependency, forgiving, and honest?"
   - type: dropdown
     id: who
     attributes:
-      label: Where do you use dom-tree-rs?
+      label: Where do you use domq?
       options:
         - Rust library (scraping / extraction)
         - CLI (shell pipelines)

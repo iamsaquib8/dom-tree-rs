@@ -1,6 +1,6 @@
 //! `Dom::metadata`: sources, fallbacks and robustness.
 
-use domtree::{Metadata, parse};
+use domq::{Metadata, parse};
 
 fn s(v: &str) -> Option<String> {
     Some(v.to_string())

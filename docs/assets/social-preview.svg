@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="dom-tree-rs — messy HTML in, clean tree, text, Markdown or JSON out">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="domq — messy HTML in, clean tree, text, Markdown or JSON out">
 <defs>
   <linearGradient id="acc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fb923c"/><stop offset="1" stop-color="#ea580c"/></linearGradient>
   <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0d1117"/><stop offset="1" stop-color="#161b22"/></linearGradient>
 </defs>
 <style>
-  .title { font: 800 96px system-ui, -apple-system, "Segoe UI", Inter, sans-serif; fill: #f0f6fc; letter-spacing: -1.5px; }
-  .rs { fill: url(#acc); }
+  .title { font: 800 120px system-ui, -apple-system, "Segoe UI", Inter, sans-serif; fill: #f0f6fc; letter-spacing: -2px; }
+  .acc { fill: url(#acc); }
   .tag { font: 500 31px system-ui, -apple-system, "Segoe UI", Inter, sans-serif; fill: #9198a1; }
   .chip { font: 600 17px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #d1d7e0; }
   .url { font: 500 24px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #9198a1; }
@@ -44,8 +44,8 @@
   <circle cx="46" cy="66" r="7" fill="#f8fafc"/><circle cx="82" cy="66" r="7" fill="#f8fafc"/>
   <circle cx="72" cy="92" r="6" fill="#94a3b8"/><circle cx="92" cy="92" r="6" fill="#94a3b8"/>
 </g>
-<text x="110" y="330" class="title">dom-tree<tspan class="rs">-rs</tspan></text>
+<text x="110" y="330" class="title">dom<tspan class="acc">q</tspan></text>
 <text x="110" y="392" class="tag">Messy HTML in. Clean tree, text, Markdown, or JSON out.</text>
-<rect x="110" y="446" width="176" height="42" rx="21.0" fill="#21262d"/><text x="198.0" y="473.1" text-anchor="middle" class="chip">0 dependencies</text><rect x="296" y="446" width="155" height="42" rx="21.0" fill="#21262d"/><text x="373.5" y="473.1" text-anchor="middle" class="chip">never panics</text><rect x="461" y="446" width="165" height="42" rx="21.0" fill="#21262d"/><text x="543.5" y="473.1" text-anchor="middle" class="chip">CSS selectors</text><rect x="636" y="446" width="134" height="42" rx="21.0" fill="#21262d"/><text x="703.0" y="473.1" text-anchor="middle" class="chip">→ Markdown</text><rect x="780" y="446" width="208" height="42" rx="21.0" fill="#21262d"/><text x="884.0" y="473.1" text-anchor="middle" class="chip">Rust · CLI · WASM</text>
-<text x="110" y="570" class="url">github.com/iamsaquib8/dom-tree-rs</text>
+<rect x="110" y="446" width="176" height="42" rx="21.0" fill="#21262d"/><text x="198.0" y="473.1" text-anchor="middle" class="chip">0 dependencies</text><rect x="296" y="446" width="155" height="42" rx="21.0" fill="#21262d"/><text x="373.5" y="473.1" text-anchor="middle" class="chip">never panics</text><rect x="461" y="446" width="165" height="42" rx="21.0" fill="#21262d"/><text x="543.5" y="473.1" text-anchor="middle" class="chip">CSS selectors</text><rect x="636" y="446" width="134" height="42" rx="21.0" fill="#21262d"/><text x="703.0" y="473.1" text-anchor="middle" class="chip">→ Markdown</text><rect x="780" y="446" width="282" height="42" rx="21.0" fill="#21262d"/><text x="921.0" y="473.1" text-anchor="middle" class="chip">Rust · CLI · JS · Python</text>
+<text x="110" y="570" class="url">github.com/iamsaquib8/domq</text>
 </svg>

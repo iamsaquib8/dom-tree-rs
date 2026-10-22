@@ -1,7 +1,7 @@
-// dom-tree-rs playground. No framework, no build step: this module, the
+// domq playground. No framework, no build step: this module, the
 // presets, and the wasm package that `wasm-pack build --target web` writes to
 // ./pkg/.
-import init, { Document } from "./pkg/dom_tree_wasm.js";
+import init, { Document } from "./pkg/domq_wasm.js";
 import { presets } from "./presets.js";
 
 const $ = (id) => document.getElementById(id);
@@ -62,7 +62,7 @@ let copyText = "";
 // --- boot --------------------------------------------------------------------
 
 async function boot() {
-  const wasmUrl = new URL("./pkg/dom_tree_wasm_bg.wasm", import.meta.url);
+  const wasmUrl = new URL("./pkg/domq_wasm_bg.wasm", import.meta.url);
   const response = await fetch(wasmUrl);
   if (!response.ok) throw new Error(`${response.status} fetching ${wasmUrl.pathname}`);
   const bytes = await response.clone().arrayBuffer();

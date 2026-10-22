@@ -1,0 +1,11 @@
+error: `default` has no effect on an `Option` field: no match or a missing attribute is already `None`
+ --> tests/ui/default_on_containers.rs:5:34
+  |
+5 |     #[html(select = ".subtitle", default)]
+  |                                  ^^^^^^^
+
+error: `default` has no effect on a `Vec` field: no match is already an empty `Vec`
+  --> tests/ui/default_on_containers.rs:11:27
+   |
+11 |     #[html(select = "li", default)]
+   |                           ^^^^^^^

@@ -24,7 +24,7 @@ impl Dom {
     /// Serialize the whole document back to an HTML string.
     ///
     /// ```
-    /// let dom = domtree::parse("<p class='x'>1 &lt; 2 &amp; 3</p>");
+    /// let dom = domq::parse("<p class='x'>1 &lt; 2 &amp; 3</p>");
     /// assert_eq!(dom.to_html(), r#"<p class="x">1 &lt; 2 &amp; 3</p>"#);
     /// ```
     pub fn to_html(&self) -> String {
@@ -45,7 +45,7 @@ impl<'a> NodeRef<'a> {
     /// Serialize just this node and its subtree back to an HTML string.
     ///
     /// ```
-    /// let dom = domtree::parse("<div><img src=a.png><br></div>");
+    /// let dom = domq::parse("<div><img src=a.png><br></div>");
     /// let div = dom.find_by_tag("div").next().unwrap();
     /// assert_eq!(div.to_html(), r#"<div><img src="a.png"><br></div>"#);
     /// ```
@@ -65,7 +65,7 @@ impl<'a> NodeRef<'a> {
     /// element itself written `<\/…` (see [`Dom::set_text`]).
     ///
     /// ```
-    /// let dom = domtree::parse("<div id=x><b>hi</b> there</div>");
+    /// let dom = domq::parse("<div id=x><b>hi</b> there</div>");
     /// let div = dom.root().unwrap();
     /// assert_eq!(div.inner_html(), "<b>hi</b> there");
     /// ```
@@ -88,7 +88,7 @@ impl<'a> NodeRef<'a> {
     /// [`NodeRef::to_html`].
     ///
     /// ```
-    /// let dom = domtree::parse("<div id=x><b>hi</b></div>");
+    /// let dom = domq::parse("<div id=x><b>hi</b></div>");
     /// let b = dom.find_by_tag("b").next().unwrap();
     /// assert_eq!(b.outer_html(), "<b>hi</b>");
     /// ```
@@ -212,14 +212,13 @@ fn neutralize_end_tags(out: &mut String, start: usize, tag: &str) {
     let mut at = 0;
     while let Some(i) = bytes.get(at..).and_then(|b| scan::find(b"</", b)) {
         at += i + 2;
-        if let (Some(name), Some(b)) = (bytes.get(at..at + tag.len()), bytes.get(at + tag.len())) {
-            if name.eq_ignore_ascii_case(tag.as_bytes())
-                && matches!(b, b'\t' | b'\n' | b'\x0c' | b'\r' | b' ' | b'/' | b'>')
-            {
-                fixed.push_str(content.get(copied..at - 1).unwrap_or_default());
-                fixed.push('\\');
-                copied = at - 1;
-            }
+        if let (Some(name), Some(b)) = (bytes.get(at..at + tag.len()), bytes.get(at + tag.len()))
+            && name.eq_ignore_ascii_case(tag.as_bytes())
+            && matches!(b, b'\t' | b'\n' | b'\x0c' | b'\r' | b' ' | b'/' | b'>')
+        {
+            fixed.push_str(content.get(copied..at - 1).unwrap_or_default());
+            fixed.push('\\');
+            copied = at - 1;
         }
     }
     if copied > 0 {

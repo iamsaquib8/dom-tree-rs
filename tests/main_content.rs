@@ -1,7 +1,7 @@
 //! Main-content extraction (`Dom::main_content`) on realistic pages
 //! (`tests/pages/reader/`) and on focused edge cases.
 
-use domtree::{Dom, NodeRef, parse};
+use domq::{Dom, NodeRef, parse};
 
 /// The chosen element's readable output: Markdown when available, else text.
 fn render(node: NodeRef<'_>) -> String {

@@ -1,0 +1,5 @@
+error: nested `Option`/`Vec` field types are not supported: a field is one value (`T`), an optional one (`Option<T>`) or every match (`Vec<T>`); to collect only elements that have an attribute, select them with `[name]`
+ --> tests/ui/nested_containers.rs:6:12
+  |
+6 |     links: Vec<Option<String>>,
+  |            ^^^^^^^^^^^^^^^^^^^

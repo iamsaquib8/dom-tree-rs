@@ -1,7 +1,7 @@
 //! Property tests: the parser must never panic and must always produce a
 //! structurally consistent tree, for arbitrary input.
 
-use domtree::parse;
+use domq::parse;
 use proptest::prelude::*;
 
 /// HTML-ish soup drawn from a small alphabet of structural characters — far
@@ -86,7 +86,7 @@ proptest! {
 
     #[test]
     fn line_col_never_panics(s in ".{0,64}", byte in 0usize..80) {
-        let (line, col) = domtree::line_col(&s, byte);
+        let (line, col) = domq::line_col(&s, byte);
         prop_assert!(line >= 1 && col >= 1);
         prop_assert!(line <= s.len() + 1 && col <= s.chars().count() + 1);
     }

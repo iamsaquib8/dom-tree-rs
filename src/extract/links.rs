@@ -66,13 +66,13 @@ impl Dom {
     /// inside `<svg>` or `<math>` (it is not an HTML `<base>` there).
     ///
     /// ```
-    /// let dom = domtree::parse(r#"<head><base href="/docs/"></head>"#);
+    /// let dom = domq::parse(r#"<head><base href="/docs/"></head>"#);
     /// assert_eq!(
     ///     dom.base_url(Some("https://example.com/index.html")).as_deref(),
     ///     Some("https://example.com/docs/"),
     /// );
     /// assert_eq!(dom.base_url(None).as_deref(), Some("/docs/"));
-    /// assert_eq!(domtree::parse("<p>x</p>").base_url(None), None);
+    /// assert_eq!(domq::parse("<p>x</p>").base_url(None), None);
     /// ```
     pub fn base_url(&self, base: Option<&str>) -> Option<String> {
         let mut tag = None;
@@ -116,7 +116,7 @@ impl Dom {
     /// only.
     ///
     /// ```
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     r#"<nav><a href="/docs/">Docs</a> <a href="javascript:void(0)">Menu</a></nav>
     ///        <p>See <a href="../faq.html#top">the
     ///        FAQ</a> or <a href="https://example.org"><img src=logo.png alt="Example"></a>.</p>"#,
@@ -167,7 +167,7 @@ impl Dom {
     /// [`NodeRef::attr`]).
     ///
     /// ```
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     r#"<link rel=stylesheet href=/main.css>
     ///        <img src="a.png" srcset="a.png 1x, a@2x.png 2x">
     ///        <script src="https://cdn.example.com/x.js"></script>"#,
@@ -267,10 +267,10 @@ impl<'a> TextCollector<'a> {
         let tag = match node.kind() {
             NodeKind::Element { tag } => tag,
             NodeKind::Text(t) => {
-                if self.hidden.is_none() {
-                    if let Some(link) = self.current() {
-                        link.push(t);
-                    }
+                if self.hidden.is_none()
+                    && let Some(link) = self.current()
+                {
+                    link.push(t);
                 }
                 return false;
             }
@@ -286,10 +286,10 @@ impl<'a> TextCollector<'a> {
                 }
                 return false;
             }
-            if tags::display(tag) != Display::Inline {
-                if let Some(link) = self.current() {
-                    link.space = true;
-                }
+            if tags::display(tag) != Display::Inline
+                && let Some(link) = self.current()
+            {
+                link.space = true;
             }
             return false;
         }
@@ -300,23 +300,23 @@ impl<'a> TextCollector<'a> {
         if self.hidden.is_none() && !self.open.is_empty() && is_hidden(node) {
             self.hidden = Some(node.id());
         }
-        if self.hidden.is_none() {
-            if let Some(link) = self.current() {
-                if display != Display::Inline || tag == "br" {
-                    link.space = true;
-                }
-                if tag == "img" && link.alt.is_none() {
-                    link.alt = node.attr("alt").and_then(non_empty);
-                }
+        if self.hidden.is_none()
+            && let Some(link) = self.current()
+        {
+            if display != Display::Inline || tag == "br" {
+                link.space = true;
+            }
+            if tag == "img" && link.alt.is_none() {
+                link.alt = node.attr("alt").and_then(non_empty);
             }
         }
-        if matches!(tag, "a" | "area") {
-            if let Some(href) = node.attr("href").filter(|h| !is_javascript(h)) {
-                let index = found(node, href);
-                // `found` pushes links in order, so `index == done.len()`.
-                self.done.push(LinkText::default());
-                self.open.push((node, index));
-            }
+        if matches!(tag, "a" | "area")
+            && let Some(href) = node.attr("href").filter(|h| !is_javascript(h))
+        {
+            let index = found(node, href);
+            // `found` pushes links in order, so `index == done.len()`.
+            self.done.push(LinkText::default());
+            self.open.push((node, index));
         }
         true
     }

@@ -1,0 +1,5 @@
+error: field `price` needs `#[html(...)]`: every field says what it reads, e.g. `#[html(select = "h1")]`; use `#[html(skip)]` to fill it with `Default::default()` instead
+ --> tests/ui/missing_html_attribute.rs:7:5
+  |
+7 |     price: f64,
+  |     ^^^^^

@@ -44,7 +44,7 @@ fn build(tokens: &[Token]) -> Dom {
 
 | Parser | Size (gzip) | Deps |
 | --- | --- | --- |
-| dom-tree-rs | 19.5 KB | 0 |
+| domq | 19.5 KB | 0 |
 | html5ever | \~180 KB | 12 |
 | a \| b | pipes are escaped | |
 
@@ -56,7 +56,7 @@ fn build(tokens: &[Token]) -> Dom {
 
 Where the time goes.
 
-Read the [API docs](https://docs.rs/dom-tree-rs) or [open issues](<https://github.com/iamsaquib8/dom-tree-rs/issues?q=is:open (bug)>). Questions? [mailto:hi@example.com](mailto:hi@example.com)
+Read the [API docs](https://docs.rs/domq) or [open issues](<https://github.com/iamsaquib8/domq/issues?q=is:open (bug)>). Questions? [mailto:hi@example.com](mailto:hi@example.com)
 
 ### Related
 

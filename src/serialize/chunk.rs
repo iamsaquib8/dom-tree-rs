@@ -46,7 +46,7 @@ impl Chunk {
     /// when the chunk comes before any heading.
     ///
     /// ```
-    /// let dom = domtree::parse("<h1>Guide</h1><h2>Install</h2><p>Run it.</p>");
+    /// let dom = domq::parse("<h1>Guide</h1><h2>Install</h2><p>Run it.</p>");
     /// let chunks = dom.to_markdown_chunks(1000);
     /// assert_eq!(chunks[0].context(), "Guide > Install");
     /// ```
@@ -89,16 +89,16 @@ impl Dom {
     /// titles.
     ///
     /// ```
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     "<h1>Guide</h1><p>Welcome.</p>\
-    ///      <h2>Install</h2><p>Run the installer.</p><pre>cargo add dom-tree-rs</pre>\
+    ///      <h2>Install</h2><p>Run the installer.</p><pre>cargo add domq</pre>\
     ///      <h2>Usage</h2><p>Parse, then query.</p>",
     /// );
     /// let chunks = dom.to_markdown_chunks(500);
     /// let parts: Vec<_> = chunks.iter().map(|c| (c.context(), c.markdown.as_str())).collect();
     /// assert_eq!(parts, [
     ///     ("Guide".to_string(), "# Guide\n\nWelcome."),
-    ///     ("Guide > Install".to_string(), "## Install\n\nRun the installer.\n\n```\ncargo add dom-tree-rs\n```"),
+    ///     ("Guide > Install".to_string(), "## Install\n\nRun the installer.\n\n```\ncargo add domq\n```"),
     ///     ("Guide > Usage".to_string(), "## Usage\n\nParse, then query."),
     /// ]);
     /// ```
@@ -111,7 +111,7 @@ impl NodeRef<'_> {
     /// This node's subtree as Markdown chunks; see [`Dom::to_markdown_chunks`].
     ///
     /// ```
-    /// let dom = domtree::parse(
+    /// let dom = domq::parse(
     ///     "<nav>Home</nav><main><h2>Notes</h2><p>One.</p><p>Two.</p></main>",
     /// );
     /// let main = dom.find_by_tag("main").next().unwrap();
@@ -415,14 +415,13 @@ fn content(line: &str) -> &str {
             continue;
         }
         let digits = trimmed.bytes().take_while(u8::is_ascii_digit).count();
-        if (1..=9).contains(&digits) {
-            if let Some(r) = trimmed
+        if (1..=9).contains(&digits)
+            && let Some(r) = trimmed
                 .get(digits..)
                 .and_then(|r| r.strip_prefix(". ").or_else(|| r.strip_prefix(") ")))
-            {
-                rest = r;
-                continue;
-            }
+        {
+            rest = r;
+            continue;
         }
         return trimmed;
     }

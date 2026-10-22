@@ -16,8 +16,8 @@ PyPI and Homebrew. See [what shipped](#shipped) and the
 1. **Rust developers pulling data out of HTML** — scrapers, crawlers, feed
    readers, link checkers, test assertions on rendered pages. They want the
    answer in one line, fast compiles, and no 40-crate tree for a two-line job.
-2. **Shell users** — `curl … | domtree 'a.title' -a href`. `htmlq` (last release
-   2022) and `pup` (2016) are unmaintained; `domtree` is the maintained,
+2. **Shell users** — `curl … | domq 'a.title' -a href`. `htmlq` (last release
+   2022) and `pup` (2016) are unmaintained; `domq` is the maintained,
    flag-compatible replacement.
 3. **LLM, RAG and agent pipelines** — turn a page into clean Markdown or
    chunks for a prompt or an index, at the edge or on a server, without a
@@ -27,7 +27,7 @@ PyPI and Homebrew. See [what shipped](#shipped) and the
 5. **Python scraping and data code** — where most scraping and RAG code lives;
    a fast, never-panicking parser with selectors and Markdown.
 6. **People who ship HTML** — docs sites, static-site generators, email
-   templates: `domtree lint` in CI catches missing alt text, empty links,
+   templates: `domq lint` in CI catches missing alt text, empty links,
    duplicate ids and broken markup with `file:line:col`.
 
 Every item below should make at least one of these people's day better. If it
@@ -60,7 +60,7 @@ Numbers we hold ourselves to (✅ = enforced in CI):
 | super-linear time on adversarial input | **none** — every fix gets a timing test | none known |
 | clean debug build of the library | **< 1 s** (M-series) | 0.55 s |
 | allocations per parse | **O(1)**, not O(nodes) | ~20 |
-| MSRV | **Rust 1.85** ✅ | 1.85 |
+| MSRV | **Rust 1.88** ✅ (raised only in minor releases, to versions ≥ ~6 months old) | 1.88 |
 
 ## Non-goals
 
@@ -112,13 +112,13 @@ people rely on.
 
 New crates and new protocols: the biggest API additions.
 
-- [ ] **L** `#[derive(FromHtml)]` in an optional companion crate
-      (`dom-tree-derive`; the core stays zero-dependency). Declarative
+- [x] **L** `#[derive(FromHtml)]` in an optional companion crate
+      (`domq-derive`; the core stays zero-dependency). Declarative
       extraction into structs: `#[html(select = "h1")] title: String`,
       `#[html(select = ".price", attr = "data-value")] price: f64`, `Vec<T>`
       for repeated items, nested structs, `Option<T>`, and errors that name the
       selector that failed. Plus a matching Python dataclass helper.
-- [ ] **L** `domtree mcp`: an MCP server over stdio exposing select, text,
+- [ ] **L** `domq mcp`: an MCP server over stdio exposing select, text,
       Markdown, chunks, links, metadata and lint on HTML the agent provides
       (still no fetching).
 
@@ -145,9 +145,9 @@ infrastructure, so it gets its own release.
 
 For inputs too big to hold as a tree, and for comparing documents in tests.
 
-- [ ] **L** Streaming selectors: run a `Selector` over `domtree::events` for
+- [ ] **L** Streaming selectors: run a `Selector` over `domq::events` for
       multi-gigabyte dumps without building a tree; CLI `--stream`.
-- [ ] **L** `domtree diff a.html b.html`: a structural diff (node-level,
+- [ ] **L** `domq diff a.html b.html`: a structural diff (node-level,
       whitespace-insensitive) for snapshot tests of rendered pages.
 
 ## 0.7 — "Parity and reach" (medium)
@@ -162,7 +162,7 @@ they install software.
       browser-identical table structure.
 - [ ] **M** Context-aware fragments: `append_html` and `parse_fragment_in("tr",
       …)` parse in the parent's context (a `<td>` inside a `<tr>`).
-- [ ] **M** A reusable GitHub Action for `domtree lint` that annotates pull
+- [ ] **M** A reusable GitHub Action for `domq lint` that annotates pull
       requests.
 - [ ] **M** Continuous fuzzing on every PR and nightly (ClusterFuzzLite).
 - [ ] **M** More package managers: Scoop / winget (Windows), Nix, AUR, and a
@@ -176,7 +176,7 @@ Small, high-value polish that makes existing features nicer to use and the
 project cheaper to release. Most items are good first issues and can land in
 any 0.x release before this if a contributor picks them up.
 
-- [ ] **S** `domtree lint` for teams: `--allow` / `--deny` per rule, a summary
+- [ ] **S** `domq lint` for teams: `--allow` / `--deny` per rule, a summary
       line, `--format sarif` for GitHub code scanning.
 - [ ] **S** `Selection` helpers, chainable and allocation-light:
       `dom.select("a").attrs("href")`, `.texts()`, `.first()`, `.len()`.
@@ -192,7 +192,7 @@ any 0.x release before this if a contributor picks them up.
       updates the Homebrew tap itself (token scoped to the tap repo).
 - [ ] **S** Supply chain: signed build provenance (GitHub artifact attestations)
       and an SBOM attached to every release.
-- [ ] **S** A pre-commit hook for `domtree lint`.
+- [ ] **S** A pre-commit hook for `domq lint`.
 - [ ] **M** Playground: reader-mode, chunks, metadata and lint tabs, within the
       wasm size budget.
 
@@ -217,7 +217,7 @@ any 0.x release before this if a contributor picks them up.
 
 Being easy to *get* matters as much as features.
 
-**Done in 0.3.0:** crates.io (`dom-tree-rs`, `domtree-cli`), `cargo binstall`,
+**Done in 0.3.0:** crates.io (`domq`, `domq-cli`), `cargo binstall`,
 release binaries (Linux x86_64/arm64, macOS, Windows) with checksums, WASI build,
 Homebrew tap, npm (trusted publishing, provenance), PyPI (trusted publishing,
 abi3 wheels), and the playground.
@@ -241,7 +241,7 @@ Ideas we like but haven't committed to. Prototypes and use-cases welcome.
 - **WASI component (WIT)** so any component runtime can call the parser.
 - **More bindings** (C ABI, Ruby, PHP, Go via wasm) if there's demand.
 - **Language-server-lite** — lint diagnostics in editors, using source spans.
-- **`domtree fmt`** — an HTML formatter built on the pretty-printer and spans.
+- **`domq fmt`** — an HTML formatter built on the pretty-printer and spans.
 - **XPath subset** — only with strong demand; CSS covers most real queries.
 - **Incremental re-parse** for editors.
 
@@ -300,7 +300,7 @@ distribution and two rounds of review fixes). Details in the
       `wrap` / `unwrap`, `append_html` / `prepend_html` /
       `insert_html_before` / `insert_html_after`. No cycles; document order is
       kept after every edit; `is_detached()`.
-- [x] Source spans: `NodeRef::source_range()` and `domtree::line_col()`.
+- [x] Source spans: `NodeRef::source_range()` and `domq::line_col()`.
 - [x] Top-level nodes linked as siblings (`li + li` works on fragments).
 - [x] More WHATWG optional-tag rules: the full `<p>`-closing list, headings,
       unclosed `<head>`, ruby, `<hr>` in `<select>`, captions / `colgroup` / `col`.
@@ -314,7 +314,7 @@ distribution and two rounds of review fixes). Details in the
 - [x] Word-at-a-time byte scanning; optional `simd` feature (`memchr`).
 - [x] Parsing 25–37% faster on markup and 69% on prose, ahead of `tl` on large
       documents.
-- [x] `domtree::events()`: streaming parse events with the same recovery as
+- [x] `domq::events()`: streaming parse events with the same recovery as
       the tree builder.
 - [x] Benchmarks against `tl`, `scraper` and `html5ever`, a memory report, and a
       weekly benchmark workflow.
@@ -329,11 +329,11 @@ distribution and two rounds of review fixes). Details in the
       (but not inside `<template>`).
 - [x] `Dom::metadata()`: title, description, canonical, lang, OpenGraph,
       Twitter cards, JSON-LD and feeds.
-- [x] `NodeRef::table_rows()` with colspan/rowspan expanded; `domtree::to_csv`.
-- [x] `domtree::resolve_url` / `resolve_srcset`: RFC 3986, HTML `srcset` rules,
+- [x] `NodeRef::table_rows()` with colspan/rowspan expanded; `domq::to_csv`.
+- [x] `domq::resolve_url` / `resolve_srcset`: RFC 3986, HTML `srcset` rules,
       and browsers' backslash handling.
 
-**CLI: `domtree`** (htmlq-compatible: `-a -t -p -w -r -b -B -f -o`)
+**CLI: `domq`** (htmlq-compatible: `-a -t -p -w -r -b -B -f -o`)
 
 - [x] Output: `--markdown`, `--json`, `--jsonl`, `--csv`, `--count`, `--first`,
       pretty HTML; conflicting formats are a usage error.
@@ -341,25 +341,25 @@ distribution and two rounds of review fixes). Details in the
 - [x] `--main` reader mode, `--links`, `--meta`, `--remove-nodes`, `--base`.
 - [x] Encoding detection (BOM, `<meta charset>`, UTF-8, Windows-1252) and
       `--encoding`.
-- [x] `domtree lint`: alt text, empty links and buttons, duplicate ids, heading
+- [x] `domq lint`: alt text, empty links and buttons, duplicate ids, heading
       order and parse errors, as `file:line:col` or JSON, with CI exit codes.
 
 **JavaScript, Python and the browser**
 
-- [x] `dom-tree-wasm` on npm: `parse`, `select`, `selectFirst`, `toText`,
+- [x] The npm package (`dom-tree-wasm` in 0.3.0, `domq` from 0.4.0): `parse`, `select`, `selectFirst`, `toText`,
       `toMarkdown`, `toHtml`, `errors`, and a parse-once `Document`; full
       TypeScript types; works in Node with no setup; ~41 KB gzipped.
-- [x] Playground: <https://iamsaquib8.github.io/dom-tree-rs/>.
-- [x] `dom-tree-rs` on PyPI (`import domtree`): abi3 wheels for 5 platforms,
+- [x] Playground: <https://iamsaquib8.github.io/domq/>.
+- [x] `domq` on PyPI (`import domq`): abi3 wheels for 5 platforms,
       typed stubs, the GIL released on large inputs.
 
 **Distribution**
 
-- [x] crates.io: `dom-tree-rs` and `domtree-cli`.
+- [x] crates.io: `domq` and `domq-cli`.
 - [x] Release binaries for Linux x86_64/arm64, macOS Intel/Apple Silicon and
-      Windows, with `SHA256SUMS`; `cargo binstall domtree-cli`.
-- [x] WASI build (`domtree.wasm`, runs under wasmtime).
-- [x] Homebrew: `brew install iamsaquib8/tap/domtree`.
+      Windows, with `SHA256SUMS`; `cargo binstall domq-cli`.
+- [x] WASI build (`domq.wasm`, runs under wasmtime).
+- [x] Homebrew: `brew install iamsaquib8/tap/domq`.
 - [x] npm and PyPI publishing from CI with trusted publishing (no stored
       tokens; npm with provenance).
 

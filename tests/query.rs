@@ -3,7 +3,7 @@
 
 use std::time::{Duration, Instant};
 
-use domtree::{AsSelector, Dom, NodeRef, Selector, parse};
+use domq::{AsSelector, Dom, NodeRef, Selector, parse};
 
 /// The `id` of every node, in order (`"?"` when it has none).
 fn ids<'a>(nodes: impl Iterator<Item = NodeRef<'a>>) -> Vec<&'a str> {

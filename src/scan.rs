@@ -61,9 +61,9 @@ fn portable(needle: u8, haystack: &[u8]) -> Option<usize> {
     };
     // (Always `Some` on a 16-byte chunk; the fallback matches nothing.)
     let word = |b: Option<&[u8; 8]>| b.map_or(splat ^ HI, |b| u64::from_le_bytes(*b));
-    let mut chunks = haystack.chunks_exact(16);
+    let (chunks, tail) = haystack.as_chunks::<16>();
     let mut offset = 0;
-    for chunk in &mut chunks {
+    for chunk in chunks {
         let (a, b) = (word(chunk.first_chunk()), word(chunk.last_chunk()));
         let (fa, fb) = (flags(a), flags(b));
         if fa | fb != 0 {
@@ -76,7 +76,6 @@ fn portable(needle: u8, haystack: &[u8]) -> Option<usize> {
         }
         offset += 16;
     }
-    let tail = chunks.remainder();
     tail.iter().position(|&b| b == needle).map(|i| offset + i)
 }
 

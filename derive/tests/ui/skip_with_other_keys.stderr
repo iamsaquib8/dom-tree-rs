@@ -1,0 +1,5 @@
+error: `skip` fills the field with `Default::default()` and reads nothing, so it can't be combined with other keys
+ --> tests/ui/skip_with_other_keys.rs:5:18
+  |
+5 |     #[html(skip, select = "h1")]
+  |                  ^^^^^^

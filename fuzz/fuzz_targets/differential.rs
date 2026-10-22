@@ -1,5 +1,5 @@
 #![no_main]
-//! Differential fuzz target: on the subset of HTML that dom-tree-rs claims to
+//! Differential fuzz target: on the subset of HTML that domq claims to
 //! handle like a browser, its tree must match html5ever's.
 //!
 //! Run with: `cargo +nightly fuzz run differential`
@@ -459,10 +459,10 @@ fn first_occurrences(attrs: impl Iterator<Item = (String, String)>) -> Vec<(Stri
 
 fn ours(html: &str) -> Vec<Item> {
     enum Step<'a> {
-        Node(domtree::NodeRef<'a>),
+        Node(domq::NodeRef<'a>),
         Close,
     }
-    let dom = domtree::parse(html);
+    let dom = domq::parse(html);
     let mut seq = Vec::new();
     let mut stack: Vec<Step<'_>> = dom.roots().map(Step::Node).collect();
     stack.reverse();
@@ -475,7 +475,7 @@ fn ours(html: &str) -> Vec<Item> {
             Step::Node(n) => n,
         };
         match node.kind() {
-            domtree::NodeKind::Element { tag } => {
+            domq::NodeKind::Element { tag } => {
                 let attrs = first_occurrences(
                     node.attributes()
                         .map(|(k, v)| (k.to_string(), v.to_string())),
@@ -485,9 +485,9 @@ fn ours(html: &str) -> Vec<Item> {
                 let kids: Vec<_> = node.children().collect();
                 stack.extend(kids.into_iter().rev().map(Step::Node));
             }
-            domtree::NodeKind::Text(t) => push_text(&mut seq, t),
-            domtree::NodeKind::Comment(c) => seq.push(Item::Comment(c.to_string())),
-            domtree::NodeKind::Doctype(_) => {}
+            domq::NodeKind::Text(t) => push_text(&mut seq, t),
+            domq::NodeKind::Comment(c) => seq.push(Item::Comment(c.to_string())),
+            domq::NodeKind::Doctype(_) => {}
         }
     }
     seq
@@ -564,7 +564,7 @@ fuzz_target!(|data: &[u8]| {
             .position(|(x, y)| x != y)
             .unwrap_or(a.len().min(b.len()));
         panic!(
-            "dom-tree-rs and html5ever disagree on\n{html:?}\nfirst difference at item {at}:\n  ours:   {:?}\n  theirs: {:?}\nours:   {a:?}\ntheirs: {b:?}",
+            "domq and html5ever disagree on\n{html:?}\nfirst difference at item {at}:\n  ours:   {:?}\n  theirs: {:?}\nours:   {a:?}\ntheirs: {b:?}",
             a.get(at),
             b.get(at)
         );

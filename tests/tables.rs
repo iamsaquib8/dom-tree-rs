@@ -1,6 +1,6 @@
 //! `NodeRef::table_rows` and `to_csv`.
 
-use domtree::{parse, to_csv};
+use domq::{parse, to_csv};
 
 fn rows(html: &str) -> Vec<Vec<String>> {
     let dom = parse(html);
@@ -240,7 +240,7 @@ fn page_fixture_table() {
         table.table_rows(),
         grid![
             ["Parser", "Size (gzip)", "Deps"],
-            ["dom-tree-rs", "19.5 KB", "0"],
+            ["domq", "19.5 KB", "0"],
             ["html5ever", "~180 KB", "12"],
             ["a | b", "pipes are escaped", "pipes are escaped"],
         ]
@@ -332,6 +332,6 @@ fn table_to_csv() {
     let table = dom.find_by_tag("table").next().unwrap();
     assert_eq!(
         to_csv(table.table_rows()),
-        "Parser,Size (gzip),Deps\r\ndom-tree-rs,19.5 KB,0\r\nhtml5ever,~180 KB,12\r\na | b,pipes are escaped,pipes are escaped\r\n"
+        "Parser,Size (gzip),Deps\r\ndomq,19.5 KB,0\r\nhtml5ever,~180 KB,12\r\na | b,pipes are escaped,pipes are escaped\r\n"
     );
 }

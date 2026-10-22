@@ -142,15 +142,12 @@ fn decode_as(bytes: Vec<u8>, encoding: Encoding) -> String {
 
 /// UTF-16 with unpaired surrogates and a dangling odd byte as U+FFFD.
 fn decode_utf16(bytes: &[u8], unit: fn([u8; 2]) -> u16) -> String {
-    let mut pairs = bytes.chunks_exact(2);
-    let units = pairs.by_ref().map(|p| match p {
-        &[a, b] => unit([a, b]),
-        _ => 0xFFFD,
-    });
+    let (pairs, odd) = bytes.as_chunks::<2>();
+    let units = pairs.iter().map(|&pair| unit(pair));
     let mut out: String = char::decode_utf16(units)
         .map(|c| c.unwrap_or(char::REPLACEMENT_CHARACTER))
         .collect();
-    if !pairs.remainder().is_empty() {
+    if !odd.is_empty() {
         out.push(char::REPLACEMENT_CHARACTER);
     }
     out

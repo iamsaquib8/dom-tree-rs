@@ -1,4 +1,4 @@
-//! End-to-end tests: run the real `domtree` binary.
+//! End-to-end tests: run the real `domq` binary.
 
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -16,18 +16,18 @@ const PAGE: &str = r#"<!doctype html>
 <footer><a href="https://other.dev/x">x</a></footer>
 </body></html>"#;
 
-fn domtree(args: &[&str], stdin: &str) -> (String, String, i32) {
-    domtree_bytes(args, stdin.as_bytes())
+fn domq(args: &[&str], stdin: &str) -> (String, String, i32) {
+    domq_bytes(args, stdin.as_bytes())
 }
 
-fn domtree_bytes(args: &[&str], stdin: &[u8]) -> (String, String, i32) {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_domtree"))
+fn domq_bytes(args: &[&str], stdin: &[u8]) -> (String, String, i32) {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_domq"))
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("spawn domtree");
+        .expect("spawn domq");
     // The binary may exit before reading stdin (usage errors do), closing the
     // pipe under us; that's fine.
     if let Err(e) = child.stdin.take().expect("stdin").write_all(stdin) {
@@ -42,7 +42,7 @@ fn domtree_bytes(args: &[&str], stdin: &[u8]) -> (String, String, i32) {
 }
 
 fn ok(args: &[&str], stdin: &str) -> String {
-    let (out, err, code) = domtree(args, stdin);
+    let (out, err, code) = domq(args, stdin);
     assert_eq!(code, 0, "stderr: {err}");
     out
 }
@@ -203,7 +203,7 @@ fn no_match_is_empty_success() {
 
 #[test]
 fn invalid_selector_points_at_problem() {
-    let (out, err, code) = domtree(&["a:hover"], PAGE);
+    let (out, err, code) = domq(&["a:hover"], PAGE);
     assert_eq!(code, 1);
     assert_eq!(out, "");
     assert!(err.contains("invalid selector"), "{err}");
@@ -212,7 +212,7 @@ fn invalid_selector_points_at_problem() {
 
 #[test]
 fn usage_errors_exit_2() {
-    let (_, err, code) = domtree(&["--bogus"], "");
+    let (_, err, code) = domq(&["--bogus"], "");
     assert_eq!(code, 2);
     assert!(err.contains("--bogus"), "{err}");
 }
@@ -252,7 +252,7 @@ fn output_formats_do_not_combine() {
 
 #[test]
 fn reads_file_and_writes_output() {
-    let dir = std::env::temp_dir().join(format!("domtree-cli-test-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("domq-cli-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("mkdir");
     let input = dir.join("in.html");
     let output = dir.join("out.txt");
@@ -276,7 +276,7 @@ fn reads_file_and_writes_output() {
 }
 
 fn usage_error(args: &[&str], stdin: &str) -> String {
-    let (out, err, code) = domtree(args, stdin);
+    let (out, err, code) = domq(args, stdin);
     assert_eq!((code, out.as_str()), (2, ""), "{args:?}: {err}");
     err
 }
@@ -448,7 +448,7 @@ fn extract_errors() {
     assert!(usage_error(&["-e", "a=h1", "-e", "a=h2"], PAGE).contains("twice"));
     assert!(usage_error(&["-e", "a=h1", "--links"], PAGE).contains("--links"));
     assert!(usage_error(&["-e", "a=h1", "-t"], PAGE).contains("--text"));
-    let (out, err, code) = domtree(&["-e", "x=a:hover"], PAGE);
+    let (out, err, code) = domq(&["-e", "x=a:hover"], PAGE);
     assert_eq!((code, out.as_str()), (1, ""));
     assert!(err.contains("--extract x: invalid selector"), "{err}");
 }
@@ -639,13 +639,13 @@ fn meta_output() {
 
 #[test]
 fn non_utf8_input_falls_back_to_windows_1252() {
-    let (out, _, code) = domtree_bytes(&["-t", "p"], b"<p>caf\xe9 \x93q\x94</p>");
+    let (out, _, code) = domq_bytes(&["-t", "p"], b"<p>caf\xe9 \x93q\x94</p>");
     assert_eq!((out.as_str(), code), ("caf\u{e9} \u{201c}q\u{201d}\n", 0));
 }
 
 #[test]
 fn meta_charset_is_honoured() {
-    let (out, _, _) = domtree_bytes(&["-t", "p"], b"<meta charset=iso-8859-1><p>\xc3\xa9</p>");
+    let (out, _, _) = domq_bytes(&["-t", "p"], b"<meta charset=iso-8859-1><p>\xc3\xa9</p>");
     assert_eq!(out, "\u{c3}\u{a9}\n");
 }
 
@@ -653,20 +653,17 @@ fn meta_charset_is_honoured() {
 fn utf16_input() {
     let mut le = vec![0xFF, 0xFE];
     le.extend("<p>h\u{e9}</p>".encode_utf16().flat_map(u16::to_le_bytes));
-    assert_eq!(domtree_bytes(&["-t"], &le).0, "h\u{e9}\n");
+    assert_eq!(domq_bytes(&["-t"], &le).0, "h\u{e9}\n");
     let be: Vec<u8> = "<p>hi</p>"
         .encode_utf16()
         .flat_map(u16::to_be_bytes)
         .collect();
-    assert_eq!(
-        domtree_bytes(&["--encoding", "utf-16be", "-t"], &be).0,
-        "hi\n"
-    );
+    assert_eq!(domq_bytes(&["--encoding", "utf-16be", "-t"], &be).0, "hi\n");
 }
 
 #[test]
 fn unknown_encoding_warns() {
-    let (out, err, code) = domtree_bytes(&["--encoding=klingon", "-t"], b"<p>caf\xe9</p>");
+    let (out, err, code) = domq_bytes(&["--encoding=klingon", "-t"], b"<p>caf\xe9</p>");
     assert_eq!((out.as_str(), code), ("caf\u{fffd}\n", 0));
     assert!(err.contains("warning") && err.contains("klingon"), "{err}");
 }
@@ -721,7 +718,7 @@ fn lint_with_shared_end_positions_is_linear() {
     // Every `<div>` ends at the end of input, after the one `</div>`.
     let html = format!("{}{}</div>", "<div>".repeat(DEPTH), "x".repeat(100_000));
     let start = std::time::Instant::now();
-    let (out, _, code) = domtree(&["lint"], &html);
+    let (out, _, code) = domq(&["lint"], &html);
     assert!(start.elapsed().as_secs() < 10, "took {:?}", start.elapsed());
     assert_eq!((code, out.lines().count()), (1, DEPTH - 1));
 }
@@ -746,7 +743,7 @@ fn help_lists_every_flag() {
 
 #[test]
 fn closed_stdout_pipe_is_not_an_error() {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_domtree"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_domq"))
         .args(["p"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -777,7 +774,7 @@ const LINTED: &str = "<h1 id=top>Shop</h1>
 
 #[test]
 fn lint_reports_findings_in_document_order() {
-    let (out, err, code) = domtree(&["lint"], LINTED);
+    let (out, err, code) = domq(&["lint"], LINTED);
     assert_eq!(code, 1, "{err}");
     assert_eq!(
         out,
@@ -795,14 +792,14 @@ fn lint_reports_findings_in_document_order() {
 
 #[test]
 fn lint_quiet_and_notes() {
-    let (out, _, code) = domtree(&["lint", "-q"], LINTED);
+    let (out, _, code) = domq(&["lint", "-q"], LINTED);
     assert_eq!(code, 1);
     assert!(!out.contains("note:"), "{out}");
     // Notes alone (valid HTML with omitted end tags) do not fail the run.
-    let (out, _, code) = domtree(&["lint"], "<ul><li>a<li>b</ul>");
+    let (out, _, code) = domq(&["lint"], "<ul><li>a<li>b</ul>");
     assert_eq!(code, 0);
     assert_eq!(out.lines().count(), 2);
-    let (out, _, code) = domtree(&["lint", "--quiet"], "<ul><li>a<li>b</ul>");
+    let (out, _, code) = domq(&["lint", "--quiet"], "<ul><li>a<li>b</ul>");
     assert_eq!((out.as_str(), code), ("", 0));
 }
 
@@ -810,13 +807,13 @@ fn lint_quiet_and_notes() {
 fn lint_clean_input() {
     let html = "<!doctype html><html lang=en><head><title>x</title></head>\
                 <body><h1>Hi</h1><img src=a.png alt=''><a href=/>Home</a></body></html>";
-    let (out, err, code) = domtree(&["lint"], html);
+    let (out, err, code) = domq(&["lint"], html);
     assert_eq!((out.as_str(), err.as_str(), code), ("", "", 0));
 }
 
 #[test]
 fn lint_json() {
-    let (out, _, code) = domtree(&["lint", "--format=json"], "<div>\n<img>");
+    let (out, _, code) = domq(&["lint", "--format=json"], "<div>\n<img>");
     assert_eq!(code, 1);
     assert_eq!(
         out,
@@ -826,13 +823,13 @@ fn lint_json() {
             "\n"
         )
     );
-    let (out, _, code) = domtree(&["lint", "--format", "json"], "<p>fine</p>");
+    let (out, _, code) = domq(&["lint", "--format", "json"], "<p>fine</p>");
     assert_eq!((out.as_str(), code), ("[]\n", 0));
 }
 
 #[test]
 fn lint_files() {
-    let dir = std::env::temp_dir().join(format!("domtree-lint-test-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("domq-lint-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("mkdir");
     let good = dir.join("good.html");
     let bad = dir.join("bad.html");
@@ -843,7 +840,7 @@ fn lint_files() {
     let missing = dir.join("missing.html");
     let missing = missing.to_str().expect("path");
 
-    let (out, _, code) = domtree(&["lint", good, bad], "");
+    let (out, _, code) = domq(&["lint", good, bad], "");
     assert_eq!(code, 1);
     assert_eq!(
         out,
@@ -851,14 +848,14 @@ fn lint_files() {
             "{bad}:1:12: error: <img> has no alt attribute (use alt=\"\" for a decorative image) [img-alt]\n"
         )
     );
-    assert_eq!(domtree(&["lint", good], "").2, 0);
+    assert_eq!(domq(&["lint", good], "").2, 0);
     // An unreadable file: exit 2, the others are still checked.
-    let (out, err, code) = domtree(&["lint", missing, bad], "");
+    let (out, err, code) = domq(&["lint", missing, bad], "");
     assert_eq!(code, 2);
     assert!(err.contains("missing.html"), "{err}");
     assert!(out.contains("[img-alt]"), "{out}");
     // `-` is stdin.
-    let (out, _, _) = domtree(&["lint", "-"], "<img>");
+    let (out, _, _) = domq(&["lint", "-"], "<img>");
     assert!(out.starts_with("<stdin>:1:1: error:"), "{out}");
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -867,7 +864,7 @@ fn lint_files() {
 fn lint_usage() {
     let err = usage_error(&["lint", "--format", "xml"], "");
     assert!(
-        err.contains("--format") && err.contains("domtree lint --help"),
+        err.contains("--format") && err.contains("domq lint --help"),
         "{err}"
     );
     assert!(usage_error(&["lint", "--bogus"], "").contains("--bogus"));
@@ -886,13 +883,13 @@ fn lint_usage() {
     ] {
         assert!(help.contains(rule), "{rule}");
     }
-    assert!(ok(&["--help"], "").contains("domtree lint"));
+    assert!(ok(&["--help"], "").contains("domq lint"));
 }
 
 #[test]
 fn lint_accepts_end_tags_with_junk() {
     // `</span` cut off by the end of input still closes the `<span>`.
-    let (out, _, code) = domtree(&["lint", "-q"], "<div><span>x</span");
+    let (out, _, code) = domq(&["lint", "-q"], "<div><span>x</span");
     assert_eq!(code, 1);
     assert_eq!(
         out,
@@ -908,11 +905,11 @@ fn lint_accepts_end_tags_with_junk() {
         &format!("</span{spaces}>"),
     ] {
         let html = format!("<ul><li><span>x{end_tag}<li>y</ul>");
-        let (out, _, code) = domtree(&["lint", "-q"], &html);
+        let (out, _, code) = domq(&["lint", "-q"], &html);
         assert_eq!((out.as_str(), code), ("", 0), "{html}");
     }
     // `<div><div>x</div>`: the `</div>` closes the inner one only.
-    let (out, _, code) = domtree(&["lint"], "<div><div>x</div>");
+    let (out, _, code) = domq(&["lint"], "<div><div>x</div>");
     assert_eq!(code, 1);
     assert_eq!(
         out,

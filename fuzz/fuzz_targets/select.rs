@@ -13,10 +13,10 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
     let (selector, html) = s.split_once('\n').unwrap_or((s, ""));
-    let dom = domtree::parse(html);
+    let dom = domq::parse(html);
 
     let by_str: Vec<_> = dom.select(selector).map(|n| n.id()).collect();
-    match domtree::Selector::parse(selector) {
+    match domq::Selector::parse(selector) {
         Ok(parsed) => {
             let by_parsed: Vec<_> = dom.select(&parsed).map(|n| n.id()).collect();
             assert_eq!(by_str, by_parsed, "&str and &Selector disagree");

@@ -1,4 +1,4 @@
-"""Tests for the `domtree` Python bindings (`pip install dom-tree-rs`)."""
+"""Tests for the `domq` Python bindings (`pip install domq`)."""
 
 import gc
 import json
@@ -8,7 +8,7 @@ import threading
 
 import pytest
 
-import domtree
+import domq
 
 ARTICLE = (
     "<article><h2>News</h2><p>It <em>works</em>!</p>"
@@ -39,35 +39,35 @@ PAGE = """<!doctype html>
 
 @pytest.fixture
 def page():
-    return domtree.parse(PAGE)
+    return domq.parse(PAGE)
 
 
 # --- module ------------------------------------------------------------------
 
 
 def test_version():
-    assert re.fullmatch(r"\d+\.\d+\.\d+.*", domtree.__version__)
+    assert re.fullmatch(r"\d+\.\d+\.\d+.*", domq.__version__)
 
 
 def test_classes_are_not_constructible():
     with pytest.raises(TypeError):
-        domtree.Element()
+        domq.Element()
     with pytest.raises(TypeError):
-        domtree.Document()
+        domq.Document()
 
 
 def test_parse_requires_str():
     with pytest.raises(TypeError):
-        domtree.parse(b"<p>bytes</p>")
+        domq.parse(b"<p>bytes</p>")
     with pytest.raises(TypeError):
-        domtree.parse(None)
+        domq.parse(None)
 
 
 # --- Document ----------------------------------------------------------------
 
 
 def test_document_serializers():
-    doc = domtree.parse(ARTICLE)
+    doc = domq.parse(ARTICLE)
     assert doc.to_text() == "News\n\nIt works!"
     assert doc.to_markdown() == "## News\n\nIt *works*!"
     assert doc.to_html() == ARTICLE
@@ -75,7 +75,7 @@ def test_document_serializers():
 
 
 def test_document_to_json():
-    data = json.loads(domtree.parse("<p class=a>hi</p>").to_json())
+    data = json.loads(domq.parse("<p class=a>hi</p>").to_json())
     assert data["type"] == "document"
     (p,) = data["children"]
     assert p["tag"] == "p"
@@ -88,19 +88,19 @@ def test_root_and_roots(page):
     assert page.root.tag == "html"
     assert [e.tag for e in page.roots] == ["html"]
 
-    frag = domtree.parse("text <b>one</b><!-- c --><i>two</i>")
+    frag = domq.parse("text <b>one</b><!-- c --><i>two</i>")
     assert frag.root.tag == "b"
     assert [e.tag for e in frag.roots] == ["b", "i"]
 
-    empty = domtree.parse("")
+    empty = domq.parse("")
     assert empty.root is None
     assert empty.roots == []
     assert empty.to_text() == ""
 
 
 def test_errors():
-    assert domtree.parse("<p>clean</p>").errors == []
-    errors = domtree.parse("<div><p>x</span></div>").errors
+    assert domq.parse("<p>clean</p>").errors == []
+    errors = domq.parse("<div><p>x</span></div>").errors
     assert errors, "expected a recovery diagnostic"
     for pos, msg in errors:
         assert isinstance(pos, int) and pos >= 0
@@ -112,7 +112,7 @@ def test_repr(page):
     r = repr(page)
     assert r.startswith("<Document roots=[<html>]")
     assert f"errors={len(page.errors)}>" in r
-    assert repr(domtree.parse("<p>a</p><p>b</p>")) == "<Document roots=[<p>, <p>] nodes=4 errors=0>"
+    assert repr(domq.parse("<p>a</p><p>b</p>")) == "<Document roots=[<p>, <p>] nodes=4 errors=0>"
 
 
 # --- selectors ---------------------------------------------------------------
@@ -184,7 +184,7 @@ def test_attrs_is_a_fresh_dict(page):
 
 
 def test_boolean_and_duplicate_attributes():
-    el = domtree.parse('<input disabled type="text" type="number">').root
+    el = domq.parse('<input disabled type="text" type="number">').root
     assert el.attr("disabled") == ""
     assert el.attrs["disabled"] == ""
     # The first of a duplicated attribute wins, in both accessors.
@@ -193,13 +193,13 @@ def test_boolean_and_duplicate_attributes():
 
 
 def test_text_vs_text_content():
-    el = domtree.parse("<div><p>a  b</p><script>x()</script><p>c</p></div>").root
+    el = domq.parse("<div><p>a  b</p><script>x()</script><p>c</p></div>").root
     assert el.text == "a b\n\nc"
     assert el.text_content == "a  bx()c"
 
 
 def test_html_and_inner_html():
-    el = domtree.parse('<ul id="l"><li>a</li><li>b &amp; c</li></ul>').root
+    el = domq.parse('<ul id="l"><li>a</li><li>b &amp; c</li></ul>').root
     assert el.html == '<ul id="l"><li>a</li><li>b &amp; c</li></ul>'
     assert el.inner_html == "<li>a</li><li>b &amp; c</li>"
     assert str(el) == el.html
@@ -241,21 +241,21 @@ def test_element_equality_and_hash(page):
     assert a1 != page.root
     assert a1 != "main"
     # Same markup, different documents: different nodes.
-    other = domtree.parse(PAGE).select_first("main")
+    other = domq.parse(PAGE).select_first("main")
     assert other != a1
 
 
 def test_element_repr():
-    el = domtree.parse('<a href="/x" class="btn" hidden>go</a>').root
+    el = domq.parse('<a href="/x" class="btn" hidden>go</a>').root
     assert repr(el) == '<Element <a href="/x" class="btn" hidden>>'
-    long = domtree.parse("<p " + " ".join(f'data-a{i}="{i}"' for i in range(50)) + ">").root
+    long = domq.parse("<p " + " ".join(f'data-a{i}="{i}"' for i in range(50)) + ">").root
     assert len(repr(long)) < 100
     assert repr(long).endswith("…>>")
 
 
 def test_element_keeps_document_alive():
     def first_link():
-        return domtree.parse('<p>see <a href="/x">here</a></p>').select_first("a")
+        return domq.parse('<p>see <a href="/x">here</a></p>').select_first("a")
 
     link = first_link()
     gc.collect()
@@ -266,7 +266,7 @@ def test_element_keeps_document_alive():
 
 
 def test_elements_outlive_the_document_variable():
-    doc = domtree.parse("<p><b>x</b></p>")
+    doc = domq.parse("<p><b>x</b></p>")
     elements = doc.select("*")
     del doc
     gc.collect()
@@ -280,7 +280,7 @@ def test_elements_outlive_the_document_variable():
 
 
 def test_unicode():
-    doc = domtree.parse("<p title='naïve'>héllo 🌍 &amp; 日本語</p>")
+    doc = domq.parse("<p title='naïve'>héllo 🌍 &amp; 日本語</p>")
     p = doc.root
     assert p.text == "héllo 🌍 & 日本語"
     assert p.attr("title") == "naïve"
@@ -289,7 +289,7 @@ def test_unicode():
 
 def test_error_offsets_are_utf8_bytes():
     src = "<p>é</span>"
-    ((pos, _),) = [e for e in domtree.parse(src).errors if "stray" in e[1]]
+    ((pos, _),) = [e for e in domq.parse(src).errors if "stray" in e[1]]
     assert src.encode()[pos:].startswith(b"</span>")
 
 
@@ -298,7 +298,7 @@ def test_never_raises_on_garbage():
     alphabet = "<>/=\"'!-&;#abcdpliu x\n\té\U0001f600[]()"
     for _ in range(300):
         html = "".join(rng.choice(alphabet) for _ in range(rng.randrange(0, 200)))
-        doc = domtree.parse(html)
+        doc = domq.parse(html)
         doc.to_text()
         doc.to_markdown()
         doc.to_html()
@@ -310,12 +310,12 @@ def test_never_raises_on_garbage():
 
 def test_lone_surrogate_is_rejected():
     with pytest.raises(UnicodeEncodeError):
-        domtree.parse("<p>\ud800</p>")
+        domq.parse("<p>\ud800</p>")
 
 
 def test_deep_nesting_does_not_overflow():
     html = "<div>" * 50_000 + "deep" + "</div>" * 50_000
-    doc = domtree.parse(html)
+    doc = domq.parse(html)
     assert doc.to_text() == "deep"
     assert len(doc.select("div")) == 50_000
 
@@ -328,7 +328,7 @@ def test_large_input_and_threads():
     results = []
 
     def work():
-        doc = domtree.parse(html)
+        doc = domq.parse(html)
         results.append((len(doc.select("tr")), len(doc.to_markdown()) > 0))
 
     threads = [threading.Thread(target=work) for _ in range(4)]
@@ -343,7 +343,7 @@ def test_large_input_and_threads():
 
 
 def test_readme_scraping_example():
-    doc = domtree.parse(PAGE)
+    doc = domq.parse(PAGE)
     products = [
         {
             "name": card.select_first(".title").text,
@@ -371,7 +371,7 @@ def test_readme_markdown_example():
       </article>
     </body></html>
     """
-    doc = domtree.parse(html)
+    doc = domq.parse(html)
     md = doc.select_first("article").to_markdown()
     assert md == (
         "# Release notes\n\n"

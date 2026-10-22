@@ -1,7 +1,7 @@
 //! URL reference resolution (`resolve_url`, RFC 3986 §5) and `srcset`
 //! handling (`resolve_srcset`).
 
-use domtree::{resolve_srcset, resolve_url};
+use domq::{resolve_srcset, resolve_url};
 
 /// The normal and abnormal examples from RFC 3986 §5.4.
 #[test]

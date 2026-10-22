@@ -1,5 +1,5 @@
 [package]
-name = "dom-tree-rs-fuzz"
+name = "domq-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -12,7 +12,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-dom-tree-rs = { path = "..", features = ["json", "query", "markdown"] }
+domq = { path = "..", features = ["json", "query", "markdown"] }
 # The reference parser for the `differential` target.
 html5ever = "0.39"
 markup5ever_rcdom = "0.39"

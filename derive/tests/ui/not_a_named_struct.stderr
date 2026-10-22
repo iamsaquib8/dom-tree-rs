@@ -1,0 +1,17 @@
+error: `#[derive(FromHtml)]` supports structs with named fields, not enums; implement `FromHtml` by hand to decide which variant a page holds
+ --> tests/ui/not_a_named_struct.rs:4:1
+  |
+4 | enum Page {
+  | ^^^^^^^^^
+
+error: `#[derive(FromHtml)]` supports structs with named fields, not tuple structs: name the fields so each can say what it reads with `#[html(...)]`
+  --> tests/ui/not_a_named_struct.rs:10:8
+   |
+10 | struct Pair(String, String);
+   |        ^^^^^^^^^^^^^^^^^^^^
+
+error: `#[derive(FromHtml)]` supports structs with named fields, not unions
+  --> tests/ui/not_a_named_struct.rs:13:1
+   |
+13 | union Bits {
+   | ^^^^^^^^^^

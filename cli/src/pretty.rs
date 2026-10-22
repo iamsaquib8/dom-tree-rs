@@ -4,7 +4,7 @@
 //! Whitespace-sensitive elements (`<pre>`, `<textarea>`, `<script>`, `<style>`)
 //! and elements holding only a short run of text are kept on one line, as-is.
 
-use domtree::{NodeKind, NodeRef};
+use domq::{NodeKind, NodeRef};
 
 const INDENT: &str = "  ";
 const INLINE_MAX: usize = 80;
@@ -124,7 +124,7 @@ mod tests {
     use super::*;
 
     fn pretty(html: &str) -> String {
-        let dom = domtree::parse(html);
+        let dom = domq::parse(html);
         let mut out = String::new();
         for r in dom.roots() {
             write(r, &mut out);

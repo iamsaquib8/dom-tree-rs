@@ -3,31 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>dom-tree-rs playground</title>
+  <title>domq playground</title>
   <meta name="description" content="Paste messy HTML and watch a tiny Rust parser, compiled to WebAssembly, repair it, query it with CSS selectors, and turn it into text, Markdown or JSON. Runs entirely in your browser.">
   <meta name="color-scheme" content="light dark">
-  <meta property="og:title" content="dom-tree-rs playground">
+  <meta property="og:title" content="domq playground">
   <meta property="og:description" content="Messy HTML in. Clean tree, text, Markdown, or JSON out. A zero-dependency Rust HTML parser with CSS selectors, running in your browser.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="modulepreload" href="pkg/dom_tree_wasm.js">
-  <link rel="preload" href="pkg/dom_tree_wasm_bg.wasm" as="fetch" type="application/wasm" crossorigin>
+  <link rel="modulepreload" href="pkg/domq_wasm.js">
+  <link rel="preload" href="pkg/domq_wasm_bg.wasm" as="fetch" type="application/wasm" crossorigin>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="masthead">
     <div class="brand">
-      <h1 class="wordmark"><span class="angle" aria-hidden="true">&lt;</span>dom-tree-rs<span class="angle" aria-hidden="true">&gt;</span></h1>
+      <h1 class="wordmark"><span class="angle" aria-hidden="true">&lt;</span>domq<span class="angle" aria-hidden="true">&gt;</span></h1>
       <p class="pitch">Messy HTML in. Clean tree, text, Markdown, or JSON out.</p>
       <p class="sub">A zero-dependency Rust parser with CSS selectors, running right here as a <span data-wasm-size>small</span> WebAssembly module. Nothing you paste leaves this page.</p>
     </div>
     <nav class="links" aria-label="Project">
-      <a class="star" href="https://github.com/iamsaquib8/dom-tree-rs">
+      <a class="star" href="https://github.com/iamsaquib8/domq">
         <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 .9l2.2 4.5 4.9.7-3.6 3.5.9 4.9L8 12.2l-4.4 2.3.9-4.9L.9 6.1l4.9-.7z"/></svg>
         Star on GitHub
       </a>
-      <a href="https://crates.io/crates/dom-tree-rs">crates.io</a>
-      <a href="https://www.npmjs.com/package/dom-tree-wasm">npm</a>
-      <a href="https://docs.rs/dom-tree-rs">Docs</a>
+      <a href="https://crates.io/crates/domq">crates.io</a>
+      <a href="https://www.npmjs.com/package/domq">npm</a>
+      <a href="https://docs.rs/domq">Docs</a>
     </nav>
   </header>
 
@@ -100,14 +100,14 @@
     <div class="install">
       <p>Use it from your terminal:</p>
       <div class="command">
-        <code id="cli-command">cargo install domtree-cli</code>
+        <code id="cli-command">cargo install domq-cli</code>
         <button type="button" class="quiet" data-copy="cli-command">Copy</button>
       </div>
     </div>
     <div class="install">
       <p>Or from JavaScript:</p>
       <div class="command">
-        <code id="npm-command">npm install dom-tree-wasm</code>
+        <code id="npm-command">npm install domq</code>
         <button type="button" class="quiet" data-copy="npm-command">Copy</button>
       </div>
     </div>

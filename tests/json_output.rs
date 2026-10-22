@@ -1,7 +1,7 @@
 //! Tests for the zero-dependency JSON serializer.
 #![cfg(feature = "json")]
 
-use domtree::parse;
+use domq::parse;
 
 #[test]
 fn document_shape() {

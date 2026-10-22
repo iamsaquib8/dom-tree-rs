@@ -1,6 +1,6 @@
 # `maturin develop` drops the compiled extension next to the Python sources.
-/domtree/*.so
-/domtree/*.pyd
+/domq/*.so
+/domq/*.pyd
 /target/
 /dist/
 __pycache__/

@@ -2,7 +2,7 @@
 //! fragments, creating and moving nodes, wrap/unwrap — and the invariants
 //! every edit must keep (document order, detached flags, top-level links).
 
-use domtree::{Dom, NodeId, parse};
+use domq::{Dom, NodeId, parse};
 
 /// The document's node ids by following links from the roots — the reference
 /// that `Dom::nodes()` must agree with after any edit.
@@ -206,7 +206,7 @@ fn select_skips_removed_nodes_and_sees_sibling_roots() {
 
 #[test]
 fn removing_nested_chains_is_linear() {
-    // Ancestors first, like `domtree -r div`: each later remove() hits an
+    // Ancestors first, like `domq -r div`: each later remove() hits an
     // already-detached node and must not re-walk its subtree.
     let html = "<div>".repeat(20_000);
     let mut dom = parse(&html);

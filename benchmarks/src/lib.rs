@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn inputs_have_the_advertised_shape() {
         for (name, html) in super::inputs() {
-            let dom = domtree::parse(&html);
+            let dom = domq::parse(&html);
             assert!(dom.len() > 5, "{name}");
             let bytes_per_node = html.len() / dom.len();
             match name {

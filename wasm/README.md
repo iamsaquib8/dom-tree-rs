@@ -1,16 +1,16 @@
-# dom-tree-wasm
+# domq for JavaScript
 
 **Messy HTML in. Clean tree, text, Markdown, or JSON out.** A forgiving HTML
 parser with CSS selectors for JavaScript: browsers, Node, Deno, Bun and edge
-workers. It is the Rust crate [`dom-tree-rs`](https://github.com/iamsaquib8/dom-tree-rs)
+workers. It is the Rust crate [`domq`](https://github.com/iamsaquib8/domq)
 compiled to one **~41 KB (gzipped)** WebAssembly module, with zero JS
 dependencies.
 
-**[Try it in the playground](https://iamsaquib8.github.io/dom-tree-rs/)**: paste
+**[Try it in the playground](https://iamsaquib8.github.io/domq/)**: paste
 any HTML and query it live.
 
 ```js
-import { select, toMarkdown } from "dom-tree-wasm";
+import { select, toMarkdown } from "domq";
 
 const html = `<ul id=links><li><a href="/a">One</a><li><a href="/b">Two</a></ul>`;
 
@@ -33,7 +33,7 @@ render.
 ## Install
 
 ```sh
-npm install dom-tree-wasm
+npm install domq
 ```
 
 ## Use it
@@ -43,10 +43,10 @@ runtime:
 
 | Runtime | Setup | Status |
 |---|---|---|
-| Node.js 18+ | nothing: `import { select } from "dom-tree-wasm"` | tested in CI (Node 20) |
+| Node.js 22+ (supported LTS lines) | nothing: `import { select } from "domq"` | tested in CI on the current LTS |
 | Browsers, bundlers (Vite, webpack 5, …) | `await init()` once | tested (the playground uses this build) |
 | Bun | nothing (uses the Node entry point) | expected to work, not tested |
-| Deno | nothing with `npm:dom-tree-wasm` (Node entry point) | expected to work, not tested |
+| Deno | nothing with `npm:domq` (Node entry point) | expected to work, not tested |
 | Cloudflare Workers | `initSync({ module })` with the imported `.wasm` | expected to work, not tested |
 
 ### Node.js
@@ -55,7 +55,7 @@ Import and call. The Node entry point loads the module synchronously at import
 time, so there is no `init()` to await (calling it anyway is harmless).
 
 ```js
-import { select, toText } from "dom-tree-wasm";
+import { select, toText } from "domq";
 
 const res = await fetch("https://news.ycombinator.com");
 const html = await res.text();
@@ -64,18 +64,18 @@ for (const link of select(html, ".titleline > a")) {
 }
 ```
 
-From CommonJS, `require("dom-tree-wasm")` works on Node versions that can
+From CommonJS, `require("domq")` works on Node versions that can
 `require()` ES modules (20.19+ and 22.12+). On older versions, use
-`const { select } = await import("dom-tree-wasm")`.
+`const { select } = await import("domq")`.
 
 ### Browsers and bundlers
 
 Call the default export once before anything else. It fetches
-`dom_tree_wasm_bg.wasm` from next to the JS file, which bundlers such as Vite
+`domq_wasm_bg.wasm` from next to the JS file, which bundlers such as Vite
 and webpack 5 handle as an asset.
 
 ```js
-import init, { select, toMarkdown } from "dom-tree-wasm";
+import init, { select, toMarkdown } from "domq";
 
 await init();
 const md = toMarkdown(document.documentElement.outerHTML, "article");
@@ -85,7 +85,7 @@ Without a bundler, import it from a CDN:
 
 ```html
 <script type="module">
-  import init, { toText } from "https://cdn.jsdelivr.net/npm/dom-tree-wasm@0.3/dom_tree_wasm.js";
+  import init, { toText } from "https://cdn.jsdelivr.net/npm/domq@0.3/domq_wasm.js";
   await init();
   console.log(toText("<p>Hello <b>world</b>"));
 </script>
@@ -94,7 +94,7 @@ Without a bundler, import it from a CDN:
 ### Deno and Bun
 
 ```js
-import { select } from "npm:dom-tree-wasm@0.3"; // Deno; in Bun: "dom-tree-wasm"
+import { select } from "npm:domq@0.3"; // Deno; in Bun: "domq"
 ```
 
 Both resolve the package's Node entry point, which reads the `.wasm` with
@@ -106,8 +106,8 @@ Wrangler imports `.wasm` files as compiled `WebAssembly.Module`s; hand it to
 `initSync`:
 
 ```js
-import { initSync, toMarkdown } from "dom-tree-wasm";
-import wasm from "dom-tree-wasm/dom_tree_wasm_bg.wasm";
+import { initSync, toMarkdown } from "domq";
+import wasm from "domq/domq_wasm_bg.wasm";
 
 initSync({ module: wasm });
 
@@ -142,7 +142,7 @@ Each function above parses the HTML again. To run several queries on one
 document, parse it once:
 
 ```js
-import { Document } from "dom-tree-wasm";
+import { Document } from "domq";
 
 const doc = new Document(html); // or Document.parse(html)
 const title = doc.selectFirst("h1")?.text;
@@ -159,7 +159,7 @@ management is available, `using doc = new Document(html)` frees it
 automatically.
 
 If you also use the DOM's `Document` type in the same file, rename the import:
-`import { Document as HtmlDocument } from "dom-tree-wasm"`.
+`import { Document as HtmlDocument } from "domq"`.
 
 ### Types
 
@@ -212,14 +212,14 @@ try {
 Unsupported selectors are errors rather than silently matching nothing:
 pseudo-elements, `:hover` and other interactive states, namespaces, and
 `:has()` inside `:has()`. The full grammar is in the
-[`Selector` docs](https://docs.rs/dom-tree-rs/latest/domtree/struct.Selector.html).
+[`Selector` docs](https://docs.rs/domq/latest/domq/struct.Selector.html).
 
 ## Size
 
 | File | Raw | Gzipped |
 |---|---:|---:|
-| `dom_tree_wasm_bg.wasm` | ~88 KB | ~41 KB |
-| `dom_tree_wasm.js` (glue) | ~22 KB | ~4 KB |
+| `domq_wasm_bg.wasm` | ~88 KB | ~41 KB |
+| `domq_wasm.js` (glue) | ~22 KB | ~4 KB |
 
 The module contains the parser, the selector engine, and the text, Markdown,
 JSON and HTML serializers. CI fails if the gzipped `.wasm` grows past 45 KiB.
@@ -237,7 +237,7 @@ which returns `Match` objects instead of a JSON string of subtrees.
 rustup target add wasm32-unknown-unknown
 cargo install wasm-pack
 
-cd dom-tree-wasm
+cd wasm
 wasm-pack build --target web --release   # -> pkg/
 node npm/finish.mjs                      # add the Node entry point + "exports"
 wasm-pack test --node                    # Rust-side tests of the bindings

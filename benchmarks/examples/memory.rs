@@ -1,5 +1,5 @@
 //! Memory use per parse: heap allocations, bytes requested, and the peak of
-//! live heap bytes while the parsed document exists — for `dom-tree-rs` and
+//! live heap bytes while the parsed document exists — for `domq` and
 //! the parsers it is benchmarked against. Prints a Markdown table.
 //!
 //! Run with: `cargo run --release --example memory` (from `benchmarks/`).
@@ -84,13 +84,13 @@ fn main() {
         "| input | size (KiB) | parser | allocations | allocated (KiB) | peak live (KiB) | retained (KiB) | retained / input |"
     );
     println!("|---|---:|---|---:|---:|---:|---:|---:|");
-    for (name, html) in dom_tree_rs_benchmarks::inputs() {
+    for (name, html) in domq_benchmarks::inputs() {
         let input = html.as_str();
         let rows: Vec<(&str, Usage)> = vec![
-            ("dom-tree-rs", measure(|| domtree::parse(input))),
+            ("domq", measure(|| domq::parse(input))),
             (
-                "dom-tree-rs/events",
-                measure(|| domtree::events(input).count()),
+                "domq/events",
+                measure(|| domq::events(input).count()),
             ),
             (
                 "tl",

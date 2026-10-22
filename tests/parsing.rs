@@ -1,6 +1,6 @@
 //! Behavioural tests for the parser and tree.
 
-use domtree::{NodeKind, Token, parse, tokenize};
+use domq::{NodeKind, Token, parse, tokenize};
 
 #[test]
 fn basic_nesting() {
@@ -167,7 +167,7 @@ fn tokenizer_stream() {
 fn tokenizer_gives_each_start_tag_its_own_attributes() {
     // The tokenizer reuses one attribute buffer internally; the public
     // iterator must still hand every tag exactly its own attributes.
-    use domtree::AttrValue;
+    use domq::AttrValue;
     let attrs: Vec<_> = tokenize("<a x=1 Y='2'><b><!-- c --><i z>t</i><img src=\"s\" alt>")
         .filter_map(|t| match t {
             Token::StartTag { name, attrs, .. } => Some((name, attrs)),
@@ -356,7 +356,7 @@ fn colliding_names_on_a_deep_stack_are_linear() {
     for (label, events) in [("parse", false), ("events", true)] {
         let start = std::time::Instant::now();
         let count = if events {
-            domtree::events(&html).count()
+            domq::events(&html).count()
         } else {
             parse(&html).len()
         };
@@ -373,13 +373,13 @@ fn colliding_names_on_a_deep_stack_are_linear() {
     let stray = dom
         .errors()
         .iter()
-        .filter(|e| e.kind == domtree::ErrorKind::StrayEndTag)
+        .filter(|e| e.kind == domq::ErrorKind::StrayEndTag)
         .count();
     assert_eq!(stray, n); // every second end tag
 }
 
 /// The tag names of `el` and its ancestors, innermost first.
-fn path(el: domtree::NodeRef<'_>) -> Vec<String> {
+fn path(el: domq::NodeRef<'_>) -> Vec<String> {
     std::iter::once(el)
         .chain(el.ancestors())
         .filter_map(|n| n.tag_name().map(str::to_owned))
@@ -388,7 +388,7 @@ fn path(el: domtree::NodeRef<'_>) -> Vec<String> {
 
 #[test]
 fn end_tags_reach_the_256_innermost_and_8_outermost_open_elements() {
-    use domtree::ErrorKind::{MismatchedEndTag, StrayEndTag};
+    use domq::ErrorKind::{MismatchedEndTag, StrayEndTag};
     // `<main>` sits under 8 wrappers (out of the outer reach) with `k` open
     // `<b>`s above it.
     let doc = |k: usize| {
@@ -641,12 +641,12 @@ fn implicit_closes_are_reported() {
     assert!(
         dom.errors()
             .iter()
-            .any(|e| e.kind == domtree::ErrorKind::ImplicitlyClosed && e.position == 5)
+            .any(|e| e.kind == domq::ErrorKind::ImplicitlyClosed && e.position == 5)
     );
 }
 
-fn kinds(html: &str) -> Vec<domtree::ErrorKind> {
-    domtree::parse(html)
+fn kinds(html: &str) -> Vec<domq::ErrorKind> {
+    domq::parse(html)
         .errors()
         .iter()
         .map(|e| e.kind.clone())
@@ -655,7 +655,7 @@ fn kinds(html: &str) -> Vec<domtree::ErrorKind> {
 
 #[test]
 fn valid_html_is_not_reported_as_an_error() {
-    use domtree::ErrorKind::*;
+    use domq::ErrorKind::*;
     // A bare `&` is valid, in text and in attribute values (query strings).
     assert!(kinds("<p>a & b, 1&2</p>").is_empty());
     assert!(kinds(r#"<a href="?a=1&b=2&region=eu&not=x">x</a>"#).is_empty());
@@ -687,7 +687,7 @@ fn valid_html_is_not_reported_as_an_error() {
 
 #[test]
 fn real_problems_are_still_reported() {
-    use domtree::ErrorKind::*;
+    use domq::ErrorKind::*;
     assert!(kinds("<p>&nosuchentity;</p>").contains(&UnknownEntity));
     assert!(kinds("<p>&#xZZ;</p>").contains(&UnknownEntity));
     assert!(kinds("<p>AT&ampT, &copy 2026</p>").contains(&UnknownEntity));
@@ -714,18 +714,18 @@ fn real_problems_are_still_reported() {
 fn unknown_entities_are_reported_at_their_ampersand() {
     let positions = |html: &str| -> Vec<usize> {
         let dom = parse(html);
-        let mut events = domtree::events(html);
+        let mut events = domq::events(html);
         for _ in events.by_ref() {}
         assert_eq!(events.errors(), dom.errors(), "{html}");
         dom.errors()
             .iter()
-            .filter(|e| e.kind == domtree::ErrorKind::UnknownEntity)
+            .filter(|e| e.kind == domq::ErrorKind::UnknownEntity)
             .map(|e| e.position)
             .collect()
     };
     let html = "<p>aaaa\nbbbb &bogus; cc</p>";
     assert_eq!(positions(html), [13]);
-    assert_eq!(domtree::line_col(html, 13), (2, 6));
+    assert_eq!(domq::line_col(html, 13), (2, 6));
     // Only the first per text run or attribute value; multi-byte text before.
     let html = "<p>é &amp; &x; &y;</p><p>&#</p>";
     assert_eq!(

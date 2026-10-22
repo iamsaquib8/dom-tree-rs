@@ -1,4 +1,4 @@
-//! WebAssembly / JavaScript bindings for [`dom-tree-rs`](https://crates.io/crates/dom-tree-rs).
+//! WebAssembly / JavaScript bindings for [`domq`](https://crates.io/crates/domq).
 //!
 //! Parse messy HTML, query it with CSS selectors, and get readable text,
 //! Markdown, JSON or repaired HTML out — in the browser, on the edge (Workers,
@@ -19,7 +19,7 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use domtree::{Dom, NodeRef, Selector};
+use domq::{Dom, NodeRef, Selector};
 use wasm_bindgen::prelude::*;
 
 /// The same allocator Rust's `std` uses on `wasm32-unknown-unknown`.
@@ -120,7 +120,7 @@ impl Document {
     /// repaired and the repairs are listed by `errors()`.
     #[wasm_bindgen(constructor)]
     pub fn new(html: &str) -> Document {
-        let dom = domtree::parse(html);
+        let dom = domq::parse(html);
         let errors = js_positions(html, &dom);
         Document { dom, errors }
     }
@@ -249,14 +249,14 @@ impl Document {
 /// Parse `html` into a tree of plain JS objects (see `DomDocument`).
 #[wasm_bindgen(unchecked_return_type = "DomDocument")]
 pub fn parse(html: &str) -> JsValue {
-    json(&domtree::parse(html).to_json())
+    json(&domq::parse(html).to_json())
 }
 
 /// Parse `html` and return the tree as a JSON string (the same shape as
 /// `parse()`), e.g. to send it over the network without re-encoding.
 #[wasm_bindgen(js_name = parseJson)]
 pub fn parse_json(html: &str) -> String {
-    domtree::parse(html).to_json()
+    domq::parse(html).to_json()
 }
 
 /// Every element of `html` matching a CSS `selector`. Throws a
@@ -292,7 +292,7 @@ pub fn to_markdown(html: &str, selector: Option<String>) -> Result<String, JsVal
 /// `html` parsed and re-serialized: the repaired, well-formed version.
 #[wasm_bindgen(js_name = toHtml)]
 pub fn to_html(html: &str) -> String {
-    domtree::parse(html).to_html()
+    domq::parse(html).to_html()
 }
 
 /// The problems the parser recovered from while parsing `html`.

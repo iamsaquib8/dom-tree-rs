@@ -28,12 +28,17 @@ cargo test --all-features        # unit + corpus snapshots + proptest + doctests
 cargo clippy --all-features --all-targets -- -D warnings
 cargo fmt --all
 
+# #[derive(FromHtml)]: end-to-end tests, then the macro's compile-fail tests
+# (after changing a diagnostic: TRYBUILD=overwrite cargo test -p domq-derive)
+cargo test --features derive
+cargo test -p domq-derive
+
 # CLI (workspace member)
-cargo test -p domtree-cli
-cargo run -p domtree-cli -- --help
+cargo test -p domq-cli
+cargo run -p domq-cli -- --help
 
 # WASM
-cd dom-tree-wasm && wasm-pack build --target web --release && wasm-pack test --node
+cd wasm && wasm-pack build --target web --release && wasm-pack test --node
 
 # Playground (after building the wasm into playground/pkg — see playground/README.md)
 python3 -m http.server -d playground 8000
@@ -59,5 +64,6 @@ committing the updated `.snap` files.
 - `cargo fmt`, `cargo clippy` clean, tests pass.
 - Add a test for the behaviour you changed (a corpus fixture is great for
   parsing changes).
-- Keep the MSRV at 1.85 (edition 2024); the CI `msrv` job enforces it.
+- Keep the MSRV at 1.88 (edition 2024); the CI `msrv` job enforces it. Raise it only in a
+  minor release, and never to a Rust release less than about six months old.
 - Add an entry to `CHANGELOG.md` for anything user-visible.

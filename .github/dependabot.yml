@@ -23,6 +23,12 @@ updates:
     groups:
       cargo:
         patterns: ["*"]
+    ignore:
+      # markup5ever_rcdom (html5ever's reference tree, used by the benchmark
+      # comparison and the differential fuzz target) still requires html5ever
+      # 0.39. Lift this once it supports a newer html5ever.
+      - dependency-name: html5ever
+        versions: [">=0.40"]
 
   # Python build requirements (maturin) in python/pyproject.toml.
   - package-ecosystem: pip

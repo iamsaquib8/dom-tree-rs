@@ -28,6 +28,13 @@ jobs:
         run: cargo test
       - name: Test (no default features, json only)
         run: cargo test --no-default-features --features json
+      - name: Test (derive)
+        run: cargo test --features derive
+      # The macro's compile-fail (trybuild) and no_std tests. They only check
+      # errors the macro itself reports, whose text is the same on every
+      # toolchain.
+      - name: Test derive macro
+        run: cargo test -p dom-tree-derive
       - name: Test CLI
         run: cargo test -p domtree-cli
       - name: Zero runtime dependencies (default features)
@@ -48,7 +55,7 @@ jobs:
           toolchain: 1.85.0
       - uses: Swatinem/rust-cache@v2
       - name: Check library on MSRV (all lib features)
-        run: cargo check --no-default-features --features json,serde,query,markdown,std
+        run: cargo check --no-default-features --features json,serde,query,markdown,std,derive
       - name: Check CLI on MSRV
         run: cargo check -p domtree-cli
 

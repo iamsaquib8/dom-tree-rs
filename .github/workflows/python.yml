@@ -201,3 +201,5 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
+          # Re-runs of a release must not fail on files PyPI already has.
+          skip-existing: true

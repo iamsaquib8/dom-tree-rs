@@ -161,7 +161,20 @@ jobs:
           wasm-pack build --target web --release
           node npm/finish.mjs
           sh npm/smoke-test.sh
+      # Re-runs and a manually published first release (npm only allows
+      # trusted publishing for packages that already exist) must not fail.
+      - name: Skip if this version is already on npm
+        id: published
+        working-directory: wasm/pkg
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "domq@$VERSION" version >/dev/null 2>&1; then
+            echo "domq@$VERSION is already on npm; skipping publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish (trusted publishing, with provenance)
+        if: steps.published.outputs.skip != 'true'
         working-directory: wasm/pkg
         run: |
           npm install -g npm@latest

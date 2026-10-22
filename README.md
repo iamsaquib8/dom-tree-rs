@@ -9,7 +9,7 @@ A tiny, zero-dependency, never-panicking HTML parser with CSS selectors —
 for Rust, your shell, JavaScript (a ~41 KB gzipped WebAssembly module) and Python.
 
 [![crates.io](https://img.shields.io/crates/v/domq.svg?logo=rust)](https://crates.io/crates/domq)
-[![npm](https://img.shields.io/npm/v/domq.svg?logo=npm)](https://www.npmjs.com/package/domq)
+[![npm](https://img.shields.io/npm/v/domq-wasm.svg?logo=npm)](https://www.npmjs.com/package/domq-wasm)
 [![docs.rs](https://img.shields.io/docsrs/domq?logo=docs.rs)](https://docs.rs/domq)
 [![CI](https://github.com/iamsaquib8/domq/actions/workflows/ci.yml/badge.svg)](https://github.com/iamsaquib8/domq/actions/workflows/ci.yml)
 ![dependencies](https://img.shields.io/badge/dependencies-0-success)
@@ -85,12 +85,12 @@ curl -sL rust-lang.org \
 <td>
 
 ```sh
-npm install domq
+npm install domq-wasm
 ```
 
 ```js
 import init, { select }
-  from "domq";
+  from "domq-wasm";
 await init();
 select(html, "a[href]");
 ```
@@ -320,7 +320,7 @@ Cloudflare Workers, Deno, Bun, and Node (no setup needed in Node).
 [Package docs →](./wasm) · [**Playground →**](https://iamsaquib8.github.io/domq/)
 
 ```js
-import init, { parse, select, toMarkdown, Document } from "domq";
+import init, { parse, select, toMarkdown, Document } from "domq-wasm";
 await init(); // browsers and Workers; harmless in Node
 
 const tree = parse("<ul><li>a<li>b</ul>");   // typed tree: { type: "document", children: [...] }

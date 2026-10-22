@@ -19,7 +19,7 @@ import init, {
   toHtml,
   toMarkdown,
   toText,
-} from "domq";
+} from "domq-wasm";
 
 const html = `<ul id=list><li class=item>One<li>Two &amp; <b>more</b></ul>`;
 
@@ -83,23 +83,23 @@ assert.equal(toText("<p>after init</p>"), "after init");
 // 5. CommonJS: require() works where Node can require ES modules (20.19+,
 //    22.12+); import() works everywhere.
 const require = createRequire(import.meta.url);
-const viaImport = await import("domq");
+const viaImport = await import("domq-wasm");
 assert.equal(viaImport.toText("<i>import()</i>"), "import()");
 let viaRequire = "require() unsupported on this Node";
 try {
-  viaRequire = require("domq").toText("<i>require() works</i>");
+  viaRequire = require("domq-wasm").toText("<i>require() works</i>");
 } catch (e) {
   assert.equal(e.code, "ERR_REQUIRE_ESM");
 }
 
 // 6. The plain web build, initialised by hand (what node.js does for you).
 //    The query string gives a fresh, not yet initialised module instance.
-const webPath = require.resolve("domq/domq_wasm.js");
+const webPath = require.resolve("domq-wasm/domq_wasm.js");
 const web = await import(`${pathToFileURL(webPath)}?fresh`);
 assert.throws(() => web.toText("<p>x</p>")); // not initialised yet
-const wasmPath = require.resolve("domq/domq_wasm_bg.wasm");
+const wasmPath = require.resolve("domq-wasm/domq_wasm_bg.wasm");
 await web.default({ module_or_path: readFileSync(wasmPath) });
 assert.equal(web.toText("<p>web build</p>"), "web build");
 
-console.log(`domq OK on Node ${process.version} (${viaRequire})`);
+console.log(`domq-wasm OK on Node ${process.version} (${viaRequire})`);
 console.log(select(html, "li").map((m) => m.html).join("\n"));

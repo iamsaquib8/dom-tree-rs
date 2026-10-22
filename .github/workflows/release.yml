@@ -127,11 +127,11 @@ jobs:
           path: domq.rb
 
   # Publishes the wasm bindings to npm with trusted publishing (OIDC): no token
-  # is stored in the repo. One-time setup on npmjs.com → domq →
+  # is stored in the repo. One-time setup on npmjs.com → domq-wasm →
   # Settings → Trusted publishing: repository iamsaquib8/domq, workflow
   # release.yml, environment npm. The tag must match wasm/Cargo.toml's version.
   npm:
-    name: publish domq to npm
+    name: publish domq-wasm to npm
     needs: release
     runs-on: ubuntu-latest
     environment: npm
@@ -169,8 +169,8 @@ jobs:
         shell: bash
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          if npm view "domq@$VERSION" version >/dev/null 2>&1; then
-            echo "domq@$VERSION is already on npm; skipping publish."
+          if npm view "domq-wasm@$VERSION" version >/dev/null 2>&1; then
+            echo "domq-wasm@$VERSION is already on npm; skipping publish."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Publish (trusted publishing, with provenance)

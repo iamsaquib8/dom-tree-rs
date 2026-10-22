@@ -346,7 +346,7 @@ distribution and two rounds of review fixes). Details in the
 
 **JavaScript, Python and the browser**
 
-- [x] The npm package (`dom-tree-wasm` in 0.3.0, `domq` from 0.4.0): `parse`, `select`, `selectFirst`, `toText`,
+- [x] The npm package (`dom-tree-wasm` in 0.3.0, `domq-wasm` from 0.4.0): `parse`, `select`, `selectFirst`, `toText`,
       `toMarkdown`, `toHtml`, `errors`, and a parse-once `Document`; full
       TypeScript types; works in Node with no setup; ~41 KB gzipped.
 - [x] Playground: <https://iamsaquib8.github.io/domq/>.

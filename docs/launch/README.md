@@ -25,14 +25,14 @@ crates**. Throughput figures are from
 - [ ] crates.io: `cargo publish -p domq-derive`, then `domq`, then `domq-cli`
 - [ ] PyPI: add a pending trusted publisher for `domq` (workflow `python.yml`,
       environment `pypi`)
-- [ ] npm: first publish of `domq` by hand (`npm publish` from `wasm/pkg`), then
-      `npm trust github domq --file release.yml --repo iamsaquib8/domq --env npm
+- [ ] npm: first publish of `domq-wasm` by hand (`npm publish` from `wasm/pkg`), then
+      `npm trust github domq-wasm --file release.yml --repo iamsaquib8/domq --env npm
       --allow-publish` (needs npm ≥ 11) or the website's Trusted Publisher form
 - [ ] Tag `v0.4.0`: binaries, WASI, PyPI wheels, Homebrew formula
 - [ ] Homebrew: add `Formula/domq.rb` to the tap and a `formula_renames.json`
       entry `{"domtree": "domq"}`
 - [ ] Old names: `dom-tree-rs` / `domtree-cli` 0.3.1 with a "renamed to domq"
-      README; `npm deprecate dom-tree-wasm "renamed to domq"`; a final
+      README; `npm deprecate dom-tree-wasm "renamed to domq-wasm"`; a final
       `dom-tree-rs` PyPI release with the same note
 
 **Repo page**
@@ -117,7 +117,7 @@ selectors, HTML→Markdown, and an htmlq-compatible CLI
 > ```sh
 > cargo add domq
 > cargo install domq-cli       # or: brew install iamsaquib8/tap/domq
-> npm install domq
+> npm install domq-wasm
 > pip install domq
 > ```
 >
@@ -185,7 +185,7 @@ or CSV
 > mode), links/metadata/tables, editing.
 >
 > Zero dependencies, never panics, ~500 MB/s. Same engine as an htmlq-compatible
-> CLI (`brew install iamsaquib8/tap/domq`), a 41 KB wasm module on npm, and
+> CLI (`brew install iamsaquib8/tap/domq`), a 41 KB wasm module on npm (`domq-wasm`), and
 > Python wheels on PyPI.
 >
 > Playground: https://iamsaquib8.github.io/domq/

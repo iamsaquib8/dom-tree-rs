@@ -4,13 +4,29 @@ Parse messy real-world HTML, query it with CSS selectors, and get readable
 text, Markdown, HTML or JSON back. Powered by the dom-tree-rs Rust crate.
 """
 
-from typing import Optional, TypeVar, Union, final, overload
+from typing import Any, Callable, Optional, TypeVar, Union, final, overload
 
-__all__ = ["Document", "Element", "__version__", "parse"]
+from _typeshed import DataclassInstance
+
+__all__ = [
+    "Attr",
+    "Document",
+    "Element",
+    "ExtractError",
+    "Html",
+    "Markdown",
+    "OuterHtml",
+    "Select",
+    "__version__",
+    "extract",
+    "extract_all",
+    "parse",
+]
 
 __version__: str
 
 _T = TypeVar("_T")
+_D = TypeVar("_D", bound=DataclassInstance)
 
 def parse(html: str) -> Document:
     """Parse an HTML document (or fragment) into a :class:`Document`.
@@ -127,3 +143,137 @@ class Element:
     def __repr__(self) -> str: ...
     def __eq__(self, other: object, /) -> bool: ...
     def __hash__(self) -> int: ...
+
+# --- declarative extraction ---------------------------------------------------
+
+def extract(cls: type[_D], source: Union[str, Document, Element]) -> _D:
+    """Fill dataclass ``cls`` from ``source``.
+
+    ``source`` is an HTML string (parsed first), a :class:`Document` or an
+    :class:`Element`; it is the scope every field's selector runs in. Each
+    field is declared as ``Annotated[T, Select(...)]`` (or one of the
+    :class:`Attr`/:class:`Html`/:class:`OuterHtml`/:class:`Markdown`
+    shorthands). ``T`` is ``str``, ``int``, ``float``, ``bool``, a nested
+    dataclass, any class built from a string (``Decimal``, an ``Enum``, ...),
+    ``Optional[T]`` (``None`` when nothing matches) or ``list[T]`` (every
+    match).
+
+    Raises :class:`ExtractError` when a field cannot be extracted (no match,
+    missing attribute, unparsable value, invalid selector) and
+    :class:`TypeError` when ``cls`` is not a usable dataclass.
+    """
+
+def extract_all(cls: type[_D], source: Union[str, Document, Element]) -> list[_D]:
+    """One ``cls`` per element matching ``cls.__select__`` (a CSS selector set
+    on the class), in document order, each extracted with that element as its
+    scope. Raises :class:`TypeError` if ``cls`` has no ``__select__``."""
+
+class Select:
+    """Where a dataclass field's value comes from; use it as
+    ``Annotated[T, Select(...)]``.
+
+    ``selector`` picks the element (the first match, or every match for
+    ``list[T]``); without one the field reads its scope (the element or
+    document being extracted). The value is the element's readable text unless
+    ``attr=`` (an attribute), ``html=True`` (inner HTML), ``outer_html=True``
+    or ``markdown=True`` says otherwise. ``default=`` is used when nothing
+    matches or the attribute is absent; ``with_=`` converts the source string
+    itself and its result is used as-is.
+    """
+
+    selector: Optional[str]
+    attr: Optional[str]
+    html: bool
+    outer_html: bool
+    markdown: bool
+    default: Any
+    """The ``default=`` value, or ``dataclasses.MISSING`` if none was given."""
+    with_: Optional[Callable[[str], Any]]
+    def __init__(
+        self,
+        selector: Optional[str] = None,
+        *,
+        attr: Optional[str] = None,
+        html: bool = False,
+        outer_html: bool = False,
+        markdown: bool = False,
+        default: Any = ...,
+        with_: Optional[Callable[[str], Any]] = None,
+    ) -> None: ...
+
+class Attr(Select):
+    """``Attr(name)``: attribute ``name`` of the scope element;
+    ``Attr(selector, name)``: of the first element matching ``selector``.
+    Shorthand for ``Select(selector, attr=name)``."""
+
+    @overload
+    def __init__(
+        self,
+        selector: Optional[str],
+        name: str,
+        /,
+        *,
+        default: Any = ...,
+        with_: Optional[Callable[[str], Any]] = None,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        name: str,
+        /,
+        *,
+        default: Any = ...,
+        with_: Optional[Callable[[str], Any]] = None,
+    ) -> None: ...
+
+class Html(Select):
+    """Inner HTML of the match. Shorthand for ``Select(selector, html=True)``."""
+
+    def __init__(
+        self,
+        selector: Optional[str] = None,
+        *,
+        default: Any = ...,
+        with_: Optional[Callable[[str], Any]] = None,
+    ) -> None: ...
+
+class OuterHtml(Select):
+    """Outer HTML of the match. Shorthand for ``Select(selector, outer_html=True)``."""
+
+    def __init__(
+        self,
+        selector: Optional[str] = None,
+        *,
+        default: Any = ...,
+        with_: Optional[Callable[[str], Any]] = None,
+    ) -> None: ...
+
+class Markdown(Select):
+    """The match as Markdown. Shorthand for ``Select(selector, markdown=True)``."""
+
+    def __init__(
+        self,
+        selector: Optional[str] = None,
+        *,
+        default: Any = ...,
+        with_: Optional[Callable[[str], Any]] = None,
+    ) -> None: ...
+
+class ExtractError(ValueError):
+    """A field could not be extracted: no element matched, an attribute was
+    missing, a value did not parse, or a selector is invalid.
+
+    ``str(err)`` reads like
+    ``Product.price (".price" @data-value): cannot parse "$5" as float: ...``.
+    """
+
+    path: str
+    """The field, e.g. ``"Product.reviews[2].rating"``."""
+    selector: Optional[str]
+    """The CSS selector involved, or ``None`` when the field reads its scope."""
+    source: str
+    """What was read: ``"text"``, ``"@<attr>"``, ``"html"``, ``"outer_html"``,
+    ``"markdown"`` or ``"element"`` (a nested dataclass / ``__select__``)."""
+    reason: str
+    """What went wrong, without the path and selector."""
+    def __init__(self, path: str, selector: Optional[str], source: str, reason: str) -> None: ...

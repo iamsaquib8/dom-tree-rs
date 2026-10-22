@@ -4,105 +4,172 @@ Drafts and a checklist for announcing 0.3. Nothing here is posted
 automatically — edit the drafts in your own voice before using them.
 (`docs/launch/` is excluded from the published crate.)
 
+Every number and command below was re-checked against the **published**
+0.3.0 on 2026-10-22: clean debug build of a crate depending only on the parser
+(Apple M4 Pro) — dom-tree-rs **0.55 s, 0 dependencies**; scraper **3.9 s, 42
+crates**. Throughput figures are from [`benchmarks/README.md`](../../benchmarks/README.md).
+
 ## Checklist
 
-**Ship**
+**Ship** — done
 
-1. Merge the release PR into `main`.
-2. Publish the crates, core first:
-   ```sh
-   cargo publish
-   cargo publish -p domtree-cli
-   ```
-3. Tag and push: `git tag v0.3.0 && git push origin v0.3.0`. The `Release`
-   workflow attaches prebuilt `domtree` binaries (Linux, macOS, Windows) and
-   `SHA256SUMS` to the GitHub release.
-4. npm: one-time *trusted publishing* setup for `dom-tree-wasm` (see
-   `docs/PUBLISHING.md`); the tag push then publishes it.
-5. Python: add a PyPI *pending trusted publisher* (project `dom-tree-rs`, owner
-   `iamsaquib8`, repo `dom-tree-rs`, workflow `python.yml`, environment `pypi`);
-   the tag push then publishes wheels.
-6. Homebrew: create the public repo `iamsaquib8/homebrew-tap`, and copy the
-   formula from the release run's `homebrew-formula` artifact to
-   `Formula/domtree.rb` (see `packaging/homebrew/README.md`).
-7. Enable GitHub Pages: **Settings → Pages → Source: GitHub Actions**. The
-   `Pages` workflow deploys the playground on the next push to `main` (or run
-   it by hand from the Actions tab).
+- [x] crates.io: `dom-tree-rs` 0.3.0 and `domtree-cli` 0.3.0 (docs.rs built)
+- [x] GitHub release `v0.3.0`: CLI binaries for Linux x86_64/arm64, macOS
+      Intel/Apple Silicon, Windows, `domtree.wasm`, `SHA256SUMS`
+- [x] npm: `dom-tree-wasm` 0.3.0 (trusted publishing, with provenance)
+- [x] PyPI: `dom-tree-rs` 0.3.0 (abi3 wheels for 5 platforms + sdist)
+- [x] Homebrew: `brew install iamsaquib8/tap/domtree` (`brew test` passes)
+- [x] Playground: <https://iamsaquib8.github.io/dom-tree-rs/>
 
-**Polish the repo page** (this is what people see when they land)
+**Repo page**
 
-- **About → Website:** `https://iamsaquib8.github.io/dom-tree-rs/`
-- **About → Description:** "Tiny, zero-dependency HTML parser with CSS
-  selectors and HTML→Markdown — for Rust, the shell (htmlq-compatible CLI), and
-  JS/WASM. Never panics."
-- **Topics:** add `cli`, `css-selectors`, `markdown`, `web-scraping`, `htmlq`,
-  `llm`, `rag` to the existing ones.
-- **Social preview image** (Settings → General): a 1280×640 screenshot of the
-  playground or `docs/assets/demo.svg` — links shared on Reddit/HN/X show it.
-- Pin a few `good first issue`s from the roadmap (e.g. Homebrew tap,
-  `entities-full`, implicit `<tbody>`), so visitors see a way in.
+- [x] Website, description, topics
+- [ ] Social preview image: Settings → General → Social preview → upload
+      `docs/assets/social-preview.png`
+- [ ] Optional: pin the repo on your profile; enable Discussions (Settings →
+      Features) so launch traffic has somewhere to ask questions
+- [ ] Optional: open 3–5 `good first issue`s from the roadmap's **0.4** list
+      so visitors see a way in
 
-**Announce** — space these out over a few days, and reply to every comment in the
-first hours; that matters more than the post itself.
+**Announce** — space these out over a week. Tuesday–Thursday mornings (US
+Eastern) get the most eyes. Reply to every comment in the first few hours;
+that matters more than the post itself.
 
-- [ ] r/rust (draft below)
-- [ ] Show HN (draft below) — weekday morning, US Eastern time
-- [ ] This Week in Rust — PR adding a line under "Project/Tooling Updates" in
-      <https://github.com/rust-lang/this-week-in-rust>
-- [ ] users.rust-lang.org "announcements" category
-- [ ] X / Bluesky / Mastodon (draft below), with the demo GIF or a playground link
-- [ ] awesome-rust — PR under "Libraries → Parsing" (and the CLI under
-      "Applications → Utilities") once there's some usage
+- [ ] **Day 1:** r/rust (draft below) — a text post, not a bare link
+- [ ] **Day 1:** users.rust-lang.org → *announcements* (reuse the r/rust text)
+- [ ] **Day 2–3:** Show HN (draft below)
+- [ ] **Same week:** This Week in Rust — PR adding the line below under
+      "Project/Tooling Updates" in the current draft in
+      <https://github.com/rust-lang/this-week-in-rust/tree/master/draft>
+- [ ] **Same week:** X / Bluesky / Mastodon (drafts below), with the demo GIF
+      or a playground link
+- [ ] **Later:** awesome-rust (they ask for ≥50 stars or ≥2,000 downloads
+      first) — the library under *Parsing*, the CLI under *Applications →
+      Utilities*
 
 ## Draft: r/rust
 
-**Title:** dom-tree-rs 0.3 — a zero-dependency HTML parser with real CSS
-selectors, HTML→Markdown, a CLI, and a tiny wasm build
+**Title:** dom-tree-rs 0.3: a zero-dependency HTML parser with real CSS
+selectors, HTML→Markdown, and an htmlq-compatible CLI
 
-> I've been working on `dom-tree-rs`, a small HTML parser for the "I just need to
-> get stuff out of this HTML" job. 0.3 is the release where it became genuinely
-> useful, so I'd love feedback.
+> I've been working on `dom-tree-rs`, a small HTML parser for the "I just need
+> to get stuff out of this HTML" job — scrapers, link checkers, feeding pages to
+> an LLM. 0.3 is the release where it grew up, and I'd love feedback.
 >
-> - **Zero dependencies**, `no_std + alloc`, `forbid(unsafe_code)`. A clean
->   build is ~0.6 s (scraper: 42 crates, ~5 s).
-> - **Never panics** on any input — proptested and fuzzed, including selectors
->   and Markdown output; deep nesting can't overflow the stack.
-> - **CSS selectors** with `+`/`~`, all attribute operators, `:nth-child()`,
->   `:not()`/`:is()`/`:has()`, and `:contains()`; `Selector::parse` gives
->   positioned errors.
-> - **`to_text()` / `to_markdown()`** — readable text and GFM Markdown, handy
->   for feeding pages to LLMs.
-> - **`domtree` CLI** — an htmlq-compatible replacement (htmlq hasn't had a
->   release since 2022) with `--markdown`, `--json`, `--count`.
-> - **WASM** — the same thing in the browser / Workers / Deno, and a playground:
->   https://iamsaquib8.github.io/dom-tree-rs/
+> ```rust
+> let dom = domtree::parse(html);
+> let title = dom.select_first("h1").map(|h| h.to_text());
+> let links: Vec<_> = dom.select("a[href^='https://']").filter_map(|a| a.attr("href")).collect();
+> let article = dom.main_content().map(|n| n.to_markdown()); // reader mode → Markdown
+> ```
 >
-> What it deliberately isn't: a WHATWG-compliant parser (use html5ever/scraper)
-> or an HTML sanitizer (use ammonia). The roadmap lists the non-goals.
+> **What's in it**
 >
-> https://github.com/iamsaquib8/dom-tree-rs
+> - **Zero dependencies**, `no_std + alloc`, `#![forbid(unsafe_code)]`. A clean
+>   build takes ~0.6 s (scraper: 42 crates, ~4 s).
+> - **Fast for an owned tree:** ~500 MB/s on markup — about 8× scraper/html5ever,
+>   ahead of `tl` on large documents, ~20 allocations per parse.
+> - **Never panics** on any input. Proptested and fuzzed (including selectors,
+>   Markdown and editing), differential-fuzzed against html5ever on the subset it
+>   claims to handle, and 100k-deep nesting can't blow the stack.
+> - **Real CSS selectors:** `+`/`~`, every attribute operator, `:nth-child(An+B of
+>   S)`, `:not`/`:is`/`:has`, and the scraper's favourite `:contains()`.
+>   `Selector::parse` gives positioned errors.
+> - **Content out:** `to_text()`, GFM `to_markdown()`, heading-aware
+>   `to_markdown_chunks()` for RAG, `main_content()` reader mode, `links()`,
+>   `metadata()` (OpenGraph, JSON-LD…), `table_rows()` → CSV.
+> - **Editing + source spans:** remove/wrap/rename/insert HTML, then `to_html()`;
+>   every node maps back to its byte range.
+> - **Streaming:** `domtree::events()` with the same error recovery as the tree.
+>
+> **The `domtree` CLI** is a maintained, htmlq-compatible replacement (htmlq's last
+> release was 2022) with Markdown/JSONL/CSV output, field extraction and a linter:
+>
+> ```sh
+> curl -sL https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/ | domtree --main --markdown
+> curl -sL https://blog.rust-lang.org | domtree --jsonl -e title=a -e url=a@href 'tr:has(a)'
+> domtree lint public/**/*.html   # file:line:col, exit 1 on findings
+> ```
+>
+> **Also on npm and PyPI:** a ~41 KB (gzipped) wasm module for the browser,
+> Workers, Deno, Bun and Node, and Python wheels. Playground that runs it in your
+> browser: https://iamsaquib8.github.io/dom-tree-rs/
+>
+> ```sh
+> cargo add dom-tree-rs
+> cargo install domtree-cli       # or: brew install iamsaquib8/tap/domtree
+> npm install dom-tree-wasm
+> pip install dom-tree-rs
+> ```
+>
+> **What it deliberately isn't:** a WHATWG-compliant tree builder (use
+> html5ever/scraper when you need browser-identical trees) or an HTML sanitizer
+> (use ammonia). The roadmap lists the non-goals and what's next.
+>
+> Repo: https://github.com/iamsaquib8/dom-tree-rs — bug reports with a small
+> HTML input are the most useful thing you could send me.
 
 ## Draft: Show HN
 
-**Title:** Show HN: Domtree – query HTML from the shell with CSS selectors,
-output Markdown
+**Title:** Show HN: Domtree – query HTML with CSS selectors, get Markdown, JSON
+or CSV
 
-> domtree is a tiny CLI (and Rust library, and wasm module) that reads HTML on
-> stdin and prints what a CSS selector matches — as HTML, attribute values,
-> readable text, Markdown, or JSON:
+**URL:** https://github.com/iamsaquib8/dom-tree-rs
+
+> domtree reads HTML on stdin and prints what a CSS selector matches — as HTML,
+> attribute values, readable text, Markdown, JSON Lines or CSV. It started as a
+> maintained replacement for htmlq (flags are compatible) and grew a few things I
+> kept writing by hand:
 >
->     curl -sL https://blog.rust-lang.org | domtree -r 'nav, footer' --markdown body
+>     # an article as Markdown, without nav/sidebars/footer (for an LLM prompt)
+>     curl -sL https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/ | domtree --main --markdown
+>
+>     # structured extraction: one JSON object per post
+>     curl -sL https://blog.rust-lang.org | domtree --jsonl -e title=a -e url=a@href 'tr:has(a)'
+>
+>     # headlines
 >     curl -s https://news.ycombinator.com | domtree -t '.titleline > a'
 >
-> It's flag-compatible with htmlq, has zero dependencies, and never panics on
-> malformed input. The parser is forgiving rather than spec-exact — it's built
-> for extraction, not for browser-identical trees.
+>     # lint pages in CI: missing alt text, empty links, duplicate ids, unclosed tags
+>     domtree lint public/**/*.html
 >
-> Playground (runs the wasm build in your browser):
+> Under it is a small Rust library (zero dependencies, ~0.6 s clean build, never
+> panics on any input) that's also on npm as a ~41 KB wasm module and on PyPI.
+> The parser is forgiving rather than spec-exact: it's built for extraction, not
+> for browser-identical trees, and it is not a sanitizer.
+>
+> Playground (the wasm build, running in your browser):
 > https://iamsaquib8.github.io/dom-tree-rs/
+>
+> Install: `brew install iamsaquib8/tap/domtree`, `cargo install domtree-cli`,
+> or a binary from the release page.
 
-## Draft: short social post
+## Draft: This Week in Rust line
 
-> dom-tree-rs 0.3 🦀 — messy HTML in, clean tree / text / Markdown / JSON out.
-> Zero deps, never panics, real CSS selectors, an htmlq-compatible CLI, and a
-> tiny wasm build. Try it in the browser: https://iamsaquib8.github.io/dom-tree-rs/
+```markdown
+* [dom-tree-rs 0.3: zero-dependency HTML parser with CSS selectors, HTML→Markdown, and an htmlq-compatible CLI](https://github.com/iamsaquib8/dom-tree-rs/releases/tag/v0.3.0)
+```
+
+## Draft: short social posts
+
+**X (≤280):**
+
+> dom-tree-rs 0.3 🦀 messy HTML in → clean tree, text, Markdown, JSON out.
+> Zero deps, never panics, real CSS selectors, ~8× scraper's speed, an
+> htmlq-compatible CLI with a linter — plus npm (41 KB wasm) and PyPI.
+> Try it in your browser: https://iamsaquib8.github.io/dom-tree-rs/
+
+**Bluesky / Mastodon (longer):**
+
+> Released dom-tree-rs 0.3 🦀 — a tiny HTML parser for getting stuff *out* of
+> HTML: CSS selectors, readable text, GFM Markdown (with RAG chunking and reader
+> mode), links/metadata/tables, editing.
+>
+> Zero dependencies, never panics, ~500 MB/s. Same engine as an htmlq-compatible
+> CLI (`brew install iamsaquib8/tap/domtree`), a 41 KB wasm module on npm, and
+> Python wheels on PyPI.
+>
+> Playground: https://iamsaquib8.github.io/dom-tree-rs/
+> Code: https://github.com/iamsaquib8/dom-tree-rs
+>
+> #rustlang #webscraping #llm

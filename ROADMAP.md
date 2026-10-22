@@ -69,14 +69,14 @@ Deliberately out of scope. Reach for the right tool instead:
 - **Full WHATWG tree construction** (adoption agency, automatic
   `<html>`/`<head>`/`<body>`, foster parenting). For browser-identical trees,
   use [`html5ever`](https://crates.io/crates/html5ever). We will *measure* how
-  far from the spec we are (see 0.6) rather than pretend.
+  far from the spec we are (see 0.5) rather than pretend.
 - **Security sanitization.** A forgiving, non-spec parser disagrees with
   browsers on edge cases, which is exactly what mutation-XSS exploits. Use
   [`ammonia`](https://crates.io/crates/ammonia).
 - **Rendering.** No layout, no CSS cascade, no `:hover`, no JavaScript. If a
   page builds its content with script, you need a browser.
 - **Networking.** Neither the library nor the CLI fetches URLs; pipe from
-  `curl`. The MCP server (0.7) only parses HTML it is given.
+  `curl`. The MCP server (0.4) only parses HTML it is given.
 - **Speed at any cost.** We stay among the fastest owned-tree parsers, but we
   won't trade safety, correctness or size for a benchmark. If raw speed over a
   borrowed tree is your only metric, use [`tl`](https://crates.io/crates/tl).
@@ -85,9 +85,11 @@ Deliberately out of scope. Reach for the right tool instead:
 
 ## How releases are ordered
 
-**Light work ships first, heavy work later.** Each release finishes what it
-starts, so the next few releases stay small and frequent, and the big projects
-get their own releases once the basics are solid. Every item is tagged:
+**Heavy work first, light polish later.** The big projects (new crates,
+protocols, measurement infrastructure) land while momentum and attention are
+highest; the medium parity work and the small quick wins follow, and many of
+those are good first issues for new contributors in the meantime. Every item is
+tagged:
 
 - **S**: small, a contained change in one area.
 - **M**: medium, touches several areas or a binding.
@@ -104,12 +106,75 @@ people rely on.
       output, in lock-step across crates.io, npm, PyPI and Homebrew.
 - [ ] **S** Turn recurring questions into README cookbook entries and doc
       examples.
-- [ ] **S** Label 5–10 `good first issue`s from 0.4 below.
+- [ ] **S** Label 5–10 `good first issue`s from the light items in 0.8 below.
 
-## 0.4 — "Quick wins" (light)
+## 0.4 — "Declarative scraping and agents" (heavy)
 
-Small, high-value changes that make the existing features nicer to use and the
-project cheaper to release.
+New crates and new protocols: the biggest API additions.
+
+- [ ] **L** `#[derive(FromHtml)]` in an optional companion crate
+      (`dom-tree-derive`; the core stays zero-dependency). Declarative
+      extraction into structs: `#[html(select = "h1")] title: String`,
+      `#[html(select = ".price", attr = "data-value")] price: f64`, `Vec<T>`
+      for repeated items, nested structs, `Option<T>`, and errors that name the
+      selector that failed. Plus a matching Python dataclass helper.
+- [ ] **L** `domtree mcp`: an MCP server over stdio exposing select, text,
+      Markdown, chunks, links, metadata and lint on HTML the agent provides
+      (still no fetching).
+
+## 0.5 — "Trust, measured" (heavy)
+
+Earn trust with published numbers, not adjectives. This builds new test
+infrastructure, so it gets its own release.
+
+- [ ] **L** Conformance report: run the
+      [html5lib-tests](https://github.com/html5lib/html5lib-tests)
+      tree-construction suite, publish pass rates per category (marking the
+      non-goal categories honestly), and track them in CI.
+- [ ] **L** Spec-aligned recovery where it's cheap, chosen by what the
+      conformance report says matters (e.g. common formatting-element
+      mis-nesting like `<b><i></b></i>`), and only within the size budget.
+- [ ] **L** Reader-mode benchmark: score `main_content()` against a labelled
+      corpus (for example Mozilla Readability's test pages, if the licence
+      allows), publish precision and recall, and tune the heuristic with it.
+- [ ] **M** Apply to OSS-Fuzz once eligible; crashers become regression tests.
+- [ ] **L** A docs site next to the playground: cookbook, CLI reference, and
+      migration guides from htmlq, scraper, BeautifulSoup and cheerio.
+
+## 0.6 — "Huge documents" (heavy)
+
+For inputs too big to hold as a tree, and for comparing documents in tests.
+
+- [ ] **L** Streaming selectors: run a `Selector` over `domtree::events` for
+      multi-gigabyte dumps without building a tree; CLI `--stream`.
+- [ ] **L** `domtree diff a.html b.html`: a structural diff (node-level,
+      whitespace-insensitive) for snapshot tests of rendered pages.
+
+## 0.7 — "Parity and reach" (medium)
+
+Bring the bindings and integrations up to the Rust crate, and meet people where
+they install software.
+
+- [ ] **M** Python parity: editing API, `events()`, reusable `Selector` objects.
+- [ ] **M** JS parity: editing on `Document` and `events()` in the wasm package,
+      inside the size budget.
+- [ ] **M** Optional `<tbody>`/`<colgroup>` insertion: a builder option for
+      browser-identical table structure.
+- [ ] **M** Context-aware fragments: `append_html` and `parse_fragment_in("tr",
+      …)` parse in the parent's context (a `<td>` inside a `<tr>`).
+- [ ] **M** A reusable GitHub Action for `domtree lint` that annotates pull
+      requests.
+- [ ] **M** Continuous fuzzing on every PR and nightly (ClusterFuzzLite).
+- [ ] **M** More package managers: Scoop / winget (Windows), Nix, AUR, and a
+      tiny Docker image.
+- [ ] **M** Playground "copy as Rust / JS / Python / CLI" for the current
+      selector, so it doubles as a code generator.
+
+## 0.8 — "Quick wins" (light)
+
+Small, high-value polish that makes existing features nicer to use and the
+project cheaper to release. Most items are good first issues and can land in
+any 0.x release before this if a contributor picks them up.
 
 - [ ] **S** `domtree lint` for teams: `--allow` / `--deny` per rule, a summary
       line, `--format sarif` for GitHub code scanning.
@@ -130,66 +195,6 @@ project cheaper to release.
 - [ ] **S** A pre-commit hook for `domtree lint`.
 - [ ] **M** Playground: reader-mode, chunks, metadata and lint tabs, within the
       wasm size budget.
-
-## 0.5 — "Parity and reach" (medium)
-
-Bring the bindings and integrations up to the Rust crate, and meet people where
-they install software.
-
-- [ ] **M** Python parity: editing API, `events()`, reusable `Selector` objects.
-- [ ] **M** JS parity: editing on `Document` and `events()` in the wasm package,
-      inside the size budget.
-- [ ] **M** Optional `<tbody>`/`<colgroup>` insertion: a builder option for
-      browser-identical table structure.
-- [ ] **M** Context-aware fragments: `append_html` and `parse_fragment_in("tr",
-      …)` parse in the parent's context (a `<td>` inside a `<tr>`).
-- [ ] **M** A reusable GitHub Action for `domtree lint` that annotates pull
-      requests.
-- [ ] **M** Continuous fuzzing on every PR and nightly (ClusterFuzzLite).
-- [ ] **M** More package managers: Scoop / winget (Windows), Nix, AUR, and a
-      tiny Docker image.
-- [ ] **M** Playground "copy as Rust / JS / Python / CLI" for the current
-      selector, so it doubles as a code generator.
-
-## 0.6 — "Trust, measured" (heavy)
-
-Earn trust with published numbers, not adjectives. This needs new test
-infrastructure, so it gets its own release.
-
-- [ ] **L** Conformance report: run the
-      [html5lib-tests](https://github.com/html5lib/html5lib-tests)
-      tree-construction suite, publish pass rates per category (marking the
-      non-goal categories honestly), and track them in CI.
-- [ ] **L** Spec-aligned recovery where it's cheap, chosen by what the
-      conformance report says matters (e.g. common formatting-element
-      mis-nesting like `<b><i></b></i>`), and only within the size budget.
-- [ ] **L** Reader-mode benchmark: score `main_content()` against a labelled
-      corpus (for example Mozilla Readability's test pages, if the licence
-      allows), publish precision and recall, and tune the heuristic with it.
-- [ ] **M** Apply to OSS-Fuzz once eligible; crashers become regression tests.
-- [ ] **L** A docs site next to the playground: cookbook, CLI reference, and
-      migration guides from htmlq, scraper, BeautifulSoup and cheerio.
-
-## 0.7 — "Declarative scraping and agents" (heavy)
-
-New crates and new protocols: the biggest API additions.
-
-- [ ] **L** `#[derive(FromHtml)]` in an optional companion crate
-      (`dom-tree-derive`; the core stays zero-dependency). Declarative
-      extraction into structs: `#[html(select = "h1")] title: String`,
-      `#[html(select = ".price", attr = "data-value")] price: f64`, `Vec<T>`
-      for repeated items, nested structs, `Option<T>`, and errors that name the
-      selector that failed. Plus a matching Python dataclass helper.
-- [ ] **L** `domtree mcp`: an MCP server over stdio exposing select, text,
-      Markdown, chunks, links, metadata and lint on HTML the agent provides
-      (still no fetching).
-
-## 0.8 — "Huge documents" (heavy)
-
-- [ ] **L** Streaming selectors: run a `Selector` over `domtree::events` for
-      multi-gigabyte dumps without building a tree; CLI `--stream`.
-- [ ] **L** `domtree diff a.html b.html`: a structural diff (node-level,
-      whitespace-insensitive) for snapshot tests of rendered pages.
 
 ## 1.0 — "Stable"
 
@@ -217,9 +222,9 @@ release binaries (Linux x86_64/arm64, macOS, Windows) with checksums, WASI build
 Homebrew tap, npm (trusted publishing, provenance), PyPI (trusted publishing,
 abi3 wheels), and the playground.
 
-**Planned:** release automation and the Homebrew tap auto-update (0.4); Scoop /
-winget / Nix / AUR / Docker (0.5); the docs site (0.6); homebrew-core once the
-project meets its notability bar.
+**Planned:** the docs site (0.5); Scoop / winget / Nix / AUR / Docker (0.7);
+release automation and the Homebrew tap auto-update (0.8); homebrew-core once
+the project meets its notability bar.
 
 ## Community
 

@@ -28,7 +28,7 @@ crates**. Throughput figures are from [`benchmarks/README.md`](../../benchmarks/
       `docs/assets/social-preview.png`
 - [ ] Optional: pin the repo on your profile; enable Discussions (Settings →
       Features) so launch traffic has somewhere to ask questions
-- [ ] Optional: open 3–5 `good first issue`s from the roadmap's **0.4** list
+- [ ] Optional: open 3–5 `good first issue`s from the roadmap's light (**S**) items
       so visitors see a way in
 
 **Announce** — space these out over a week. Tuesday–Thursday mornings (US

@@ -26,8 +26,9 @@ git tag v0.3.0 && git push origin main --tags
 
 ```sh
 cargo login                  # paste a token from https://crates.io/me
-cargo publish                # the library first…
-cargo publish -p domq-cli # …then the CLI, which depends on it
+cargo publish -p domq-derive # the derive macro first (the library's `derive` feature needs it)…
+cargo publish -p domq        # …then the library…
+cargo publish -p domq-cli    # …then the CLI, which depends on it
 ```
 
 Pushing the `v*` tag runs `.github/workflows/release.yml`, which attaches

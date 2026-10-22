@@ -117,6 +117,125 @@
 //! assert_eq!(links[1].text, "full changelog");
 //! ```
 //!
+//! ## Declarative extraction
+//!
+//! With the `derive` feature, `#[derive(FromHtml)]` reads a struct out of a
+//! page: each field names a CSS selector and what to read from the element it
+//! matches. [`Dom::extract`] reads one value, [`Dom::extract_all`] one per
+//! match of the type's own selector, [`NodeRef::extract`] one from an element.
+//!
+//! ```
+//! # #[cfg(feature = "derive")] {
+//! use domtree::FromHtml;
+//!
+//! #[derive(FromHtml, Debug, PartialEq)]
+//! struct Product {
+//!     #[html(select = "h1")]
+//!     name: String,
+//!     #[html(select = ".price", attr = "data-value")]
+//!     price: f64,
+//!     #[html(select = ".tags li")]
+//!     tags: Vec<String>,
+//!     #[html(select = ".discount")]
+//!     discount: Option<String>,
+//!     #[html(select = ".seller")]
+//!     seller: Seller,
+//!     #[html(select = ".review")]
+//!     reviews: Vec<Review>,
+//! }
+//!
+//! #[derive(FromHtml, Debug, PartialEq)]
+//! struct Seller {
+//!     #[html(select = ".name")]
+//!     name: String,
+//!     #[html(select = "a", attr = "href")]
+//!     url: String,
+//! }
+//!
+//! #[derive(FromHtml, Debug, PartialEq)]
+//! struct Review {
+//!     #[html(select = ".stars", attr = "data-value")]
+//!     stars: u8,
+//!     #[html(select = "p")]
+//!     text: String,
+//! }
+//!
+//! let dom = domtree::parse(r#"
+//!   <h1>Acme Anvil</h1>
+//!   <span class="price" data-value="149.99">$149.99</span>
+//!   <ul class="tags"><li>tools</li><li>heavy</li></ul>
+//!   <div class="seller"><b class="name">Wile E.</b> <a href="/s/77">profile</a></div>
+//!   <div class="review"><i class="stars" data-value="5"></i><p>Beep beep!</p></div>
+//!   <div class="review"><i class="stars" data-value="1"></i><p>It fell on me.</p></div>
+//! "#);
+//! let product: Product = dom.extract().unwrap();
+//! assert_eq!(product.name, "Acme Anvil");
+//! assert_eq!(product.price, 149.99);
+//! assert_eq!(product.tags, ["tools", "heavy"]);
+//! assert_eq!(product.discount, None);
+//! assert_eq!(product.seller.url, "/s/77");
+//! assert_eq!(product.reviews[1], Review { stars: 1, text: "It fell on me.".into() });
+//!
+//! // Errors say which field, selector and value failed:
+//! let err = domtree::parse("<h1>Anvil</h1><span class=price data-value='$5'>")
+//!     .extract::<Product>()
+//!     .unwrap_err();
+//! assert_eq!(
+//!     err.to_string(),
+//!     r#"Product.price (".price" @data-value): cannot parse "$5" as f64: invalid float literal"#,
+//! );
+//! # }
+//! ```
+//!
+//! **Field keys** — every field has `#[html(...)]` (a field without one is a
+//! compile error):
+//!
+//! | key | meaning |
+//! |---|---|
+//! | `select = "css"` | the elements to read; without it, the scope itself (the document, or the element of a nested struct) |
+//! | *(no source key)* | the [readable text](Dom::to_text) — or, for a type that implements [`FromHtml`] itself (a nested struct), that type read from the match |
+//! | `attr = "name"` | an attribute's value |
+//! | `html` / `outer_html` | the inner / outer HTML |
+//! | `markdown` | the Markdown (needs the `markdown` feature) |
+//! | `with = "path::to::fn"` | convert the value (text by default) with `fn(&str) -> Result<T, E>` where `E: Display`, instead of [`FromHtmlValue`] |
+//! | `default` | no match or no attribute gives `Default::default()` instead of an error |
+//! | `skip` | read nothing: `Default::default()` |
+//!
+//! At most one source per field. `attr`, `html`, `outer_html` and `markdown`
+//! convert the string with [`FromHtmlValue`] (implemented for `String`, the
+//! number types, `bool` and `char`; numbers, `bool` and `char` ignore
+//! surrounding whitespace, and `bool` is `true` or `false` in any ASCII case).
+//! On the struct, `#[html(select = "css")]` sets [`FromHtml::SELECTOR`]:
+//! where values of the type live, for [`Dom::extract_all`] (one per match)
+//! and [`Dom::extract`] (the first match).
+//!
+//! **The field type decides how many matches are read:** `Option<T>` is the
+//! first match or `None` (also `None` when the attribute is missing; a value
+//! that fails to convert is still an error), `Vec<T>` is every match in
+//! document order (it needs a `select`; an element without the attribute is
+//! an error, so select `a[href]` to skip them), and any other type is the
+//! first match, a [`NoMatch`](ExtractErrorKind::NoMatch) error without one.
+//! `Option` and `Vec` are recognized by name, so a type alias for one is read
+//! as a single value.
+//!
+//! **Errors** ([`ExtractError`]) carry the field path (`Product.seller.name`,
+//! `Product.reviews[1].stars`, `Product[1].title` for [`Dom::extract_all`]
+//! items), the selector, the source and the reason; fields are read in
+//! declaration order and the first failure is returned.
+//!
+//! **Notes.** Selectors are parsed at run time, once per field each time a
+//! value is read (so a `Vec<Review>` field parses `Review`'s selectors once per
+//! review); an invalid one is an [`InvalidSelector`](ExtractErrorKind::InvalidSelector)
+//! error naming the field. That is cheap next to matching, but in a hot loop
+//! parse each page once and read everything you need from that one [`Dom`].
+//! Generic structs work: the macro adds `T: FromHtml` (or [`FromHtmlValue`],
+//! or `Default`) bounds for the fields that need them. The generated code
+//! names only `::domtree::__private` re-exports, never `std`, so it works in
+//! `no_std` crates — but it does need this crate to be reachable as
+//! `domtree` (the default; a renamed dependency is not supported). Implement
+//! [`FromHtml`] by hand for anything the attributes can't express; a
+//! hand-written type nests in derived ones like any other.
+//!
 //! ## Features
 //!
 //! - `json` *(default)* — the zero-dependency [`Dom::to_json`] serializer.
@@ -124,7 +243,13 @@
 //!   [`Dom::to_markdown_chunks`].
 //! - `serde` — optional `serde::Serialize` for the tree, [`Metadata`] and
 //!   [`Chunk`] (adds the `serde` dep).
-//! - `query` — a zero-dependency CSS selector engine ([`Dom::select`], [`Selector`]).
+//! - `query` *(default)* — a zero-dependency CSS selector engine
+//!   ([`Dom::select`], [`Selector`]), and the extraction traits built on it
+//!   ([`FromHtml`], [`Dom::extract`]).
+//! - `derive` — `#[derive(FromHtml)]` (implies `query`): declarative
+//!   extraction into structs. Re-exports the proc-macro from the companion
+//!   `dom-tree-derive` crate, which uses `syn`, `quote` and `proc-macro2` at
+//!   compile time only; nothing is added to the compiled program.
 //! - `entities-full` — decode all 2,125 WHATWG named character references
 //!   instead of the curated ~180 (a sorted static table, about 70 KB).
 //! - `simd` — scan text and attribute values with
@@ -169,6 +294,9 @@ mod serialize;
 #[cfg(feature = "query")]
 mod query;
 
+#[cfg(feature = "query")]
+mod from_html;
+
 pub use error::{ErrorKind, ParseError};
 pub use events::{Event, Events};
 pub use extract::{Link, Metadata, Resource, to_csv};
@@ -184,6 +312,53 @@ pub use serialize::Chunk;
 
 #[cfg(feature = "query")]
 pub use query::{AsSelector, Selector, SelectorError};
+
+#[cfg(feature = "query")]
+pub use from_html::{ExtractError, ExtractErrorKind, FromHtml, FromHtmlValue, Scope, ValueSource};
+
+/// `#[derive(FromHtml)]`: declarative extraction into structs (the `derive`
+/// feature); see [Declarative extraction](crate#declarative-extraction).
+#[cfg(feature = "derive")]
+pub use dom_tree_derive::FromHtml;
+
+/// What `#[derive(FromHtml)]` expands to. Not public API: no semver
+/// guarantees.
+#[cfg(feature = "query")]
+#[doc(hidden)]
+pub mod __private {
+    pub use alloc::string::String;
+    pub use alloc::vec::Vec;
+    pub use core::default::Default;
+    pub use core::option::Option::{self, None, Some};
+    pub use core::result::Result::{self, Err, Ok};
+
+    pub use crate::from_html::{Ctx, Src, all, nested, one, opt, value, with};
+    pub use crate::{ExtractError, FromHtml, FromHtmlValue, Scope};
+
+    pub use crate::__dom_tree_require_markdown as require_markdown;
+}
+
+/// Stops the build of a `#[html(markdown)]` field when the `markdown`
+/// feature is off.
+#[cfg(not(feature = "markdown"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __dom_tree_require_markdown {
+    () => {
+        ::core::compile_error!(
+            "`#[html(markdown)]` needs the `markdown` feature of dom-tree-rs (on by default)"
+        );
+    };
+}
+
+/// Stops the build of a `#[html(markdown)]` field when the `markdown`
+/// feature is off.
+#[cfg(feature = "markdown")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __dom_tree_require_markdown {
+    () => {};
+}
 
 /// Parse a full HTML document into a best-effort tree.
 ///

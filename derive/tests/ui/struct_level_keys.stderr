@@ -1,0 +1,5 @@
+error: unknown key `attr` on a struct: only `select` goes here (`attr` belongs on a field)
+ --> tests/ui/struct_level_keys.rs:4:26
+  |
+4 | #[html(select = ".card", attr = "data-id")]
+  |                          ^^^^

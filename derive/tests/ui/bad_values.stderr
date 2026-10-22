@@ -1,0 +1,29 @@
+error: `html` takes no value: write just `html`
+ --> tests/ui/bad_values.rs:5:28
+  |
+5 |     #[html(select = "div", html = "yes")]
+  |                            ^^^^
+
+error: `with` takes the path of a function `fn(&str) -> Result<T, E>`, like `with = "parse_price"` or `with = "my::parse"`
+ --> tests/ui/bad_values.rs:7:33
+  |
+7 |     #[html(select = "b", with = "not a path!")]
+  |                                 ^^^^^^^^^^^^^
+
+error: `select` needs a CSS selector; leave it out to read the scope itself
+ --> tests/ui/bad_values.rs:9:21
+  |
+9 |     #[html(select = "")]
+  |                     ^^
+
+error: duplicate `select`
+  --> tests/ui/bad_values.rs:11:26
+   |
+11 |     #[html(select = "a", select = "b")]
+   |                          ^^^^^^
+
+error: `attr` needs an attribute name, like `attr = "href"`
+  --> tests/ui/bad_values.rs:13:33
+   |
+13 |     #[html(select = "a", attr = "")]
+   |                                 ^^

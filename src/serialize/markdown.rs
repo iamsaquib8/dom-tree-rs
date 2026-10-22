@@ -26,7 +26,7 @@ use core::fmt::Write as _;
 use core::mem;
 
 use super::{is_space, push_verbatim, skip_newline, walk};
-use crate::node::NodeKind;
+use crate::node::{NodeId, NodeKind};
 use crate::tags::{self, Display};
 use crate::tree::{Dom, NodeRef};
 
@@ -82,8 +82,21 @@ impl NodeRef<'_> {
     /// let pre = dom.find_by_tag("pre").next().unwrap();
     /// assert_eq!(pre.to_markdown(), "```rust\nfn main() {}\n```");
     /// ```
+    ///
+    /// Hidden elements are left out only *inside* the node: called on a
+    /// `<title>` (or `<template>`, `<noscript>`, …) itself, it converts that
+    /// element's content.
+    ///
+    /// ```
+    /// let dom = domtree::parse("<head><title>Tom &amp; *Jerry*</title></head>");
+    /// assert_eq!(dom.find_by_tag("title").next().unwrap().to_markdown(), r"Tom & \*Jerry\*");
+    /// assert_eq!(dom.find_by_tag("head").next().unwrap().to_markdown(), "");
+    /// ```
     pub fn to_markdown(&self) -> String {
-        let mut md = Markdown::default();
+        let mut md = Markdown {
+            root: Some(self.id()),
+            ..Markdown::default()
+        };
         walk(*self, |node, enter| md.visit(node, enter));
         md.finish()
     }
@@ -207,6 +220,8 @@ struct Markdown<'a> {
     inline_only: u32,
     code: Option<Code<'a>>,
     table: Option<Table>,
+    /// The node `NodeRef::to_markdown` was called on: shown even if hidden.
+    root: Option<NodeId>,
 }
 
 impl<'a> Markdown<'a> {
@@ -221,9 +236,13 @@ impl<'a> Markdown<'a> {
     }
 
     fn open(&mut self, node: NodeRef<'a>, tag: &'a str) -> bool {
-        let display = tags::display(tag);
+        let mut display = tags::display(tag);
         if display == Display::Hidden {
-            return false;
+            if self.root != Some(node.id()) {
+                return false;
+            }
+            // The node itself, though hidden: a block.
+            display = Display::Block;
         }
         let mut f = Frame::default();
         if let Some(code) = &mut self.code {

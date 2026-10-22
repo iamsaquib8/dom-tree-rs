@@ -19,6 +19,10 @@ const ordered = {};
 // The crate is `domq-wasm` (it can't share the core crate's name); the npm
 // package is plain `domq`.
 manifest.name = "domq";
+// npm normalises this on publish (and warns); write it in its canonical form.
+if (typeof manifest.repository?.url === "string" && manifest.repository.url.startsWith("https://")) {
+  manifest.repository.url = `git+${manifest.repository.url.replace(/\.git$/, "")}.git`;
+}
 for (const [key, value] of Object.entries(manifest)) {
   ordered[key] = value;
   if (key === "types") {

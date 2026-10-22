@@ -12,7 +12,7 @@ readme = "README.md"
 license = "MIT"
 keywords = ["html", "parser", "css-selector", "markdown", "wasm"]
 categories = ["parser-implementations", "wasm", "web-programming", "no-std"]
-exclude = ["/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/cli", "/python", "/packaging", "/playground", "/docs/launch"]
+exclude = ["/.github", "/benchmarks", "/fuzz", "/dom-tree-wasm", "/cli", "/derive", "/python", "/packaging", "/playground", "/docs/launch"]
 
 [lib]
 name = "domtree"
@@ -37,14 +37,28 @@ std = []
 # that one dependency, `no_std`). Off by default: the default build stays
 # zero-dependency and produces exactly the same tokens.
 simd = ["dep:memchr"]
+# `#[derive(FromHtml)]`: declarative extraction into structs. Re-exports the
+# proc-macro from the `dom-tree-derive` companion crate (which pulls in `syn`,
+# `quote` and `proc-macro2` at compile time only). The traits it implements
+# (`FromHtml`, `Dom::extract`, …) come with `query` and need no extra crates.
+derive = ["query", "dep:dom-tree-derive"]
 
 [[example]]
 name = "to_markdown"
 required-features = ["query", "markdown"]
 
+[[test]]
+name = "extract"
+required-features = ["derive", "markdown"]
+
+[[test]]
+name = "extract_derive_properties"
+required-features = ["derive"]
+
 [dependencies]
 serde = { version = "1", default-features = false, features = ["alloc"], optional = true }
 memchr = { version = "2.7", default-features = false, optional = true }
+dom-tree-derive = { path = "derive", version = "0.4.0", optional = true }
 
 [dev-dependencies]
 # Snapshot testing for the corpus suite (dev-only; not a runtime dependency).
@@ -65,8 +79,9 @@ lto = true
 
 [workspace]
 resolver = "2"
-# The `domtree` command-line tool. Shares this crate's lockfile and target dir.
-members = ["cli"]
+# The `domtree` command-line tool and the `#[derive(FromHtml)]` proc-macro
+# crate. They share this crate's lockfile and target dir.
+members = ["cli", "derive"]
 # The WASM bindings, the Python bindings, the comparison benchmarks, and the
 # fuzz harness are independent crates with their own (heavier) dependency
 # graphs and release profiles, so they are kept out of this crate's pristine,

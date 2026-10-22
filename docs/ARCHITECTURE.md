@@ -80,6 +80,15 @@ flowchart LR
    shared `walk` in `src/serialize/mod.rs` visits a subtree using the tree's
    links — no recursion.
 
+Declarative extraction (`src/from_html.rs`, `query` feature) is the
+`FromHtml` / `FromHtmlValue` traits, `Dom::extract` / `extract_all`, the
+`ExtractError` type and the small runtime (`one`, `opt`, `all`, …) that
+`#[derive(FromHtml)]` expands to through the hidden `domtree::__private`
+module. The macro itself lives in `derive/` (the `dom-tree-derive`
+proc-macro crate, a workspace member re-exported by the `derive` feature):
+it only parses `#[html(...)]` and emits calls into that runtime, so the
+behaviour is in the core and the macro never depends on it.
+
 Around the core: `cli/` (the `domtree` binary, a workspace member),
 `dom-tree-wasm/` (wasm-bindgen bindings and npm package), `playground/` (the
 GitHub Pages site), `benchmarks/` and `fuzz/` (separate crates with their own
@@ -117,6 +126,14 @@ dependencies, excluded from the workspace).
   elements are blocks, inline, or hidden lives in `src/tags.rs`. Tests in
   `tests/text_output.rs` / `tests/markdown_output.rs`, page snapshots from
   `tests/pages/`.
+- **Declarative extraction** → behaviour and messages in
+  `src/from_html.rs`, attribute parsing and code generation in
+  `derive/src/lib.rs`. Tests in `tests/extract.rs` (keep the messages in
+  `error_messages_match_the_python_binding` in step with the Python
+  binding), `tests/extract_derive_properties.rs`, and the macro's
+  diagnostics in `derive/tests/ui/` (regenerate with
+  `TRYBUILD=overwrite cargo test -p dom-tree-derive` and review the
+  `.stderr` diff).
 - **A CLI flag** → `cli/src/args.rs` (parsing + `--help` text) and
   `cli/src/main.rs`; end-to-end tests in `cli/tests/cli.rs`.
 - **The JS API** → `dom-tree-wasm/src/lib.rs`; tests in `dom-tree-wasm/tests/`.
@@ -128,6 +145,8 @@ cargo test --workspace --all-features   # unit, snapshots, proptests, doctests, 
 cargo clippy --workspace --all-features --all-targets -- -D warnings
 cargo +nightly fuzz run select          # or parse / tokenize / markdown / differential
 cargo test --features simd              # the memchr scanning path
+cargo test --features derive            # #[derive(FromHtml)] end to end
+cargo test -p dom-tree-derive           # the macro's compile errors (trybuild)
 ```
 
 After an intentional output change, review and accept snapshots with

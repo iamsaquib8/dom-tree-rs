@@ -28,6 +28,11 @@ cargo test --all-features        # unit + corpus snapshots + proptest + doctests
 cargo clippy --all-features --all-targets -- -D warnings
 cargo fmt --all
 
+# #[derive(FromHtml)]: end-to-end tests, then the macro's compile-fail tests
+# (after changing a diagnostic: TRYBUILD=overwrite cargo test -p dom-tree-derive)
+cargo test --features derive
+cargo test -p dom-tree-derive
+
 # CLI (workspace member)
 cargo test -p domtree-cli
 cargo run -p domtree-cli -- --help

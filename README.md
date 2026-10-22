@@ -6,7 +6,7 @@
 </picture>
 
 A tiny, zero-dependency, never-panicking HTML parser with CSS selectors —
-for Rust, your shell, and JavaScript (via a ~41 KB gzipped WebAssembly module).
+for Rust, your shell, JavaScript (a ~41 KB gzipped WebAssembly module) and Python.
 
 [![crates.io](https://img.shields.io/crates/v/domq.svg?logo=rust)](https://crates.io/crates/domq)
 [![npm](https://img.shields.io/npm/v/domq.svg?logo=npm)](https://www.npmjs.com/package/domq)
@@ -27,6 +27,10 @@ for Rust, your shell, and JavaScript (via a ~41 KB gzipped WebAssembly module).
 <img src="docs/assets/demo.svg" width="760" alt="Terminal demo: domq lists the navigation links of rust-lang.org, converts its first section to Markdown, counts images without alt text, and pretty-prints a fragment with unclosed list items.">
 
 </div>
+
+> **New name:** up to 0.3 this project was published as `dom-tree-rs` (crates.io,
+> PyPI), `domtree-cli` and `dom-tree-wasm` (npm). From 0.4 it is **`domq`**
+> everywhere; the old packages point here.
 
 ---
 
@@ -135,6 +139,30 @@ let title = dom.select_first("title").map(|t| t.to_text());
 let links: Vec<&str> = dom.select("a[href^='https://']").filter_map(|a| a.attr("href")).collect();
 let price = dom.select_first(".product:has(.in-stock) .price").map(|p| p.to_text());
 ```
+</details>
+
+<details open>
+<summary><b>Extract structs declaratively</b> (<code>derive</code> feature)</summary>
+
+```rust
+use domq::FromHtml;
+
+#[derive(FromHtml)]
+#[html(select = ".product")]
+struct Product {
+    #[html(select = "h2")] name: String,
+    #[html(select = ".price", attr = "data-value")] price: f64,
+    #[html(select = ".tag")] tags: Vec<String>,                // every match
+    #[html(select = "a.more", attr = "href")] link: Option<String>, // None if missing
+}
+
+let products: Vec<Product> = domq::parse(html).extract_all()?;
+```
+
+Nested structs, `default`, `with = parse_fn`, and `html` / `outer_html` /
+`markdown` sources are supported, and misused attributes are compile errors.
+Runtime errors name the field and selector:
+`Product.price (".price" @data-value): cannot parse "cheap" as f64: invalid float literal`.
 </details>
 
 <details>
@@ -316,6 +344,20 @@ doc = domq.parse(html)
 links = [a.attr("href") for a in doc.select("a[href]")]
 price = doc.select_first(".product:has(.in-stock) .price").text
 markdown = doc.select_first("article").to_markdown()   # ready for an LLM prompt
+
+# Declarative extraction into dataclasses (mirrors Rust's #[derive(FromHtml)])
+from dataclasses import dataclass
+from typing import Annotated, Optional
+from domq import extract_all, Select, Attr
+
+@dataclass
+class Product:
+    __select__ = ".product"
+    name: Annotated[str, Select("h2")]
+    price: Annotated[float, Attr(".price", "data-value")]
+    link: Annotated[Optional[str], Attr("a.more", "href")]
+
+products = extract_all(Product, html)
 ```
 
 ## How it compares
@@ -386,6 +428,7 @@ recovers from is recorded in
 | `json` | ✅ | `to_json()` — zero-dependency JSON |
 | `query` | ✅ | CSS selectors: `select`, `select_first`, `Selector`, `closest`, `matches` |
 | `markdown` | ✅ | `to_markdown()` and `to_markdown_chunks()` — zero-dependency HTML → Markdown |
+| `derive` | | `#[derive(FromHtml)]` — declarative extraction into structs (adds the `domq-derive` proc-macro crate) |
 | `entities-full` | | all 2,125 WHATWG named character references (default: the 178 most common) |
 | `simd` | | `memchr`-backed scanning (~24% faster on text-heavy pages; adds `memchr`) |
 | `serde` | | `serde::Serialize` for the tree (same JSON shape; adds `serde`) |

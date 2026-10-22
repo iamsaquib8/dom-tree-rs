@@ -112,7 +112,7 @@ people rely on.
 
 New crates and new protocols: the biggest API additions.
 
-- [ ] **L** `#[derive(FromHtml)]` in an optional companion crate
+- [x] **L** `#[derive(FromHtml)]` in an optional companion crate
       (`domq-derive`; the core stays zero-dependency). Declarative
       extraction into structs: `#[html(select = "h1")] title: String`,
       `#[html(select = ".price", attr = "data-value")] price: f64`, `Vec<T>`

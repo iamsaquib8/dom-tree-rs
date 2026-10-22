@@ -4,9 +4,45 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [Unreleased] — 0.4.0
 
-Nothing yet.
+"Declarative scraping", and one name everywhere.
+
+### Changed
+- **Renamed to `domq`.** The crate is `domq` (was `dom-tree-rs`, imported as
+  `domtree`), the CLI crate `domq-cli` with the binary `domq` (was
+  `domtree-cli` / `domtree`), the npm package `domq` (was `dom-tree-wasm`), the
+  PyPI package and Python import `domq` (was `dom-tree-rs` / `domtree`), and
+  the Homebrew formula `iamsaquib8/tap/domq`. The repository moves to
+  `github.com/iamsaquib8/domq`; the old packages get a final release pointing
+  here.
+- **MSRV raised to Rust 1.88** (from 1.85).
+- **Python 3.11+** (3.9 and 3.10 are end of life); wheels are abi3 for
+  CPython ≥ 3.11.
+- `NodeRef::to_text()` / `to_markdown()` called *on* a hidden element
+  (`<title>`, `<script>`, `<style>`, `<template>`, …) now return its content
+  instead of `""`; hiding applies only to descendants. `to_text` gives a
+  `<script>`/`<style>` source verbatim. Document-level output is unchanged.
+- CI and release builds use the current Node LTS; the derive crate uses
+  `syn` 3.
+
+### Added
+- **`#[derive(FromHtml)]`** (new `derive` feature, companion crate
+  `domq-derive`): declarative extraction into structs with
+  `#[html(select, attr, html, outer_html, markdown, default, with, skip)]`,
+  `Option<T>`, `Vec<T>`, nested and generic structs, a struct-level
+  `#[html(select = "…")]`, and compile-time diagnostics for misused
+  attributes.
+- `Dom::extract`, `Dom::extract_all`, `NodeRef::extract`, the
+  `FromHtml` / `FromHtmlValue` traits, `Scope`, and `ExtractError`, whose
+  messages name the field path, selector and source:
+  `Product.reviews[2].stars (".stars" @data-value): cannot parse "x" as u8: …`.
+  Zero-dependency and `no_std`; hand-written impls need no feature.
+- **Python `domq.extract` / `extract_all`**: the same declarative extraction
+  into dataclasses with `Annotated[T, Select(...)]` (`Attr`, `Html`,
+  `OuterHtml`, `Markdown` shorthands), `Optional`, `list`, nested dataclasses,
+  `default=`, `with_=`, a class-level `__select__`, and `ExtractError` with the
+  same paths and messages as Rust.
 
 ## [0.3.0] — 2026-10-21
 

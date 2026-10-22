@@ -1,29 +1,43 @@
-# 0.3 launch kit
+# Launch kit
 
-Drafts and a checklist for announcing 0.3. Nothing here is posted
+Drafts and a checklist for announcing domq. Nothing here is posted
 automatically — edit the drafts in your own voice before using them.
 (`docs/launch/` is excluded from the published crate.)
 
-Every number and command below was re-checked against the **published**
-0.3.0 on 2026-10-22: clean debug build of a crate depending only on the parser
-(Apple M4 Pro) — domq **0.55 s, 0 dependencies**; scraper **3.9 s, 42
-crates**. Throughput figures are from [`benchmarks/README.md`](../../benchmarks/README.md).
+**Launch with 0.4.0**, the first release under the `domq` name, so every
+install command in the posts works and nobody is sent to a deprecated name.
+The numbers below were measured on the published 0.3.0 (same engine) on
+2026-10-22: a clean debug build of a crate depending only on the parser (Apple
+M4 Pro) took **0.55 s with 0 dependencies**; scraper took **3.9 s, 42
+crates**. Throughput figures are from
+[`benchmarks/README.md`](../../benchmarks/README.md). Re-check both after 0.4.0.
 
 ## Checklist
 
-**Ship** — done
+**Already shipped (0.3.0, under the old names)** — crates.io `dom-tree-rs` /
+`domtree-cli`, npm `dom-tree-wasm`, PyPI `dom-tree-rs`, Homebrew
+`iamsaquib8/tap/domtree`, release binaries, playground.
 
-- [x] crates.io: `domq` 0.3.0 and `domq-cli` 0.3.0 (docs.rs built)
-- [x] GitHub release `v0.3.0`: CLI binaries for Linux x86_64/arm64, macOS
-      Intel/Apple Silicon, Windows, `domq.wasm`, `SHA256SUMS`
-- [x] npm: `domq-wasm` 0.3.0 (trusted publishing, with provenance)
-- [x] PyPI: `domq` 0.3.0 (abi3 wheels for 5 platforms + sdist)
-- [x] Homebrew: `brew install iamsaquib8/tap/domq` (`brew test` passes)
-- [x] Playground: <https://iamsaquib8.github.io/domq/>
+**Ship 0.4.0 as `domq`** (see `docs/PUBLISHING.md`)
+
+- [ ] Merge the 0.4 PR; rename the GitHub repo to `iamsaquib8/domq` (old URLs
+      redirect; the playground moves to <https://iamsaquib8.github.io/domq/>)
+- [ ] crates.io: `cargo publish -p domq-derive`, then `domq`, then `domq-cli`
+- [ ] PyPI: add a pending trusted publisher for `domq` (workflow `python.yml`,
+      environment `pypi`)
+- [ ] npm: first publish of `domq` by hand (`npm publish` from `wasm/pkg`), then
+      `npm trust github domq --file release.yml --repo iamsaquib8/domq --env npm
+      --allow-publish` (needs npm ≥ 11) or the website's Trusted Publisher form
+- [ ] Tag `v0.4.0`: binaries, WASI, PyPI wheels, Homebrew formula
+- [ ] Homebrew: add `Formula/domq.rb` to the tap and a `formula_renames.json`
+      entry `{"domtree": "domq"}`
+- [ ] Old names: `dom-tree-rs` / `domtree-cli` 0.3.1 with a "renamed to domq"
+      README; `npm deprecate dom-tree-wasm "renamed to domq"`; a final
+      `dom-tree-rs` PyPI release with the same note
 
 **Repo page**
 
-- [x] Website, description, topics
+- [ ] Update the About after the repo rename (website → the new playground URL)
 - [ ] Social preview image: Settings → General → Social preview → upload
       `docs/assets/social-preview.png`
 - [ ] Optional: pin the repo on your profile; enable Discussions (Settings →
@@ -49,12 +63,13 @@ that matters more than the post itself.
 
 ## Draft: r/rust
 
-**Title:** domq 0.3: a zero-dependency HTML parser with real CSS
+**Title:** domq 0.4 (formerly dom-tree-rs): a zero-dependency HTML parser with real CSS
 selectors, HTML→Markdown, and an htmlq-compatible CLI
 
 > I've been working on `domq`, a small HTML parser for the "I just need
 > to get stuff out of this HTML" job — scrapers, link checkers, feeding pages to
-> an LLM. 0.3 is the release where it grew up, and I'd love feedback.
+> an LLM. 0.3 is where it grew up, and 0.4 adds declarative extraction and a
+> proper name (it used to be `dom-tree-rs`). I'd love feedback.
 >
 > ```rust
 > let dom = domq::parse(html);
@@ -75,6 +90,10 @@ selectors, HTML→Markdown, and an htmlq-compatible CLI
 > - **Real CSS selectors:** `+`/`~`, every attribute operator, `:nth-child(An+B of
 >   S)`, `:not`/`:is`/`:has`, and the scraper's favourite `:contains()`.
 >   `Selector::parse` gives positioned errors.
+> - **Declarative extraction:** `#[derive(FromHtml)]` fills your structs straight
+>   from selectors (`#[html(select = ".price", attr = "data-value")] price: f64`),
+>   with errors that name the field and selector. Python gets the same via
+>   dataclasses.
 > - **Content out:** `to_text()`, GFM `to_markdown()`, heading-aware
 >   `to_markdown_chunks()` for RAG, `main_content()` reader mode, `links()`,
 >   `metadata()` (OpenGraph, JSON-LD…), `table_rows()` → CSV.
@@ -147,21 +166,21 @@ or CSV
 ## Draft: This Week in Rust line
 
 ```markdown
-* [domq 0.3: zero-dependency HTML parser with CSS selectors, HTML→Markdown, and an htmlq-compatible CLI](https://github.com/iamsaquib8/domq/releases/tag/v0.3.0)
+* [domq 0.4 (formerly dom-tree-rs): zero-dependency HTML parser with CSS selectors, `#[derive(FromHtml)]`, HTML→Markdown, and an htmlq-compatible CLI](https://github.com/iamsaquib8/domq/releases/tag/v0.4.0)
 ```
 
 ## Draft: short social posts
 
 **X (≤280):**
 
-> domq 0.3 🦀 messy HTML in → clean tree, text, Markdown, JSON out.
+> domq 0.4 🦀 messy HTML in → clean tree, text, Markdown, JSON out.
 > Zero deps, never panics, real CSS selectors, ~8× scraper's speed, an
 > htmlq-compatible CLI with a linter — plus npm (41 KB wasm) and PyPI.
 > Try it in your browser: https://iamsaquib8.github.io/domq/
 
 **Bluesky / Mastodon (longer):**
 
-> Released domq 0.3 🦀 — a tiny HTML parser for getting stuff *out* of
+> Released domq 0.4 🦀 — a tiny HTML parser for getting stuff *out* of
 > HTML: CSS selectors, readable text, GFM Markdown (with RAG chunking and reader
 > mode), links/metadata/tables, editing.
 >
